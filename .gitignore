@@ -1,0 +1,5 @@
+*.glob
+CoqEqDec.v.d
+*.vo
+Makefile.coq
+*.d
