@@ -7,10 +7,52 @@ Import ListNotations.
 
 Set Implicit Arguments.
 
-Section VectorClocks.
-  Variables (tid var lock : Type) 
-    (tid_eq : EqDec_eq tid) (var_eq : EqDec_eq var) (lock_eq : EqDec_eq lock).
+Section RTC.
+  Variables (S L : Type) (step : S -> L -> S -> Prop).
 
+  Inductive rtc s : list L -> S -> Prop :=
+    | ss_refl : rtc s [] s
+    | ss_step l s' l' s'' (Hstep : step s l s') (Hsteps : rtc s' l' s'') :
+        rtc s (l :: l') s''.
+
+  Lemma rtc_snoc : forall tr s s' a s'' (Hsteps : rtc s tr s')
+    (Hstep : step s' a s''), rtc s (tr ++ [a]) s''.
+  Proof.
+    intros; induction Hsteps; clarify.
+    - econstructor; eauto; constructor.
+    - econstructor; eauto.
+  Qed.
+
+  Lemma rtc_snoc_inv : forall tr s s' a (Hsteps : rtc s (tr ++ [a]) s'),
+    exists s'', rtc s tr s'' /\ step s'' a s'.
+  Proof.
+    induction tr; clarify.
+    - inversion Hsteps as [|? ? ? ? ? Hsteps']; clarify.
+      inversion Hsteps'; clarify.
+      eexists; split; [apply ss_refl | auto].
+    - inversion Hsteps as [|? ? ? ? ? Hsteps']; clarify.
+      specialize (IHtr _ _ _ Hsteps'); clarify.
+      eexists; split; [eapply ss_step; eauto | eauto].
+  Qed.
+
+  Lemma rtc_app_inv : forall tr1 tr2 s s', rtc s (tr1 ++ tr2) s' ->
+    exists s'', rtc s tr1 s'' /\ rtc s'' tr2 s'.
+  Proof.
+    induction tr1; clarify.
+    - eexists; split; eauto; apply ss_refl.
+    - inversion H as [| ? ? ? ? Ha Hsteps]; clarify.
+      specialize (IHtr1 _ _ _ Hsteps); clarify.
+      eexists; split; [econstructor|]; eauto.
+  Qed.
+
+End RTC.
+
+Class VC_base tid var lock (tid_eq : EqDec_eq tid) (var_eq : EqDec_eq var)
+  (lock_eq : EqDec_eq lock).
+
+Section VectorClocks.
+  Context `{Types : VC_base}.
+  
   (* Basic definitions (Section 2) *)
   Inductive operation :=
   | rd (t : tid) (x : var)
@@ -87,13 +129,9 @@ Section VectorClocks.
     if eq_dec x y then v else f y.
 
   Inductive step : state -> operation -> state -> Prop :=
-  | read_same_epoch : forall C L R W t x (HR : R x t = C t t),
-     step (C, L, R, W) (rd t x) (C, L, R, W)
   | read_upd : forall C L R W t x R' (HW : vc_le (W x) (C t))
      (HR' : R' = upd R x (upd (R x) t (C t t))),
      step (C, L, R, W) (rd t x) (C, L, R', W)
-  | write_same_epoch : forall C L R W t x (HW : W x t = C t t),
-     step (C, L, R, W) (wr t x) (C, L, R, W)
   | write_upd : forall C L R W t x W' (HW : vc_le (W x) (C t))
      (HR : vc_le (R x) (C t)) (HW' : W' = upd W x (upd (W x) t (C t t))),
      step (C, L, R, W) (wr t x) (C, L, R, W')
@@ -109,11 +147,7 @@ Section VectorClocks.
       (HC' : C' = upd (upd C t (vc_join (C t) (C u))) u (vc_inc u (C u))),
      step (C, L, R, W) (join t u) (C', L, R, W).
 
-  (* s =>tr s' *)
-  Inductive step_star s : trace -> state -> Prop :=
-  | ss_refl : step_star s [] s
-  | ss_step : forall a s' tr s'', step s a s' -> step_star s' tr s'' ->
-      step_star s (a :: tr) s''.
+  Definition step_star := rtc step.
 
   (* Correctness *)
   (* Supporting definitions and lemmas *)
@@ -175,37 +209,6 @@ Section VectorClocks.
     apply IHHsteps; eapply wf_preservation; eauto.
   Qed.
 
-  Lemma step_star_snoc : forall tr s s' a s'' (Hsteps : step_star s tr s')
-    (Hstep : step s' a s''), step_star s (tr ++ [a]) s''.
-  Proof.
-    intros; induction Hsteps; clarify.
-    - econstructor; eauto; constructor.
-    - econstructor; eauto.
-  Qed.
-
-  Lemma step_star_snoc_inv : forall tr s s' a 
-    (Hsteps : step_star s (tr ++ [a]) s'),
-    exists s'', step_star s tr s'' /\ step s'' a s'.
-  Proof.
-    induction tr; clarify.
-    - inversion Hsteps as [|? ? ? ? ? Hsteps']; clarify.
-      inversion Hsteps'; clarify.
-      eexists; split; [apply ss_refl | auto].
-    - inversion Hsteps as [|? ? ? ? ? Hsteps']; clarify.
-      specialize (IHtr _ _ _ Hsteps'); clarify.
-      eexists; split; [eapply ss_step; eauto | eauto].
-  Qed.
-
-  Lemma step_star_app_inv : forall tr1 tr2 s s', step_star s (tr1 ++ tr2) s' ->
-    exists s'', step_star s tr1 s'' /\ step_star s'' tr2 s'.
-  Proof.
-    induction tr1; clarify.
-    - eexists; split; eauto; apply ss_refl.
-    - inversion H as [| ? ? ? ? Ha Hsteps]; clarify.
-      specialize (IHtr1 _ _ _ Hsteps); clarify.
-      eexists; split; [econstructor|]; eauto.
-  Qed.
-
   Definition clock_of (s : state) := match s with (C, _, _, _) => C end.
   Definition lock_of (s : state) := match s with (_, L, _, _) => L end.
   Definition read_of (s : state) := match s with (_, _, R, _) => R end.
@@ -215,8 +218,8 @@ Section VectorClocks.
     clock_of s u t <= clock_of s' u t.
   Proof.
     intros; induction Hsteps; auto.
-    inversion H; unfold upd, vc_inc, vc_join in *; clarify; dec_eq; try omega;
-      eapply Max.max_lub_l; eauto.
+    inversion Hstep; unfold upd, vc_inc, vc_join in *; clarify; dec_eq;
+      try omega; eapply Max.max_lub_l; eauto.
   Qed.
 
   Lemma hb_cons : forall tr i j a, happens_before tr i j ->
@@ -272,7 +275,7 @@ Section VectorClocks.
   Proof.
     intros; induction Hsteps; clarify.
     inversion Hno_rel as [| ? ? Ha]; clarify.
-    inversion H; clarify.
+    inversion Hstep; clarify.
     unfold upd in *; clarify.
     specialize (Ha t); clarify.
   Qed.
@@ -287,7 +290,7 @@ Section VectorClocks.
       specialize (Hrel _ _ eq_refl); destruct Hrel as [j Hj].
     rewrite nth_error_app in Hj; clarify.
     generalize (nth_error_split' _ _ Hj21); intros [l1 [l2 ?]]; clarify.
-    generalize (step_star_app_inv _ _ Hsteps); intros [s'' Hs'']; clarify.
+    generalize (rtc_app_inv _ _ Hsteps); intros [s'' Hs'']; clarify.
     inversion Hs''2 as [| ? ? ? ? Hacq Hsteps'']; clarify.
     generalize (clock_mono Hsteps'' t t'); clarify.
     etransitivity; [|eauto].
@@ -343,7 +346,7 @@ Section VectorClocks.
       split; clarify.
       - specialize (Hclock u t); clarify; omega.
       - specialize (Hlock m t); omega. }
-    generalize (step_star_snoc_inv _ _ Hsteps); intros [s'' [Htr Hx]].
+    generalize (rtc_snoc_inv _ _ Hsteps); intros [s'' [Htr Hx]].
     specialize (IHtr _ Hwf _ Htr t).
     generalize (step_star_wf Hwf Htr); intro Hwf'.
     split; [intros ? Ht Hclock | intros ? Hlock]; clarify.
@@ -535,7 +538,7 @@ Section VectorClocks.
   Proof.
     induction tr using rev_ind; clarify.
     { inversion Hsteps; split; intro; clarify. }
-    generalize (step_star_snoc_inv _ _ Hsteps); intros [s' [Htr Hs']].
+    generalize (rtc_snoc_inv _ _ Hsteps); intros [s' [Htr Hs']].
     generalize (step_star_wf wf0 Htr); intro Hwf.
     specialize (IHtr _ x0 t Htr).
     inversion Hs'; clarify.
@@ -576,7 +579,7 @@ Section VectorClocks.
   Proof.
     intros; induction Hsteps; intro; clarify.
     etransitivity; [|eapply IHHsteps].
-    inversion H; clarify.
+    inversion Hstep; clarify.
     unfold upd; clarify.
   Qed.
 
@@ -584,9 +587,9 @@ Section VectorClocks.
     (Hwf : well_formed s), vc_le (read_of s x) (read_of s' x).
   Proof.
     intros; induction Hsteps; intro; clarify.
-    generalize (wf_preservation Hwf H); intro.
+    generalize (wf_preservation Hwf Hstep); intro.
     etransitivity; [|apply IHHsteps; auto].
-    inversion H; clarify.
+    inversion Hstep; clarify.
     unfold upd; clarify.
   Qed.
 
@@ -624,9 +627,8 @@ Section VectorClocks.
       repeat rewrite Min.min_l; omega. }
     rewrite Hi', Hj'; rewrite Htr at 1; clear Hi' Hj'.
     rewrite Htr in Hsteps; clear Htr.
-    generalize (step_star_app_inv _ _ Hsteps); intros (? & ? & Hsteps').
-    rewrite app_comm_cons in Hsteps';
-      generalize (step_star_app_inv _ _ Hsteps');
+    generalize (rtc_app_inv _ _ Hsteps); intros (? & ? & Hsteps').
+    rewrite app_comm_cons in Hsteps'; generalize (rtc_app_inv _ _ Hsteps');
       intros (? & Hstepsi & Hstepsj).
     eapply clocks_hb'; eauto.
     { eapply step_star_wf; eauto; apply wf0. }
@@ -635,9 +637,9 @@ Section VectorClocks.
     generalize (write_result Hstepi), (write_result Hstepj);
       intros [Hwi Hci] [Hwj Hcj].
     rewrite <- Hcj in *; etransitivity; [|eapply write_own; eauto].
-    generalize (step_star_snoc Htr2 Hstepj); intro.
+    generalize (rtc_snoc _ _ Htr2 Hstepj); intro.
     etransitivity; [|eapply write_mono; eauto]; clarsimp.
-    { eapply step_star_snoc; [|eauto].
+    { eapply rtc_snoc; [|eauto].
       eapply ss_trans; eauto. }
   Qed.
 
@@ -647,7 +649,7 @@ Section VectorClocks.
   Proof.
     induction tr using rev_ind; clarify.
     { inversion Hsteps; intro; clarify. }
-    generalize (step_star_snoc_inv _ _ Hsteps); intros [s' [Htr Hs']].
+    generalize (rtc_snoc_inv _ _ Hsteps); intros [s' [Htr Hs']].
     generalize (step_star_wf wf0 Htr); intro Hwf.
     specialize (IHtr _ x0 t Htr).
     inversion Hs'; clarify.
@@ -703,9 +705,8 @@ Section VectorClocks.
       repeat rewrite Min.min_l; omega. }
     rewrite Hi', Hj'; rewrite Htr at 1; clear Hi' Hj'.
     rewrite Htr in Hsteps; clear Htr.
-    generalize (step_star_app_inv _ _ Hsteps); intros (? & ? & Hsteps').
-    rewrite app_comm_cons in Hsteps';
-      generalize (step_star_app_inv _ _ Hsteps');
+    generalize (rtc_app_inv _ _ Hsteps); intros (? & ? & Hsteps').
+    rewrite app_comm_cons in Hsteps'; generalize (rtc_app_inv _ _ Hsteps');
       intros (? & Hstepsi & Hstepsj).
     eapply clocks_hb'; eauto.
     { eapply step_star_wf; eauto; apply wf0. }
@@ -714,9 +715,9 @@ Section VectorClocks.
     generalize (write_result Hstepi), (read_result Hstepj);
       intros [Hwi Hci] [Hwj Hcj].
     rewrite <- Hcj in *; etransitivity; [|eapply read_own; eauto].
-    generalize (step_star_snoc Htr2 Hstepj); intro.
+    generalize (rtc_snoc _ _ Htr2 Hstepj); intro.
     etransitivity; [|eapply write_mono; eauto]; clarsimp.
-    { eapply step_star_snoc; [|eauto].
+    { eapply rtc_snoc; [|eauto].
       eapply ss_trans; eauto. }
   Qed.
 
@@ -741,9 +742,8 @@ Section VectorClocks.
       repeat rewrite Min.min_l; omega. }
     rewrite Hi', Hj'; rewrite Htr at 1; clear Hi' Hj'.
     rewrite Htr in Hsteps; clear Htr.
-    generalize (step_star_app_inv _ _ Hsteps); intros (? & ? & Hsteps').
-    rewrite app_comm_cons in Hsteps';
-      generalize (step_star_app_inv _ _ Hsteps');
+    generalize (rtc_app_inv _ _ Hsteps); intros (? & ? & Hsteps').
+    rewrite app_comm_cons in Hsteps'; generalize (rtc_app_inv _ _ Hsteps');
       intros (? & Hstepsi & Hstepsj).
     eapply clocks_hb'; eauto.
     { eapply step_star_wf; eauto; apply wf0. }
@@ -752,14 +752,14 @@ Section VectorClocks.
     generalize (read_result Hstepi), (write_result Hstepj);
       intros [Hwi Hci] [Hwj Hcj].
     rewrite <- Hcj in *; etransitivity; [|eapply write_own'; eauto].
-    generalize (step_star_snoc Htr2 Hstepj); intro.
+    generalize (rtc_snoc _ _ Htr2 Hstepj); intro.
     etransitivity; [|eapply read_mono; eauto]; clarsimp.
     { eapply (step_star_wf wf0).
-      eapply step_star_snoc; eauto. }
-    { eapply step_star_snoc; [|eauto].
+      eapply rtc_snoc; eauto. }
+    { eapply rtc_snoc; [|eauto].
       eapply ss_trans; eauto. }
   Qed.
-    
+
 (*  Lemma clock_pos : forall s t u (Hwf : well_formed s) (Hdiff : t <> u),
     clock_of s t t > 0.
   Proof.
@@ -798,7 +798,7 @@ Section VectorClocks.
     K a s t t' <= clock_of s' t t'.
   Proof.
     intros.
-    generalize (clock_mono (ss_step Hstep (ss_refl _)) t t'); intro.
+    generalize (clock_mono (ss_step _ _ Hstep (ss_refl _ _)) t t'); intro.
     destruct a; clarify; inversion Hstep; clarify.
   Qed.
 
@@ -809,10 +809,10 @@ Section VectorClocks.
     intros.
     inversion Hsteps as [|? ? ? ? Ha Htr]; clarify.
     inversion Ha; clarify.
-    generalize (step_star_snoc_inv _ _ Htr); intros [s'' [Htr' Hx]].
+    generalize (rtc_snoc_inv _ _ Htr); intros [s'' [Htr' Hx]].
     inversion Hx; clarify.
     unfold upd; clarify.
-    generalize (ss_step Ha Htr'); intro Hsteps'.
+    generalize (ss_step _ _ Ha Htr'); intro Hsteps'.
     generalize (clock_mono Hsteps'); unfold vc_le; auto.
   Qed.
 
@@ -828,7 +828,7 @@ Section VectorClocks.
   Proof.
     induction tr' using rev_ind; clarify.
     { inversion Hsteps'; clarify. }
-    generalize (step_star_snoc_inv _ _ Hsteps'); intros [sx [Htr' Hx]].
+    generalize (rtc_snoc_inv _ _ Hsteps'); intros [sx [Htr' Hx]].
     specialize (IHtr' _ Hsteps Htr' m t).
     rewrite app_assoc in Hfeasible; generalize (feasible_snoc _ _ Hfeasible);
       clarify.
@@ -904,7 +904,7 @@ Section VectorClocks.
               [|omega].
             generalize (nth_error_split' _ _ Hk2); intros [l1 [l2 ?]];
               clarify.
-            generalize (step_star_app_inv _ _ Hsteps2); intros [sr [? Hsr]].
+            generalize (rtc_app_inv _ _ Hsteps2); intros [sr [? Hsr]].
             inversion Hsr; clarify.
             exists (acq t m :: l1), sr, s', l2, sb, []; clarsimp.
             econstructor; eauto.
@@ -936,8 +936,8 @@ Section VectorClocks.
             rewrite <- app_assoc in Hk2; rewrite nth_error_app in Hk2;
               destruct (lt_dec k' (length l0)); [|omega].
             generalize (nth_error_split' _ _ Hk2); intros [l01 [l2 ?]]; clarify.
-            generalize (step_star_app_inv _ _ Hsteps2); intros [sc [Hsc ?]].
-            generalize (step_star_app_inv _ _ Hsc); intros [sr [? Hsr]].
+            generalize (rtc_app_inv _ _ Hsteps2); intros [sc [Hsc ?]].
+            generalize (rtc_app_inv _ _ Hsc); intros [sr [? Hsr]].
             inversion Hsr; clarify.
             exists (acq t m :: l01), sr, s', l2, sc, (l3 ++ [rel u m]);
               clarsimp.
@@ -951,7 +951,7 @@ Section VectorClocks.
               [|omega].
             generalize (nth_error_split' _ _ Hj21); intros [l2 [l3 ?]];
               clarify.
-            generalize (step_star_app_inv _ _ Hsteps2); intros [sc [? Hsc]].
+            generalize (rtc_app_inv _ _ Hsteps2); intros [sc [? Hsc]].
             exists [], sa, sa', l2, sc, (l3 ++ [rel u m]); clarsimp.
             split; [apply ss_refl | clarify].
             rewrite removelast_snoc; auto. }
@@ -962,7 +962,7 @@ Section VectorClocks.
           generalize (clock_mono Hl1 t t0); inversion Ha; clarify.
         * eapply clock_mono; eauto.
       + simpl; unfold upd, vc_join; clarify.
-        generalize (step_star_snoc Hra21 Hra221); intro Hsteps.
+        generalize (rtc_snoc _ _ Hra21 Hra221); intro Hsteps.
         generalize (ss_trans Hsteps1 Hsteps); intro Hsteps'.
         generalize (lock_mono Hsteps' Hra2221 m t0); intro Hlock.
         etransitivity; [|apply Max.le_max_r].
@@ -1052,7 +1052,7 @@ Section VectorClocks.
       specialize (Hk (k - length tr1)); use Hk; [|omega].
       destruct Hk as [c Hk].
       generalize (nth_error_split' _ _ Hk); intros [l1 [l2 ?]]; clarify.
-      generalize (step_star_app_inv _ _ Hsteps2); intros [sc [Hl1 Hstepsc]].
+      generalize (rtc_app_inv _ _ Hsteps2); intros [sc [Hl1 Hstepsc]].
       inversion Hstepsc as [|? sc' ? ? Hstepc Hl2]; clarify.
       transitivity (K c sc (thread_of c) t0).
       + destruct (eq_dec (thread_of a) (thread_of c)).
@@ -1064,7 +1064,7 @@ Section VectorClocks.
         { rewrite e; etransitivity; [apply K_upper; eauto|].
           etransitivity; [|apply K_lower].
           eapply clock_mono; eauto. }
-        generalize (ss_step Hstepa Hl1); intro Hstepsa.
+        generalize (ss_step _ _ Hstepa Hl1); intro Hstepsa.
         generalize (ss_trans Hsteps1 Hstepsa); intro.
         eapply IHHhb2; eauto; clarsimp; omega.
   Qed.
@@ -1132,7 +1132,7 @@ Section VectorClocks.
   Proof.
     intros; induction Hsteps; clarify.
     inversion Hno as [|? ? Ha ?]; clarify.
-    unfold writes in *; inversion H; clarify.
+    unfold writes in *; inversion Hstep; clarify.
     unfold upd in *; clarify.
     contradiction Ha; eauto.
   Qed.
@@ -1162,7 +1162,7 @@ Section VectorClocks.
       rewrite <- (skipn_length (length tr - n - 1)); intro Hhb'; clarify.
       rewrite <- (firstn_skipn (length tr - n - 1) tr) in Hsteps, Hfeasible.
       erewrite skipn_n in Hsteps, Hfeasible, Hhb'; eauto.
-      generalize (step_star_app_inv _ _ Hsteps); intros [s' [Hs' Hs]].
+      generalize (rtc_app_inv _ _ Hsteps); intros [s' [Hs' Hs]].
       generalize (step_star_wf wf0 Hs'); intro Hwf'.
       rewrite <- app_assoc in Hfeasible.
       generalize (hb_clocks' Hwf' Hs Hs' Hfeasible eq_refl eq_refl Hhb' H
@@ -1171,7 +1171,7 @@ Section VectorClocks.
       destruct Hfind21 as [u ?]; subst.
       inversion Hs as [|? ? ? ? Hstep Hnone]; clarify.
       generalize (write_result Hstep); intros [Hw' Hc'].
-      generalize (step_star_snoc Hs' Hstep); intro Hs'0.
+      generalize (rtc_snoc _ _ Hs' Hstep); intro Hs'0.
       rewrite <- Hc' in *; generalize (write_own _ _ Hs'0 Hw'); intro Hle'.
       etransitivity; [|apply Hle'].
       erewrite no_writes; eauto.
@@ -1183,8 +1183,8 @@ Section VectorClocks.
       generalize (nth_error_lt _ _ Hfind1); rewrite rev_length; intro Hn.
       clear - Hn Hj1; rewrite plus_comm, NPeano.Nat.sub_add_distr,
         (NPeano.Nat.sub_succ_r (length tr)).
-      rewrite minus_distr, NPeano.Nat.add_1_r; simpl; try timeout 1 omega.
-      rewrite minus_distr, minus_diag; try timeout 1 omega.
+      rewrite minus_distr, NPeano.Nat.add_1_r; simpl; [| omega | omega].
+      rewrite minus_distr, minus_diag; [| omega | omega].
       destruct n; omega.
     - unfold last_write in Hfind; rewrite find_index_fail in Hfind.
       erewrite no_writes; eauto; [intro; clarify|].
@@ -1205,7 +1205,7 @@ Section VectorClocks.
     inversion Hstep; clarify; unfold upd; clarify.
     assert (accesses (rd u x) x) as Haccess by (unfold accesses; eauto);
       clarify.
-    generalize (ss_step Hstep Hsteps); intro Hsteps'.
+    generalize (ss_step _ _ Hstep Hsteps); intro Hsteps'.
     assert (well_formed (C, L, R, W)) as Hwf by (split; auto).
     generalize (hb_clocks' Hwf Hsteps' Hsteps0 Hfeasible eq_refl eq_refl Hrf
       Haccess); intro Hle'; eapply Hle'.
@@ -1222,7 +1222,7 @@ Section VectorClocks.
     destruct (eq_dec tr []).
     { subst; inversion Hsteps; intro; clarify. }
     rewrite (app_removelast_last (wr t x)) in Hsteps; auto.
-    generalize (step_star_snoc_inv _ _ Hsteps); clarify.
+    generalize (rtc_snoc_inv _ _ Hsteps); clarify.
     eapply Hread; eauto; try (apply ss_refl).
     apply app_removelast_last; auto.
   Qed.
@@ -1240,10 +1240,10 @@ Section VectorClocks.
       + apply wf0.
       + intro; clarify.
       + apply Hrf; auto.
-    - generalize (step_star_snoc_inv _ _ H0); intros [sx [Htr Hx]].
+    - generalize (rtc_snoc_inv _ _ H0); intros [sx [Htr Hx]].
       rewrite <- app_assoc in IHtr1; simpl in IHtr1;
         specialize (IHtr1 _ _ _ _ eq_refl Htr Hx).
-      generalize (ss_step Ha Htr2); clarify.
+      generalize (ss_step _ _ Ha Htr2); clarify.
       eapply read_step; eauto.
       + eapply (step_star_wf wf0); eauto.
       + specialize (Hrf (length (tr1 ++ [x0])) a);
@@ -1263,7 +1263,7 @@ Section VectorClocks.
     generalize (feasible_snoc _ _ Hfeasible); clarify.
     generalize (rf_app _ _ Hrf); intro; use IHtr; destruct IHtr as [s Htr].
     assert (exists s', step s x s') as [s' ?];
-      [|eexists; eapply step_star_snoc; eauto].
+      [|eexists; eapply rtc_snoc; eauto].
     destruct s as (((C, L), R), W).
     generalize (step_star_wf wf0 Htr); intro Hwf.
     destruct x; try (eexists; econstructor; eauto; fail).
@@ -1345,11 +1345,7 @@ Section VectorClocks.
         (HC' : C' = upd (upd C t (vc_join (C t) (C u))) u (vc_inc u (C u))),
        FT_step (C, L, R, W) (join t u) (C', L, R, W).
 
-    (* s =>tr s' *)
-    Inductive FT_step_star s : trace -> FT_state -> Prop :=
-    | FT_ss_refl : FT_step_star s [] s
-    | FT_ss_step : forall a s' tr s'', FT_step s a s' ->
-        FT_step_star s' tr s'' -> FT_step_star s (a :: tr) s''.
+    Definition FT_step_star := rtc FT_step.
 
     Definition e_app (e : epoch) u := let (c, t) := e in 
       if eq_dec t u then c else 0.
@@ -1406,35 +1402,13 @@ Section VectorClocks.
     Definition FT_read_of (s : FT_state) := match s with (_, _, R, _) => R end.
     Definition FT_write_of (s : FT_state) := match s with (_, _, _, W) => W end.
 
-    Lemma FT_step_star_snoc_inv : forall tr s s' a 
-      (Hsteps : FT_step_star s (tr ++ [a]) s'),
-      exists s'', FT_step_star s tr s'' /\ FT_step s'' a s'.
-    Proof.
-      induction tr; clarify.
-      - inversion Hsteps as [|? ? ? ? ? Hsteps']; clarify.
-        inversion Hsteps'; clarify.
-        eexists; split; [apply FT_ss_refl | auto].
-      - inversion Hsteps as [|? ? ? ? ? Hsteps']; clarify.
-        specialize (IHtr _ _ _ Hsteps'); clarify.
-        eexists; split; [eapply FT_ss_step; eauto | eauto].
-    Qed.
-
-    Lemma FT_step_star_snoc : forall tr s s' a s''
-      (Hsteps : FT_step_star s tr s') (Hstep : FT_step s' a s''),
-      FT_step_star s (tr ++ [a]) s''.
-    Proof.
-      intros; induction Hsteps; clarify.
-      - econstructor; eauto; constructor.
-      - econstructor; eauto.
-    Qed.
-
     Lemma FT_read_own : forall tr s x t (Hsteps : FT_step_star FT_s0 tr s)
       (Hown : FT_read_of s x = E (e_of (FT_clock_of s) t)) u,
       e_app (FT_write_of s x) u <= FT_clock_of s t u.
     Proof.
       induction tr using rev_ind; clarify.
       { inversion Hsteps; clarify. }
-      generalize (FT_step_star_snoc_inv _ _ Hsteps); intros [s' [Htr Hx]].
+      generalize (rtc_snoc_inv _ _ Hsteps); intros [s' [Htr Hx]].
       specialize (IHtr _ x0 t Htr).
       generalize (FT_step_star_wf FT_wf0 Htr); intro Hwf.
       inversion Hx; clarify; unfold upd, e_of in *; clarsimp.
@@ -1471,7 +1445,7 @@ Section VectorClocks.
     Proof.
       induction tr using rev_ind; clarify.
       { inversion Hsteps; clarify. }
-      generalize (FT_step_star_snoc_inv _ _ Hsteps); intros [s' [Htr Hx]].
+      generalize (rtc_snoc_inv _ _ Hsteps); intros [s' [Htr Hx]].
       specialize (IHtr _ x0 t Htr).
       generalize (FT_step_star_wf FT_wf0 Htr); intro Hwf.
       inversion Hx; clarify; unfold upd, e_of in *; clarsimp.
@@ -1633,7 +1607,7 @@ Section VectorClocks.
       induction tr using rev_ind; clarify.
       { inversion Hsteps; clarify.
         unfold vc_inc, vc_bot; clarify. }
-      generalize (step_star_snoc_inv _ _ Hsteps); intros [? [Htr Hstep]].
+      generalize (rtc_snoc_inv _ _ Hsteps); intros [? [Htr Hstep]].
       specialize (IHtr _ t Htr).
       inversion Hstep; clarify.
       - unfold upd, vc_join; intro; clarify.
@@ -1664,13 +1638,13 @@ Section VectorClocks.
       exists s2', FT_step_star s2 tr s2' /\ FT_sim s1' s2'.
     Proof.
       intros ? ? ? ?; induction Hsteps; intros.
-      { do 2 eexists; eauto; apply FT_ss_refl. }
-      specialize (IHHsteps _ (step_star_snoc Hroot H)).
-      assert (exists s2', FT_step s2 a s2' /\ FT_sim s' s2')
+      { do 2 eexists; eauto; apply ss_refl. }
+      specialize (IHHsteps _ (rtc_snoc _ _ Hroot Hstep)).
+      assert (exists s2', FT_step s2 l s2' /\ FT_sim s' s2')
         as [s2' [Hstep' Hsim']].
       destruct s2 as (((C2, L2), R2), W2).
-      clear Hsteps IHHsteps; inversion H; clarify.
-      - generalize (read_own _ _ Hroot HR); clarify.
+      clear Hsteps IHHsteps; inversion Hstep; clarify.
+      (*- generalize (read_own _ _ Hroot HR); clarify.
         generalize (Hsim22 x); intros [Hw Hr].
         destruct (W2 x) eqn: HW2.
         destruct (R2 x) eqn: HR2; clarify.
@@ -1713,7 +1687,7 @@ Section VectorClocks.
               destruct (eq_dec t2 t'); clarify.
               { split; intros; apply Hr22; clarsimp. }
               { unfold vc_bot in *; clarify.
-                split; intros; wf_check. } }
+                split; intros; wf_check. } }*)
       - generalize (Hsim22 x); intros [Hw Hr].
         destruct (R2 x) eqn: HR2; clarify.
         + do 2 eexists.
@@ -1766,7 +1740,7 @@ Section VectorClocks.
               destruct n; unfold vc_bot in *; clarify.
               destruct (eq_dec t t'); clarify.
               split; intros; apply Hr22; clarsimp. }
-      - generalize (Hsim22 x); intros [Hw Hr].
+      (*- generalize (Hsim22 x); intros [Hw Hr].
         generalize (write_own' _ _ Hroot HW); intros [HWle HRle].
         destruct (W2 x) eqn: HW2; clarify.
         destruct Hw2 as [Hw Hl].
@@ -1776,7 +1750,7 @@ Section VectorClocks.
           clarify; [|omega].
         do 2 eexists.
         + apply FT_write_same_epoch; clarsimp.
-        + clarify.
+        + clarify.*)
       - generalize (Hsim22 x); intros [Hw Hr].
         destruct (W2 x) eqn: HW2; clarify.
         destruct (R2 x) eqn: HR2; clarify.
@@ -1826,12 +1800,12 @@ Section VectorClocks.
                   clarify. } }
             { destruct e as (c, ?); destruct c; clarify.
               { intro; unfold vc_join in *; rewrite NPeano.Nat.max_le_iff in *.
-                destruct H0; [left; apply Hsim22221 | right; apply Hsim22222];
+                destruct H; [left; apply Hsim22221 | right; apply Hsim22222];
                   auto. }
               { split; repeat intro; clarify.
                 { destruct (eq_dec t u); clarify; [|apply Hsim22222; auto].
                   unfold ge, vc_join in *; rewrite NPeano.Nat.max_le_iff in *;
-                    destruct H0; [left | right]; apply Hsim22222; auto. }
+                    destruct H; [left | right]; apply Hsim22222; auto. }
                 { apply Hsim22222; auto. } } }
       - do 2 eexists.
         + econstructor; eauto.
@@ -1906,13 +1880,13 @@ Section VectorClocks.
                 { destruct (eq_dec t0 u0); clarify; apply Hsim22221; auto. }
                 { destruct (eq_dec u u0); clarify; [|apply Hsim22221; auto].
                   rewrite NPeano.Nat.max_le_iff in *.
-                  destruct H0; [left | right]; apply Hsim22221; auto. } }
+                  destruct H; [left | right]; apply Hsim22221; auto. } }
               { split; repeat intro; unfold vc_join, vc_inc in *; clarify.
                 { destruct (eq_dec t u0); clarify.
                   { destruct (eq_dec t1 u0); clarify; apply Hsim22222; auto. }
                   { destruct (eq_dec u u0); clarify; [|apply Hsim22222; auto].
                     unfold ge in *; rewrite NPeano.Nat.max_le_iff in *.
-                    destruct H0; [left | right]; apply Hsim22222; auto. } }
+                    destruct H; [left | right]; apply Hsim22222; auto. } }
                 { apply Hsim22222; auto. } } }
       - do 2 eexists.
         + econstructor; eauto.
@@ -1954,13 +1928,13 @@ Section VectorClocks.
                 { destruct (eq_dec t0 u0); clarify; apply Hsim22221; auto. }
                 { destruct (eq_dec t u0); clarify; [|apply Hsim22221; auto].
                   rewrite NPeano.Nat.max_le_iff in *.
-                  destruct H0; [left | right]; apply Hsim22221; auto. } }
+                  destruct H; [left | right]; apply Hsim22221; auto. } }
               { split; repeat intro; unfold vc_join, vc_inc in *; clarify.
                 { destruct (eq_dec u u0); clarify.
                   { destruct (eq_dec t1 u0); clarify; apply Hsim22222; auto. }
                   { destruct (eq_dec t u0); clarify; [|apply Hsim22222; auto].
                     unfold ge in *; rewrite NPeano.Nat.max_le_iff in *.
-                    destruct H0; [left | right]; apply Hsim22222; auto. } }
+                    destruct H; [left | right]; apply Hsim22222; auto. } }
                 { apply Hsim22222; auto. } } }
       - generalize (FT_wf_preservation Hwf Hstep'); intro Hwf'.
         specialize (IHHsteps _ Hwf' Hsim'); clarify.
@@ -1974,10 +1948,10 @@ Section VectorClocks.
     Proof.
       intros ? ? ? ?; induction Hsteps; intros.
       { do 2 eexists; eauto; apply ss_refl. }
-      assert (exists s1', step s1 a s1' /\ FT_sim s1' s')
+      assert (exists s1', step s1 l s1' /\ FT_sim s1' s')
         as [s1' [Hstep' Hsim']].
       destruct s1 as (((C1, L1), R1), W1).
-      clear Hsteps IHHsteps; inversion H; clarify.
+      clear Hsteps IHHsteps; inversion Hstep; clarify.
       - generalize (Hsim22 x); intros [Hw Hr].
         generalize (FT_read_own _ Hroot2 HR t); clarsimp.
         specialize (Hr1 t); clarify.
@@ -2105,7 +2079,7 @@ Section VectorClocks.
           * split; repeat intro; [|apply Hsim2212; auto].
             destruct (eq_dec t u); clarify; [|apply Hsim2212; auto].
             unfold vc_join, ge in *; rewrite NPeano.Nat.max_le_iff in *.
-            destruct H0; [left | right]; apply Hsim2212; auto.
+            destruct H; [left | right]; apply Hsim2212; auto.
           * destruct (R x) eqn: HR2; clarify.
             { split.
               { exists x0; clarify.
@@ -2117,12 +2091,12 @@ Section VectorClocks.
                   clarify. } }
             { destruct e as (c, ?); destruct c; clarify.
               { intro; unfold vc_join in *; rewrite NPeano.Nat.max_le_iff in *.
-                destruct H0; [left; apply Hsim22221 | right; apply Hsim22222];
+                destruct H; [left; apply Hsim22221 | right; apply Hsim22222];
                   auto. }
               { split; repeat intro; [|apply Hsim22222; auto].
                 destruct (eq_dec t u); clarify; [|apply Hsim22222; auto].
                 unfold vc_join, ge in *; rewrite NPeano.Nat.max_le_iff in *.
-                destruct H0; [left | right]; apply Hsim22222; auto. } }
+                destruct H; [left | right]; apply Hsim22222; auto. } }
       - do 2 eexists.
         + econstructor; eauto.
         + clarify.
@@ -2163,7 +2137,7 @@ Section VectorClocks.
             { apply Hsim2212; clarify. }
             { destruct (eq_dec u u0); clarify; [|apply Hsim2212; auto].
               unfold vc_join, ge in *; rewrite NPeano.Nat.max_le_iff in *.
-              destruct H0; [left | right]; apply Hsim2212; auto. }
+              destruct H; [left | right]; apply Hsim2212; auto. }
           * destruct (R x) eqn: HR2; clarify.
             { split.
               { exists x0; clarify.
@@ -2182,13 +2156,13 @@ Section VectorClocks.
                 { destruct (eq_dec t1 u0); clarify; apply Hsim22221; auto. }
                 { destruct (eq_dec u u0); clarify; [|apply Hsim22221; auto].
                   unfold vc_join, ge in *; rewrite NPeano.Nat.max_le_iff in *.
-                  destruct H0; [left | right]; apply Hsim22221; auto. } }
+                  destruct H; [left | right]; apply Hsim22221; auto. } }
               { split; repeat intro; [|apply Hsim22222; auto].
                 destruct (eq_dec t u0); unfold vc_inc in *; clarify.
                 { apply Hsim22222; clarify. }
                 { destruct (eq_dec u u0); clarify; [|apply Hsim22222; auto].
                   unfold vc_join, ge in *; rewrite NPeano.Nat.max_le_iff in *.
-                  destruct H0; [left | right]; apply Hsim22222; auto. } } }
+                  destruct H; [left | right]; apply Hsim22222; auto. } } }
       - do 2 eexists.
         + econstructor; eauto.
         + clarify.
@@ -2200,7 +2174,7 @@ Section VectorClocks.
             { apply Hsim2212; clarify. }
             { destruct (eq_dec t u0); clarify; [|apply Hsim2212; auto].
               unfold vc_join, ge in *; rewrite NPeano.Nat.max_le_iff in *.
-              destruct H0; [left | right]; apply Hsim2212; auto. }
+              destruct H; [left | right]; apply Hsim2212; auto. }
           * destruct (R x) eqn: HR2; clarify.
             { split.
               { exists x0; clarify.
@@ -2219,15 +2193,15 @@ Section VectorClocks.
                 { destruct (eq_dec t1 u0); clarify; apply Hsim22221; auto. }
                 { destruct (eq_dec t u0); clarify; [|apply Hsim22221; auto].
                   unfold vc_join, ge in *; rewrite NPeano.Nat.max_le_iff in *.
-                  destruct H0; [left | right]; apply Hsim22221; auto. } }
+                  destruct H; [left | right]; apply Hsim22221; auto. } }
               { split; repeat intro; [|apply Hsim22222; auto].
                 destruct (eq_dec u u0); unfold vc_inc in *; clarify.
                 { apply Hsim22222; clarify. }
                 { destruct (eq_dec t u0); clarify; [|apply Hsim22222; auto].
                   unfold vc_join, ge in *; rewrite NPeano.Nat.max_le_iff in *.
-                  destruct H0; [left | right]; apply Hsim22222; auto. } } }
-      - generalize (FT_step_star_snoc Hroot2 H); intro Hroot2'.
-        generalize (step_star_snoc Hroot1 Hstep'); intro Hroot1'.
+                  destruct H; [left | right]; apply Hsim22222; auto. } } }
+      - generalize (rtc_snoc _ _ Hroot2 Hstep); intro Hroot2'.
+        generalize (rtc_snoc _ _ Hroot1 Hstep'); intro Hroot1'.
         specialize (IHHsteps _ Hroot2' _ _ Hroot1' Hsim'); clarify.
         do 2 eexists; eauto; econstructor; eauto.
     Qed.
@@ -2236,9 +2210,9 @@ Section VectorClocks.
       exists s, step_star s0 tr s.
     Proof.
       split; intros [s Hs].
-      - generalize (FT_sim2 Hs (FT_ss_refl _) (ss_refl _) FT_sim0); clarify;
+      - generalize (FT_sim2 Hs (ss_refl _ _) (ss_refl _ _) FT_sim0); clarify;
           eauto.
-      - generalize (FT_sim1 Hs (ss_refl _) _ FT_wf0 FT_sim0); clarify; eauto.
+      - generalize (FT_sim1 Hs (ss_refl _ _) _ FT_wf0 FT_sim0); clarify; eauto.
     Qed.
 
     Theorem FT_Correctness tr (Hfeasible : feasible tr) :

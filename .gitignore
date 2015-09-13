@@ -3,3 +3,5 @@ CoqEqDec.v.d
 *.vo
 Makefile.coq
 *.d
+Makefile~
+*.v~
