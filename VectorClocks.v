@@ -7,6 +7,18 @@ Import ListNotations.
 
 Set Implicit Arguments.
 
+Ltac dec_eq := match goal with 
+  | |- context[eq_dec ?a ?b] => destruct (eq_dec a b); clarify
+  | [H : context[eq_dec ?a ?b] |- _] => destruct (eq_dec a b); clarify end.
+
+Ltac wf_check := unfold ge in *; match goal with
+| [H : ?C ?t ?t <= ?C ?u ?t,
+   Hwf : forall u t, t <> u -> ?C u t < ?C t t |- _] =>
+     specialize (Hwf u t); destruct (eq_dec u t); clarify; try omega
+| [H : ?C ?t ?t <= ?L ?m ?t, Hwf : forall m t, ?L m t < ?C t t |- _] =>
+     specialize (Hwf m t); omega
+end.
+
 Section RTC.
   Variables (S L : Type) (step : S -> L -> S -> Prop).
 
@@ -45,6 +57,13 @@ Section RTC.
       eexists; split; [econstructor|]; eauto.
   Qed.
 
+  Lemma rtc_trans : forall s tr s' tr' s'' (Hsteps : rtc s tr s')
+    (Hsteps' : rtc s' tr' s''), rtc s (tr ++ tr') s''.
+  Proof.
+    intros; induction Hsteps; clarify.
+    econstructor; eauto.
+  Qed.
+
 End RTC.
 
 Class VC_base tid var lock (tid_eq : EqDec_eq tid) (var_eq : EqDec_eq var)
@@ -62,7 +81,7 @@ Section VectorClocks.
   | fork (t : tid) (u : tid)
   | join (t : tid) (u : tid).
 
-  Instance op_eq : EqDec_eq operation.
+  Global Instance op_eq : EqDec_eq operation.
   Proof. eq_dec_inst. Qed.
 
   Definition trace := list operation.
@@ -164,18 +183,13 @@ Section VectorClocks.
       clarify.
   Qed.
 
-  Hint Resolve Le.le_0_n.
-  Ltac dec_eq := match goal with 
-    | |- context[eq_dec ?a ?b] => destruct (eq_dec a b); clarify
-    | [H : context[eq_dec ?a ?b] |- _] => destruct (eq_dec a b); clarify end.
-
-  Definition max_lt := NPeano.Nat.max_lub_lt.
+  Definition max_lt := Nat.max_lub_lt.
 
   Lemma lt_max_l : forall n m p, p < n -> p < max n m.
-  Proof. intros; rewrite NPeano.Nat.max_lt_iff; auto. Qed.
+  Proof. intros; rewrite Nat.max_lt_iff; auto. Qed.
 
   Lemma lt_max_r : forall n m p, p < m -> p < max n m.
-  Proof. intros; rewrite NPeano.Nat.max_lt_iff; auto. Qed.
+  Proof. intros; rewrite Nat.max_lt_iff; auto. Qed.
 
   Lemma le_max_l : forall n m p, p <= n -> p <= max n m.
   Proof. intros; etransitivity; eauto; apply Max.le_max_l. Qed.
@@ -455,7 +469,7 @@ Section VectorClocks.
           clarify; eauto.
       + eapply hb_fork_join; clarify.
         * instantiate (1 := d); destruct j; clarify.
-          rewrite <- NPeano.Nat.succ_lt_mono, nth_error_app in *; clarify.
+          rewrite <- Nat.succ_lt_mono, nth_error_app in *; clarify.
         * apply nth_error_split.
         * eauto.
         * unfold uses_thread; auto.
@@ -512,18 +526,6 @@ Section VectorClocks.
       + assert (j < i) as Hlt by omega.
         specialize (H _ _ Hlt _ _ Hb Ha x); clarify.
         generalize (writes_accesses Hwrites); clarify.
-  Qed.
-
-  Lemma read_clock : forall s t x s' (Hstep : step s (rd t x) s'),
-    read_of s' x t = clock_of s' t t.
-  Proof.
-    intros; inversion Hstep; unfold upd in *; clarsimp.
-  Qed.
-      
-  Lemma write_clock : forall s t x s' (Hstep : step s (wr t x) s'),
-    write_of s' x t = clock_of s' t t.
-  Proof.
-    intros; inversion Hstep; unfold upd in *; clarsimp.
   Qed.
 
   Definition writesb a x := match a with wr _ y => beq x y | _ => false end.
@@ -593,13 +595,6 @@ Section VectorClocks.
     unfold upd; clarify.
   Qed.
 
-  Lemma ss_trans : forall s tr s' tr' s'' (Hsteps : step_star s tr s')
-    (Hsteps' : step_star s' tr' s''), step_star s (tr ++ tr') s''.
-  Proof.
-    intros; induction Hsteps; clarify.
-    econstructor; eauto.
-  Qed.
-
   Lemma write_result : forall s t x s' (Hstep : step s (wr t x) s'),
     write_of s' x t = clock_of s t t /\ clock_of s' t = clock_of s t.
   Proof.
@@ -640,7 +635,7 @@ Section VectorClocks.
     generalize (rtc_snoc _ _ Htr2 Hstepj); intro.
     etransitivity; [|eapply write_mono; eauto]; clarsimp.
     { eapply rtc_snoc; [|eauto].
-      eapply ss_trans; eauto. }
+      eapply rtc_trans; eauto. }
   Qed.
 
   Lemma read_own : forall tr s x t (Hsteps : step_star s0 tr s)
@@ -718,7 +713,7 @@ Section VectorClocks.
     generalize (rtc_snoc _ _ Htr2 Hstepj); intro.
     etransitivity; [|eapply write_mono; eauto]; clarsimp.
     { eapply rtc_snoc; [|eauto].
-      eapply ss_trans; eauto. }
+      eapply rtc_trans; eauto. }
   Qed.
 
   Lemma write_after_read : forall tr s i j x t u
@@ -757,7 +752,7 @@ Section VectorClocks.
     { eapply (step_star_wf wf0).
       eapply rtc_snoc; eauto. }
     { eapply rtc_snoc; [|eauto].
-      eapply ss_trans; eauto. }
+      eapply rtc_trans; eauto. }
   Qed.
 
 (*  Lemma clock_pos : forall s t u (Hwf : well_formed s) (Hdiff : t <> u),
@@ -833,7 +828,7 @@ Section VectorClocks.
     rewrite app_assoc in Hfeasible; generalize (feasible_snoc _ _ Hfeasible);
       clarify.
     inversion Hx; unfold upd, vc_inc, vc_join in *; clarify.
-    generalize (ss_trans Hsteps Htr'); intro Htr.
+    generalize (rtc_trans Hsteps Htr'); intro Htr.
     generalize (feasible_le Htr m t0 t Hfeasible); clarify; omega.
   Qed.
 
@@ -963,7 +958,7 @@ Section VectorClocks.
         * eapply clock_mono; eauto.
       + simpl; unfold upd, vc_join; clarify.
         generalize (rtc_snoc _ _ Hra21 Hra221); intro Hsteps.
-        generalize (ss_trans Hsteps1 Hsteps); intro Hsteps'.
+        generalize (rtc_trans Hsteps1 Hsteps); intro Hsteps'.
         generalize (lock_mono Hsteps' Hra2221 m t0); intro Hlock.
         etransitivity; [|apply Max.le_max_r].
         etransitivity; [|apply Hlock].
@@ -1047,7 +1042,7 @@ Section VectorClocks.
             specialize (Hjoin b); use Hjoin; [clarify | omega].
     - generalize (hb_lt Hhb1), (hb_lt Hhb2); intros Hlti Hltj.
       destruct k; [omega | clarify].
-      rewrite <- plus_n_Sm in Hltj; rewrite <- NPeano.Nat.succ_lt_mono in Hltj.
+      rewrite <- plus_n_Sm in Hltj; rewrite <- Nat.succ_lt_mono in Hltj.
       generalize (nth_error_succeeds tr2); intro Hk.
       specialize (Hk (k - length tr1)); use Hk; [|omega].
       destruct Hk as [c Hk].
@@ -1065,7 +1060,7 @@ Section VectorClocks.
           etransitivity; [|apply K_lower].
           eapply clock_mono; eauto. }
         generalize (ss_step _ _ Hstepa Hl1); intro Hstepsa.
-        generalize (ss_trans Hsteps1 Hstepsa); intro.
+        generalize (rtc_trans Hsteps1 Hstepsa); intro.
         eapply IHHhb2; eauto; clarsimp; omega.
   Qed.
 
@@ -1181,9 +1176,9 @@ Section VectorClocks.
       rewrite <- writesb_writes, Bool.not_true_iff_false; eapply Hfind22;
         [|apply nth_error_rev; eauto].
       generalize (nth_error_lt _ _ Hfind1); rewrite rev_length; intro Hn.
-      clear - Hn Hj1; rewrite plus_comm, NPeano.Nat.sub_add_distr,
-        (NPeano.Nat.sub_succ_r (length tr)).
-      rewrite minus_distr, NPeano.Nat.add_1_r; simpl; [| omega | omega].
+      clear - Hn Hj1; rewrite plus_comm, Nat.sub_add_distr,
+        (Nat.sub_succ_r (length tr)).
+      rewrite minus_distr, Nat.add_1_r; simpl; [| omega | omega].
       rewrite minus_distr, minus_diag; [| omega | omega].
       destruct n; omega.
     - unfold last_write in Hfind; rewrite find_index_fail in Hfind.
@@ -1422,7 +1417,7 @@ Section VectorClocks.
         { specialize (Hwf1 u t); clarify; omega. }
       - unfold vc_join in *.
         specialize (Hwf21 m t); rewrite Max.max_l in IHtr; [clarify | omega].
-        etransitivity; [apply IHtr | apply NPeano.Nat.le_max_l].
+        etransitivity; [apply IHtr | apply Nat.le_max_l].
       - unfold vc_inc in *; clarify.
         specialize (Hwf221 x0 t); rewrite Hown in *; clarify; omega.
       - destruct (eq_dec t1 t); clarify.
@@ -1430,13 +1425,13 @@ Section VectorClocks.
           specialize (Hwf221 x0 t); rewrite Hown in *; clarify; omega.
         + unfold vc_join in *.
           specialize (Hwf1 t1 t); rewrite Max.max_l in IHtr; clarify; [|omega].
-          etransitivity; [apply IHtr | apply NPeano.Nat.le_max_l].
+          etransitivity; [apply IHtr | apply Nat.le_max_l].
       - destruct (eq_dec u0 t); clarify.
         + unfold vc_inc in Hown; clarify.
           specialize (Hwf221 x0 t); rewrite Hown in *; clarify; omega.
         + unfold vc_join in *.
           specialize (Hwf1 u0 t); rewrite Max.max_l in IHtr; clarify; [|omega].
-          etransitivity; [apply IHtr | apply NPeano.Nat.le_max_l].
+          etransitivity; [apply IHtr | apply Nat.le_max_l].
     Qed.
 
     Lemma FT_write_own : forall tr s x t (Hsteps : FT_step_star FT_s0 tr s)
@@ -1459,7 +1454,7 @@ Section VectorClocks.
       - destruct e; clarify.
       - unfold vc_join in Hown, IHtr; unfold vc_join.
         specialize (Hwf21 m t); rewrite Max.max_l in IHtr; [clarify | omega].
-        etransitivity; [apply IHtr | apply NPeano.Nat.le_max_l].
+        etransitivity; [apply IHtr | apply Nat.le_max_l].
       - unfold vc_inc in Hown; clarify.
         specialize (Hwf222 x0 t); rewrite Hown in *; clarify; omega.
       - destruct (eq_dec t1 t); clarify.
@@ -1467,27 +1462,27 @@ Section VectorClocks.
           specialize (Hwf222 x0 t); rewrite Hown in *; clarify; omega.
         + unfold vc_join in *.
           specialize (Hwf1 t1 t); rewrite Max.max_l in IHtr; clarify; [|omega].
-          etransitivity; [apply IHtr | apply NPeano.Nat.le_max_l].
+          etransitivity; [apply IHtr | apply Nat.le_max_l].
       - destruct (eq_dec u0 t); clarify.
         + unfold vc_inc in Hown; clarify.
           specialize (Hwf222 x0 t); rewrite Hown in *; clarify; omega.
         + unfold vc_join in *.
           specialize (Hwf1 u0 t); rewrite Max.max_l in IHtr; clarify; [|omega].
-          etransitivity; [apply IHtr | apply NPeano.Nat.le_max_l].
+          etransitivity; [apply IHtr | apply Nat.le_max_l].
     Qed.
 
     Lemma vc_join_mono_l : forall V V' V2, vc_le V V' ->
       vc_le (vc_join V V2) (vc_join V' V2).
     Proof.
       repeat intro; unfold vc_join.
-      apply NPeano.Nat.max_le_compat_r; auto.
+      apply Nat.max_le_compat_r; auto.
     Qed.
       
     Lemma vc_join_mono_r : forall V1 V V', vc_le V V' ->
       vc_le (vc_join V1 V) (vc_join V1 V').
     Proof.
       repeat intro; unfold vc_join.
-      apply NPeano.Nat.max_le_compat_l; auto.
+      apply Nat.max_le_compat_l; auto.
     Qed.
 
     Lemma eorv_join_mono_r : forall r V V', vc_le V V' ->
@@ -1496,7 +1491,7 @@ Section VectorClocks.
       destruct r; clarify.
       - apply vc_join_mono_r; auto.
       - destruct e; intro; unfold upd; clarify.
-        apply NPeano.Nat.max_le_compat_l; auto.
+        apply Nat.max_le_compat_l; auto.
     Qed.
 
     Definition eorv_le r r' := forall t, app r t <= app r' t.
@@ -1515,18 +1510,18 @@ Section VectorClocks.
       - apply vc_join_mono_l; auto.
       - destruct e; intro t'; specialize (H t'); unfold upd, vc_join; clarify.
         destruct (eq_dec t t'); clarify.
-        + apply NPeano.Nat.max_le_compat_r; auto.
-        + rewrite NPeano.Nat.max_lub_iff; omega.
+        + apply Nat.max_le_compat_r; auto.
+        + rewrite Nat.max_lub_iff; omega.
       - destruct e.
         specialize (H t); clarify.
         intro t'; unfold upd, vc_join; destruct (eq_dec t t'); clarify.
-        + apply NPeano.Nat.max_le_compat_r; auto.
+        + apply Nat.max_le_compat_r; auto.
         + apply Max.le_max_r.
       - destruct e, e0.
         specialize (H t); clarify.
         destruct (eq_dec t1 t); clarify.
         + intro; unfold upd; clarify.
-          apply NPeano.Nat.max_le_compat_r; auto.
+          apply Nat.max_le_compat_r; auto.
         + rewrite Max.max_r; [|omega].
           intro; clarsimp; unfold upd; clarify.
           apply Max.le_max_r.
@@ -1537,8 +1532,8 @@ Section VectorClocks.
     Proof.
       split; repeat intro; clarify.
       - split; intro x; specialize (H x); unfold vc_join in *;
-          rewrite NPeano.Nat.max_lub_iff in *; clarify.
-      - unfold vc_join; rewrite NPeano.Nat.max_lub_iff; clarify.
+          rewrite Nat.max_lub_iff in *; clarify.
+      - unfold vc_join; rewrite Nat.max_lub_iff; clarify.
     Qed.
 
     Lemma eorv_join_le : forall V1 V2 V3, vc_le (eorv_join V1 V2) V3 <->
@@ -1548,15 +1543,15 @@ Section VectorClocks.
       - rewrite vc_join_le; split; clarify.
       - destruct e; split; clarify.
         + split; intro t'; specialize (H t'); unfold upd in *; clarify;
-            rewrite NPeano.Nat.max_lub_iff in *; clarify.
+            rewrite Nat.max_lub_iff in *; clarify.
         + intro; unfold upd; clarify.
-          rewrite NPeano.Nat.max_lub_iff; clarify.
+          rewrite Nat.max_lub_iff; clarify.
           specialize (H1 t0); clarify.
     Qed.
 
     Require Import RelationClasses.
 
-    Instance vc_le_trans : Transitive vc_le.
+    Global Instance vc_le_trans : Transitive vc_le.
     Proof.
       repeat intro; etransitivity; eauto.
     Qed.
@@ -1587,14 +1582,6 @@ Section VectorClocks.
     Proof.
       split; repeat intro; auto.
     Qed.
-
-    Ltac wf_check := unfold ge in *; match goal with
-    | [H : ?C ?t ?t <= ?C ?u ?t,
-       Hwf : forall u t, t <> u -> ?C u t < ?C t t |- _] =>
-         specialize (Hwf u t); destruct (eq_dec u t); clarify; try omega
-    | [H : ?C ?t ?t <= ?L ?m ?t, Hwf : forall m t, ?L m t < ?C t t |- _] =>
-         specialize (Hwf m t); omega
-    end.
 
     Lemma max_0 : forall n m, max n m = 0 <-> n = 0 /\ m = 0.
     Proof.
@@ -1784,7 +1771,7 @@ Section VectorClocks.
                 destruct (eq_dec t u); clarify.
                 unfold vc_join; apply Max.le_max_l. }
               destruct (eq_dec t u); clarify.
-              unfold vc_join, ge in *; rewrite NPeano.Nat.max_le_iff in *;
+              unfold vc_join, ge in *; rewrite Nat.max_le_iff in *;
                 clarify.
               right; apply Hl; auto. }
             { apply Hl; auto. }
@@ -1792,19 +1779,19 @@ Section VectorClocks.
             { split.
               { exists x0; clarify.
                 specialize (Hsim222212 t1); clarify.
-                unfold vc_join in *; rewrite NPeano.Nat.max_le_iff in *;
+                unfold vc_join in *; rewrite Nat.max_le_iff in *;
                   clarify. }
               { intros.
                 specialize (Hsim22222 t1); clarify.
-                unfold vc_join in *; rewrite NPeano.Nat.max_le_iff in *;
+                unfold vc_join in *; rewrite Nat.max_le_iff in *;
                   clarify. } }
             { destruct e as (c, ?); destruct c; clarify.
-              { intro; unfold vc_join in *; rewrite NPeano.Nat.max_le_iff in *.
+              { intro; unfold vc_join in *; rewrite Nat.max_le_iff in *.
                 destruct H; [left; apply Hsim22221 | right; apply Hsim22222];
                   auto. }
               { split; repeat intro; clarify.
                 { destruct (eq_dec t u); clarify; [|apply Hsim22222; auto].
-                  unfold ge, vc_join in *; rewrite NPeano.Nat.max_le_iff in *;
+                  unfold ge, vc_join in *; rewrite Nat.max_le_iff in *;
                     destruct H; [left | right]; apply Hsim22222; auto. }
                 { apply Hsim22222; auto. } } }
       - do 2 eexists.
@@ -1858,7 +1845,7 @@ Section VectorClocks.
                   destruct (eq_dec u u0); clarify.
                   unfold vc_join; apply Max.le_max_l. }
                 destruct (eq_dec u u0); clarify.
-                unfold vc_join, ge in *; rewrite NPeano.Nat.max_le_iff in *;
+                unfold vc_join, ge in *; rewrite Nat.max_le_iff in *;
                   clarify.
                 right; apply Hw; auto. } }
             { apply Hl; auto. }
@@ -1867,25 +1854,25 @@ Section VectorClocks.
               { exists x0; clarify.
                 specialize (Hsim222212 t1); clarify.
                 unfold vc_join, vc_inc in *; destruct (eq_dec t u0); clarify;
-                  [|rewrite NPeano.Nat.max_le_iff in *; clarify].
+                  [|rewrite Nat.max_le_iff in *; clarify].
                 apply Hsim2222121.
                 etransitivity; [apply Hsim2221 | eauto]. }
               { intros.
                 specialize (Hsim22222 t1); clarify.
                 unfold vc_join, vc_inc in *; destruct (eq_dec t u0); clarify;
-                  rewrite NPeano.Nat.max_le_iff in *; clarify. } }
+                  rewrite Nat.max_le_iff in *; clarify. } }
             { destruct e as (c, ?); destruct c; clarify.
               { intro; unfold vc_join, vc_inc in *.
                 destruct (eq_dec t u0); clarify.
                 { destruct (eq_dec t0 u0); clarify; apply Hsim22221; auto. }
                 { destruct (eq_dec u u0); clarify; [|apply Hsim22221; auto].
-                  rewrite NPeano.Nat.max_le_iff in *.
+                  rewrite Nat.max_le_iff in *.
                   destruct H; [left | right]; apply Hsim22221; auto. } }
               { split; repeat intro; unfold vc_join, vc_inc in *; clarify.
                 { destruct (eq_dec t u0); clarify.
                   { destruct (eq_dec t1 u0); clarify; apply Hsim22222; auto. }
                   { destruct (eq_dec u u0); clarify; [|apply Hsim22222; auto].
-                    unfold ge in *; rewrite NPeano.Nat.max_le_iff in *.
+                    unfold ge in *; rewrite Nat.max_le_iff in *.
                     destruct H; [left | right]; apply Hsim22222; auto. } }
                 { apply Hsim22222; auto. } } }
       - do 2 eexists.
@@ -1906,7 +1893,7 @@ Section VectorClocks.
                   destruct (eq_dec t u0); clarify.
                   unfold vc_join; apply Max.le_max_l. }
                 destruct (eq_dec t u0); clarify.
-                unfold vc_join, ge in *; rewrite NPeano.Nat.max_le_iff in *;
+                unfold vc_join, ge in *; rewrite Nat.max_le_iff in *;
                   clarify.
                 right; apply Hw; auto. } }
             { apply Hl; auto. }
@@ -1915,25 +1902,25 @@ Section VectorClocks.
               { exists x0; clarify.
                 specialize (Hsim222212 t1); clarify.
                 unfold vc_join, vc_inc in *; destruct (eq_dec u u0); clarify;
-                  [|rewrite NPeano.Nat.max_le_iff in *; clarify].
+                  [|rewrite Nat.max_le_iff in *; clarify].
                 apply Hsim2222121.
                 etransitivity; [apply Hsim2221 | eauto]. }
               { intros.
                 specialize (Hsim22222 t1); clarify.
                 unfold vc_join, vc_inc in *; destruct (eq_dec u u0); clarify;
-                  rewrite NPeano.Nat.max_le_iff in *; clarify. } }
+                  rewrite Nat.max_le_iff in *; clarify. } }
             { destruct e as (n, ?); destruct n; clarify.
               { intro; unfold vc_join, vc_inc in *.
                 destruct (eq_dec u u0); clarify.
                 { destruct (eq_dec t0 u0); clarify; apply Hsim22221; auto. }
                 { destruct (eq_dec t u0); clarify; [|apply Hsim22221; auto].
-                  rewrite NPeano.Nat.max_le_iff in *.
+                  rewrite Nat.max_le_iff in *.
                   destruct H; [left | right]; apply Hsim22221; auto. } }
               { split; repeat intro; unfold vc_join, vc_inc in *; clarify.
                 { destruct (eq_dec u u0); clarify.
                   { destruct (eq_dec t1 u0); clarify; apply Hsim22222; auto. }
                   { destruct (eq_dec t u0); clarify; [|apply Hsim22222; auto].
-                    unfold ge in *; rewrite NPeano.Nat.max_le_iff in *.
+                    unfold ge in *; rewrite Nat.max_le_iff in *.
                     destruct H; [left | right]; apply Hsim22222; auto. } }
                 { apply Hsim22222; auto. } } }
       - generalize (FT_wf_preservation Hwf Hstep'); intro Hwf'.
@@ -2078,24 +2065,24 @@ Section VectorClocks.
           split; clarsimp.
           * split; repeat intro; [|apply Hsim2212; auto].
             destruct (eq_dec t u); clarify; [|apply Hsim2212; auto].
-            unfold vc_join, ge in *; rewrite NPeano.Nat.max_le_iff in *.
+            unfold vc_join, ge in *; rewrite Nat.max_le_iff in *.
             destruct H; [left | right]; apply Hsim2212; auto.
           * destruct (R x) eqn: HR2; clarify.
             { split.
               { exists x0; clarify.
                 specialize (Hsim222212 t2); clarify.
-                unfold vc_join in *; rewrite NPeano.Nat.max_le_iff in *;
+                unfold vc_join in *; rewrite Nat.max_le_iff in *;
                   clarify. }
               { intros t' ?; specialize (Hsim22222 t'); clarify.
-                unfold vc_join in *; rewrite NPeano.Nat.max_le_iff in *;
+                unfold vc_join in *; rewrite Nat.max_le_iff in *;
                   clarify. } }
             { destruct e as (c, ?); destruct c; clarify.
-              { intro; unfold vc_join in *; rewrite NPeano.Nat.max_le_iff in *.
+              { intro; unfold vc_join in *; rewrite Nat.max_le_iff in *.
                 destruct H; [left; apply Hsim22221 | right; apply Hsim22222];
                   auto. }
               { split; repeat intro; [|apply Hsim22222; auto].
                 destruct (eq_dec t u); clarify; [|apply Hsim22222; auto].
-                unfold vc_join, ge in *; rewrite NPeano.Nat.max_le_iff in *.
+                unfold vc_join, ge in *; rewrite Nat.max_le_iff in *.
                 destruct H; [left | right]; apply Hsim22222; auto. } }
       - do 2 eexists.
         + econstructor; eauto.
@@ -2136,7 +2123,7 @@ Section VectorClocks.
             destruct (eq_dec t u0); unfold vc_inc in *; clarify.
             { apply Hsim2212; clarify. }
             { destruct (eq_dec u u0); clarify; [|apply Hsim2212; auto].
-              unfold vc_join, ge in *; rewrite NPeano.Nat.max_le_iff in *.
+              unfold vc_join, ge in *; rewrite Nat.max_le_iff in *.
               destruct H; [left | right]; apply Hsim2212; auto. }
           * destruct (R x) eqn: HR2; clarify.
             { split.
@@ -2145,23 +2132,23 @@ Section VectorClocks.
                 destruct (eq_dec t u0); unfold vc_inc in *; clarify.
                 { apply Hsim2222121.
                   etransitivity; [apply Hsim2221 | eauto]. }
-                { unfold vc_join, ge in *; rewrite NPeano.Nat.max_le_iff in *;
+                { unfold vc_join, ge in *; rewrite Nat.max_le_iff in *;
                     clarify. } }
               { intros t' ?; specialize (Hsim22222 t'); clarify.
                 destruct (eq_dec t u0); unfold vc_inc in *; clarify.
-                unfold vc_join, ge in *; rewrite NPeano.Nat.max_le_iff in *;
+                unfold vc_join, ge in *; rewrite Nat.max_le_iff in *;
                   clarify. } }
             { destruct e as (c, ?); destruct c; clarify.
               { destruct (eq_dec t u0); unfold vc_inc in *; intro; clarify.
                 { destruct (eq_dec t1 u0); clarify; apply Hsim22221; auto. }
                 { destruct (eq_dec u u0); clarify; [|apply Hsim22221; auto].
-                  unfold vc_join, ge in *; rewrite NPeano.Nat.max_le_iff in *.
+                  unfold vc_join, ge in *; rewrite Nat.max_le_iff in *.
                   destruct H; [left | right]; apply Hsim22221; auto. } }
               { split; repeat intro; [|apply Hsim22222; auto].
                 destruct (eq_dec t u0); unfold vc_inc in *; clarify.
                 { apply Hsim22222; clarify. }
                 { destruct (eq_dec u u0); clarify; [|apply Hsim22222; auto].
-                  unfold vc_join, ge in *; rewrite NPeano.Nat.max_le_iff in *.
+                  unfold vc_join, ge in *; rewrite Nat.max_le_iff in *.
                   destruct H; [left | right]; apply Hsim22222; auto. } } }
       - do 2 eexists.
         + econstructor; eauto.
@@ -2173,7 +2160,7 @@ Section VectorClocks.
             destruct (eq_dec u u0); unfold vc_inc in *; clarify.
             { apply Hsim2212; clarify. }
             { destruct (eq_dec t u0); clarify; [|apply Hsim2212; auto].
-              unfold vc_join, ge in *; rewrite NPeano.Nat.max_le_iff in *.
+              unfold vc_join, ge in *; rewrite Nat.max_le_iff in *.
               destruct H; [left | right]; apply Hsim2212; auto. }
           * destruct (R x) eqn: HR2; clarify.
             { split.
@@ -2182,23 +2169,23 @@ Section VectorClocks.
                 destruct (eq_dec u u0); unfold vc_inc in *; clarify.
                 { apply Hsim2222121.
                   etransitivity; [apply Hsim2221 | eauto]. }
-                { unfold vc_join, ge in *; rewrite NPeano.Nat.max_le_iff in *;
+                { unfold vc_join, ge in *; rewrite Nat.max_le_iff in *;
                     clarify. } }
               { intros t' ?; specialize (Hsim22222 t'); clarify.
                 destruct (eq_dec u u0); unfold vc_inc in *; clarify.
-                unfold vc_join, ge in *; rewrite NPeano.Nat.max_le_iff in *;
+                unfold vc_join, ge in *; rewrite Nat.max_le_iff in *;
                   clarify. } }
             { destruct e as (c, ?); destruct c; clarify.
               { destruct (eq_dec u u0); unfold vc_inc in *; intro; clarify.
                 { destruct (eq_dec t1 u0); clarify; apply Hsim22221; auto. }
                 { destruct (eq_dec t u0); clarify; [|apply Hsim22221; auto].
-                  unfold vc_join, ge in *; rewrite NPeano.Nat.max_le_iff in *.
+                  unfold vc_join, ge in *; rewrite Nat.max_le_iff in *.
                   destruct H; [left | right]; apply Hsim22221; auto. } }
               { split; repeat intro; [|apply Hsim22222; auto].
                 destruct (eq_dec u u0); unfold vc_inc in *; clarify.
                 { apply Hsim22222; clarify. }
                 { destruct (eq_dec t u0); clarify; [|apply Hsim22222; auto].
-                  unfold vc_join, ge in *; rewrite NPeano.Nat.max_le_iff in *.
+                  unfold vc_join, ge in *; rewrite Nat.max_le_iff in *.
                   destruct H; [left | right]; apply Hsim22222; auto. } } }
       - generalize (rtc_snoc _ _ Hroot2 Hstep); intro Hroot2'.
         generalize (rtc_snoc _ _ Hroot1 Hstep'); intro Hroot1'.

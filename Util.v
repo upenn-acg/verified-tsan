@@ -1,16 +1,19 @@
-Require Import List.
-Require Import CoqEqDec.
-Require Import Arith.
+Require Export List.
+Require Export Arith.
 Require Import Sorted.
-Require Import Coqlib.
+Require Export Coqlib.
 Require Import Program.Tactics.
 Require Import Permutation.
+Require Export NPeano.
+Require Export CoqEqDec.
 Import RelationClasses.
-Import ListNotations.
+Export ListNotations.
 
 Set Implicit Arguments.
 
-Local Close Scope Z.
+Close Scope Z.
+
+Hint Resolve Le.le_0_n.
 
 Definition fun_upd A B {_ : EqDec_eq A} (f : A -> B) x y z :=
   if eq_dec z x then y else f z.
@@ -123,7 +126,7 @@ repeat match goal with
 | [H : forall x1 x2 x3 x4 x5, ?a = ?b -> ?P |- _] => specialize (H _ _ _ _ _ eq_refl)*)
 (* This is useful when right, but can eliminate non-trivial equality hypotheses
    by instantiating them trivially. *)
-| [H : ?a <> ?a |- _] => contradiction H; apply eq_refl
+| [H : ?a <> ?a |- _] => contradiction H; auto
 | [H : ?P -> ?Q, H' : ?P |- _] => specialize (H H')
 | [H : ?P \/ False |- _] => destruct H; [| exfalso; auto]
 | [H : False \/ ?P |- _] => destruct H; [exfalso; auto |]
@@ -260,7 +263,8 @@ Proof.
     + split; clarify; destruct H; clarify.
 Qed.
 
-Lemma exists_not_None : forall A (x : option A), (exists y, x = Some y) <-> (x <> None).
+Lemma exists_not_None : forall A (x : option A),
+  (exists y, x = Some y) <-> (x <> None).
 Proof. intros; destruct x; split; clarify; eauto. Qed.
 
 Hint Rewrite minus_diag : util.
@@ -1388,8 +1392,7 @@ Section IList.
   Lemma itake_length : forall n s, length (itake n s) <= n.
   Proof.
     induction n; destruct s; clarify.
-    - omega.
-    - specialize (IHn s); omega.
+    specialize (IHn s); omega.
   Qed.
 
   Lemma iapp_take : forall n l s, itake n (iapp l s) =

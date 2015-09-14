@@ -5,3 +5,5 @@ Makefile.coq
 *.d
 Makefile~
 *.v~
+#VectorClocks.v#
+*.v#
