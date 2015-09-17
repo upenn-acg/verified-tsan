@@ -1,5 +1,6 @@
 Require Export List.
 Require Export Arith.
+(*Require Export Omega.*)
 Require Import Sorted.
 Require Export Coqlib.
 Require Import Program.Tactics.
@@ -176,7 +177,11 @@ Ltac clarsimp := repeat (try clarify; repeat rewrite <- app_assoc in *;
   | [H : ?a = ?b |- context[?a]] => first [rewrite H | setoid_rewrite H] end;
   clarify).
 
-Lemma find_success : forall A P (l : list A) x, find P l = Some x -> In x l /\ P x = true.
+Definition nil_dec A (l : list A) : {l = []} + {l <> []}.
+Proof. destruct l; [left | right]; clarify. Defined.
+
+Lemma find_success : forall A P (l : list A) x, find P l = Some x ->
+  In x l /\ P x = true.
 Proof. intros; induction l; inversion H; clarify. Qed.
 
 Lemma find_succeeds : forall A P (l : list A) x, In x l -> P x = true -> 
@@ -288,7 +293,7 @@ Lemma lt_dec_plus_r : forall A i j (a b : A),
   (if lt_dec (i + j) i then a else b) = b.
 Proof. intros; destruct (lt_dec (i + j) i); [omega | auto]. Qed.
 Hint Rewrite lt_dec_plus_l lt_dec_plus_r : util.
-Hint Rewrite minus_plus NPeano.Nat.add_sub : util.
+Hint Rewrite minus_plus NPeano.Nat.add_sub NPeano.Nat.add_1_r : util.
 
 Lemma lt_dec_mono : forall A i j (a b : A), 
   (if lt_dec (S i) (S j) then a else b) = if lt_dec i j then a else b.
@@ -366,6 +371,9 @@ Proof.
   - omega.
   - apply IHn; omega.
 Qed.
+
+Corollary skipn_length' : forall A (l : list A), skipn (length l) l = [].
+Proof. intros; apply skipn_all; auto. Qed.
 
 Lemma nth_error_lt : forall A (l : list A) n a,
   nth_error l n = Some a -> lt n (length l).
@@ -461,6 +469,14 @@ Proof.
   - specialize (IHl _ H); destruct IHl as [n ?]; exists (S n); clarify.
 Qed.
 
+Lemma in_nth_iff : forall A (l : list A) x,
+  In x l <-> exists n, nth_error l n = Some x.
+Proof.
+  split; clarify.
+  - exploit in_nth_error; eauto; clarify; eauto.
+  - eapply nth_error_in; eauto.
+Qed.
+
 Lemma find_nth_error : forall A (l : list A) P x,
   find P l = Some x -> exists n, n < length l /\
     nth_error l n = Some x /\ P x = true.
@@ -502,6 +518,20 @@ Proof.
   - inversion H; rewrite Forall_app; rewrite IHl; clarify.
 Qed.
 
+Lemma Forall_skipn : forall A P (l : list A) n (Hforall : Forall P l),
+  Forall P (skipn n l).
+Proof.
+  intros; rewrite <- (firstn_skipn n), Forall_app in Hforall; clarify.
+Qed.
+
+Lemma Exists_dec : forall A (P : A -> Prop) l
+  (Hdec : forall x, In x l -> P x \/ ~P x),
+  Exists P l \/ Forall (fun x => ~P x) l.
+Proof.
+  induction l; clarify.
+  specialize (Hdec a); clarify.
+Qed.
+    
 Lemma nth_error_rev_iff : forall A (l : list A) i x (Hlt : i < length l),
   nth_error (rev l) (length l - i - 1) = Some x <-> nth_error l i = Some x.
 Proof.
@@ -888,6 +918,13 @@ Proof.
   rewrite Forall_forall; intros; rewrite andb_comm; auto.
 Qed.
 
+Lemma filter_idem : forall A f (l : list A), filter f (filter f l) =
+  filter f l.
+Proof.
+  intros; rewrite filter_filter_1; auto.
+  rewrite Forall_forall; unfold implb; clarify.
+Qed.
+
 Lemma filter_all : forall A (f : A -> bool) l
   (Hall : Forall (fun x => f x = true) l), filter f l = l.
 Proof.
@@ -1035,6 +1072,13 @@ Proof.
       exists x; clarify.
       specialize (H22 (S j) x'); clarify.
 Qed.      
+
+Lemma find_find_index : forall A f (l : list A) x, find f l = Some x <->
+  exists i, find_index f l = Some i /\ nth_error l i = Some x.
+Proof.
+  setoid_rewrite find_spec; setoid_rewrite find_index_spec; split; clarsimp;
+    eexists; eauto.
+Qed.
 
 Lemma find_index_fail : forall A (f : A -> bool) l,
   find_index f l = None <-> Forall (fun x => f x = false) l.
@@ -1219,6 +1263,12 @@ Qed.
 Lemma firstn_length : forall A (l : list A), firstn (length l) l = l.
 Proof. induction l; clarsimp. Qed.
 Hint Rewrite firstn_length : list.
+
+Lemma firstn_comm : forall A n m (l : list A), firstn n (firstn m l) =
+  firstn m (firstn n l).
+Proof.
+  intros; repeat rewrite firstn_firstn; rewrite Min.min_comm; auto.
+Qed.
 
 Lemma removelast_app : forall A (l1 l2 : list A), removelast (l1 ++ l2) =
   firstn (length l1 + length l2 - 1) l1 ++ removelast l2.

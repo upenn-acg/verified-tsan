@@ -1,7 +1,7 @@
-MODULES := CoqEqDec Util VectorClocks
+MODULES := CoqEqDec Coqlib Util VectorClocks block_model conc_model
 VS := $(MODULES:%=%.v)
 
-COQFLAGS := -R /cygdrive/c/Users/William/Documents/GitHub/compcomp compcert
+#COQFLAGS := -R /cygdrive/c/Users/William/Documents/GitHub/compcomp compcert
 
 .PHONY: coq clean
 
