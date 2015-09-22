@@ -56,13 +56,15 @@ match cop with
 | _ => []
 end.*)
 
+Definition move src tgt tmp := [Load tmp src; Store tgt (V tmp)].
+
 Fixpoint set_vc (tgt : var (* loc of target VC *))
   (src : var (* loc of source VC *)) (z : nat (* thread bound/size of VCs *))
   (tmp : local (* a local to use as temp *)) :=
 (* Move all z of the timestamps in src into tgt. *)
 match z with
 | O => []
-| S n => Load tmp (src, n) :: Store (tgt, n) (V tmp) :: set_vc tgt src n tmp
+| S n => move (src, n) (tgt, n) tmp ++ set_vc tgt src n tmp
 end.
 
 Definition inc_vc t tgt tmp := [
@@ -72,6 +74,8 @@ Definition inc_vc t tgt tmp := [
 ].
 
 (* Since everything is a nat, we can use C + t as the t component of C. *)
+Definition load_handler t x C R tmp := move (C + t, t) (R + x, t) tmp.
+
 Definition unlock_handler t l (C : var (* start of thread VCs *))
   (L : var (* start of lock VCs *)) z tmp :=
   set_vc (L + l) (C + t) z tmp ++ inc_vc t (C + t) tmp.
@@ -81,10 +85,10 @@ Definition unlock_handler t l (C : var (* start of thread VCs *))
 Definition instrument_instr (C L R W : var) z tmp (ins : instr) (t : tid)
   : prog :=
 (match ins with
-(* | Load a x   => load_handler t x a*)
-(* | ... *)
-| Unlock l   => unlock_handler t l C L z tmp
-| _          => []
+ | Load a (x, 0)   => load_handler t x C R tmp
+ (* | ... *)
+ | Unlock l   => unlock_handler t l C L z tmp
+ | _          => []
 end) ++ [ins].
 
 Fixpoint instrument C L R W z tmp (p: prog) (t: tid) : prog:=
