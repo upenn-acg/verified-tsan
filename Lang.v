@@ -14,7 +14,7 @@ Definition lock := nat.
 Definition tid := nat.
 
 Inductive expr : Set :=
-| N (n : nat)
+| I (n : nat)
 | V (a : local)
 | Plus (e1 e2 : expr).
 
@@ -39,7 +39,7 @@ Section Semantics.
   Definition init_env (t : tid) (a : local) := 0.
 
   Fixpoint eval G e := match e with
-  | N n => n
+  | I n => n
   | V a => G a
   | Plus e1 e2 => eval G e1 + eval G e2
   end.
