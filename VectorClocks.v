@@ -1560,7 +1560,7 @@ Section VectorClocks.
       (C1, L1, R1, W1), (C2, L2, R2, W2) => C1 = C2 /\ L1 = L2 /\
       forall x, match W2 x with (c, t) => W1 x t = c /\ epoch_rep C1 L1 t (W1 x)
                 end /\ (forall t, app (R2 x) t <= R1 x t) /\
-       match R2 x with 
+       match R2 x with
        | E (O, _) => (forall u, e_le (W2 x) (C1 u) -> vc_le (R1 x) (C1 u)) /\
                      (forall m, e_le (W2 x) (L1 m) -> vc_le (R1 x) (L1 m))
        | E (c, t) => R1 x t = c /\ epoch_rep C1 L1 t (R1 x)

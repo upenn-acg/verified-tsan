@@ -967,13 +967,13 @@ Section TSan.
 
   Inductive TS_step : state -> operation -> state -> Prop :=
   | on_read : forall C L R W t x Vs' R'
-     (HW : Forall (fun s => vc_le (snd s) (C t)) (W x))
+     (HW : Forall (fun s => vc_le s (C t)) (map snd (W x)))
      (HR : drop_le (C t) (R x) Vs') (HR' : R' = upd R x ((t, C t) :: Vs')),
      TS_step (C, L, R, W) (rd t x) (C, L, R', W)
   | on_write : forall C L R W t x R' W'
      (* We must be able to drop all previous reads and writes *)
-     (HR : Forall (fun s => vc_le (snd s) (C t)) (R x))
-     (HW : Forall (fun s => vc_le (snd s) (C t)) (W x))
+     (HR : Forall (fun s => vc_le s (C t)) (map snd (R x)))
+     (HW : Forall (fun s => vc_le s (C t)) (map snd (W x)))
      (HR' : R' = upd R x [(t, C t)]) (HW' : W' = upd W x [(t, C t)]),
      TS_step (C, L, R, W) (wr t x) (C, L, R', W')
   | on_signal : forall C L R W t m L' C' (HL' : L' = upd L m (C t))
@@ -991,10 +991,10 @@ Section TSan.
 
   Definition TS_step_star := rtc TS_step.
 
-  Fixpoint join_list (ss : list (tid * vector_clock)) :=
+  Fixpoint join_list (ss : list vector_clock) :=
     match ss with
     | [] => vc_bot
-    | (_, V) :: rest => vc_join V (join_list rest)
+    | V :: rest => vc_join V (join_list rest)
     end.
 
   Lemma vc_bot_le : forall (V : vector_clock), vc_le vc_bot V.
@@ -1002,12 +1002,11 @@ Section TSan.
   Hint Resolve vc_bot_le.
 
   Lemma join_le : forall V ss, vc_le (join_list ss) V <->
-    Forall (fun s => vc_le (snd s) V) ss.
+    Forall (fun s => vc_le s V) ss.
   Proof.
     induction ss.
     - split; clarify.
-    - destruct a; simpl.
-      rewrite vc_join_le, IHss; split; clarify.
+    - simpl; rewrite vc_join_le, IHss; split; clarify.
       inversion H; clarify.
   Qed.
 
@@ -1046,13 +1045,74 @@ Section TSan.
       + eexists; apply drop_keep; eauto.
   Qed.        
 
+  Definition finite_state (s : state) := match s with (C, L, W, R) =>
+    (forall t, finite (C t)) /\ (forall m, finite (L m)) /\
+    (forall x, Forall (fun s => finite (snd s)) (R x) /\
+               Forall (fun s => finite (snd s)) (W x)) end.
+
+  Lemma finite_bot : finite vc_bot.
+  Proof.
+    exists []; clarify.
+  Qed.
+  Hint Resolve finite_bot.
+
+  Lemma finite_inc : forall V t, finite V -> finite (vc_inc t V).
+  Proof.
+    intros ??[??].
+    exists (t :: x); unfold vc_inc; clarify.
+    contradiction H0; auto.
+  Qed. 
+  Hint Resolve finite_inc.
+
+  Lemma finite_s0 : finite_state s0.
+  Proof. clarify. Qed.
+
+  Lemma drop_finite : forall V l l' (Hdrop : drop_le V l l')
+    (Hfin : Forall (fun s => finite (snd s)) l),
+    Forall (fun s => finite (snd s)) l'.
+  Proof.
+    intros; induction Hdrop; clarify.
+    - inversion Hfin; clarify.
+    - inversion Hfin; clarify.
+  Qed.
+  Hint Resolve drop_finite.
+
+  Lemma finite_join : forall V V' (Hfin : finite V) (Hfin' : finite V'),
+    finite (vc_join V V').
+  Proof.
+    intros ?? [x Hfin] [x' Hfin'].
+    exists (x ++ x'); intros; rewrite in_app in *.
+    specialize (Hfin t); specialize (Hfin' t); unfold vc_join; clarsimp.
+  Qed.
+
+  Lemma finite_step : forall s a s' (Hstep : TS_step s a s')
+    (Hfin : finite_state s), finite_state s'.
+  Proof.
+    intros; inversion Hstep; clarify.
+    - specialize (Hfin22 x0); unfold upd; clarify.
+      constructor; clarify.
+      eapply drop_finite; eauto.
+    - unfold upd; clarify.
+      split; constructor; clarify.
+    - unfold upd; repeat split; clarify; apply Hfin22.
+    - unfold upd; clarify.
+      apply finite_join; auto.
+    - unfold upd; clarify.
+      apply finite_join; auto.
+    - unfold upd; clarify.
+      apply finite_join; auto.
+  Qed.
+
+  Corollary finite_step_star : forall s tr s' (Hsteps : TS_step_star s tr s')
+    (Hfin : finite_state s), finite_state s'.
+  Proof.
+    intros; induction Hsteps; clarify; eapply IHHsteps, finite_step; eauto.
+  Qed.
+
   Definition TS_sim (s1 : VectorClocks.state) (s2 : state) := match s1, s2 with
     (C1, L1, R1, W1), (C2, L2, R2, W2) => C1 = C2 /\ L1 = L2 /\
-    (forall t, finite (C1 t)) /\ (forall m, finite (L1 m)) /\
-    forall x, vc_eq (join_list (R2 x)) (R1 x) /\
-              vc_eq (join_list (W2 x)) (W1 x) /\
-              Forall (fun s => finite (snd s)) (R2 x) /\
-              Forall (fun s => finite (snd s)) (W2 x) end.
+    forall x, vc_eq (join_list (map snd (R2 x))) (R1 x) /\
+              vc_eq (join_list (map snd (W2 x))) (W1 x) end.
 
   Import RelationClasses.
   Instance vc_eq_refl : Reflexive (@vc_eq tid).
@@ -1069,20 +1129,6 @@ Section TSan.
   Proof.
     constructor; [apply vc_eq_refl | apply vc_eq_sym | apply vc_eq_trans].
   Qed.
-
-  Lemma finite_bot : finite vc_bot.
-  Proof.
-    exists []; clarify.
-  Qed.
-  Hint Resolve finite_bot.
-
-  Lemma finite_inc : forall V t, finite V -> finite (vc_inc t V).
-  Proof.
-    intros ??[??].
-    exists (t :: x); unfold vc_inc; clarify.
-    contradiction H0; auto.
-  Qed. 
-  Hint Resolve finite_inc.
 
   Lemma TS_sim0 : TS_sim (VectorClocks.s0) s0.
   Proof. clarify. Qed.
@@ -1112,7 +1158,8 @@ Section TSan.
   Qed.
 
   Lemma join_drop_le : forall V l l' (Hdrop : drop_le V l l'),
-    vc_eq (vc_join V (join_list l')) (vc_join (join_list l) V).
+    vc_eq (vc_join V (join_list (map snd l')))
+          (vc_join (join_list (map snd l)) V).
   Proof.
     intros; induction Hdrop; clarify.
     - rewrite vc_join_sym; auto.
@@ -1127,16 +1174,6 @@ Section TSan.
     repeat intro; split; repeat intro;
       specialize (H1 t); rewrite H, H0 in *; auto.
   Qed.
-
-  Lemma drop_finite : forall V l l' (Hdrop : drop_le V l l')
-    (Hfin : Forall (fun s => finite (snd s)) l),
-    Forall (fun s => finite (snd s)) l'.
-  Proof.
-    intros; induction Hdrop; clarify.
-    - inversion Hfin; clarify.
-    - inversion Hfin; clarify.
-  Qed.
-  Hint Resolve drop_finite.
 
   Lemma drop_all : forall V Vs (Hle : Forall (fun s => vc_le (snd s) V) Vs),
     drop_le V Vs [].
@@ -1157,17 +1194,8 @@ Section TSan.
     repeat intro; setoid_rewrite Max.max_0_r; auto.
   Qed.
 
-  Lemma finite_join : forall V V' (Hfin : finite V) (Hfin' : finite V'),
-    finite (vc_join V V').
-  Proof.
-    intros ?? [x Hfin] [x' Hfin'].
-    exists (x ++ x'); intros; rewrite in_app in *.
-    specialize (Hfin t); specialize (Hfin' t); unfold vc_join; clarsimp.
-  Qed.
-
-  Lemma TS_sim1 : forall s1 tr s1' (Hsteps : step_star s1 tr s1') s2
-    (*tr0 (Hroot : VC_step_star s0 tr0 s1) s2 (Hwf : well_formed s2)*)
-    (Hsim : TS_sim s1 s2),
+  Lemma TS_sim1 : forall s1 tr s1' (Hsteps : step_star s1 tr s1')
+    s2 (Hfin : finite_state s2) (Hsim : TS_sim s1 s2),
     exists s2', TS_step_star s2 tr s2' /\ TS_sim s1' s2'.
   Proof.
     intros ????; induction Hsteps; intros.
@@ -1176,28 +1204,24 @@ Section TSan.
       as [s2' [Hstep' Hsim']].
     destruct s2 as (((C2, L2), R2), W2).
     clear Hsteps IHHsteps; inversion Hstep; clarify.
-    - generalize (Hsim2222 x); intros (Hr & Hw & Hfinr & Hfinw).
+    - generalize (Hsim22 x); intros (Hr & Hw).
       rewrite <- Hw, join_le in HW.
+      generalize (Hfin22 x); intros (Hfinw & Hfinr).
       generalize (finite_drop (C2 t) Hfinr); intros [? Hdrop].
       do 2 eexists; [econstructor; eauto | unfold upd; clarify].
-      rewrite <- Hr; split; [apply join_drop_le|]; clarify.
-      constructor; eauto.
-    - generalize (Hsim2222 x); intros (Hr & Hw & Hfinr & Hfinw).
+      rewrite <- Hr; apply join_drop_le; auto.
+    - generalize (Hsim22 x); intros (Hr & Hw).
       rewrite <- Hw, join_le in HW.
       rewrite <- Hr, join_le in HR.
       do 2 eexists; [econstructor; eauto | unfold upd; clarify].
       rewrite join_id_r; clarify.
-      split; constructor; eauto.
     - do 2 eexists; [econstructor; eauto | unfold upd; clarify].
-      apply finite_join; auto.
     - do 2 eexists; [econstructor; eauto | unfold upd; clarify].
-      split; clarify.
     - do 2 eexists; [econstructor; eauto | unfold upd; clarify].
-      apply finite_join; auto.
     - do 2 eexists; [econstructor; eauto | unfold upd; clarify].
-      apply finite_join; auto.
-    - specialize (IHHsteps _ Hsim'); clarify; do 2 eexists; eauto; econstructor;
-        eauto.
+    - exploit finite_step; eauto; intro Hfin'.
+      specialize (IHHsteps _ Hfin' Hsim'); clarify; do 2 eexists; eauto;
+        econstructor; eauto.
   Qed.
 
   Lemma TS_sim2 : forall s2 tr s2' (Hsteps : TS_step_star s2 tr s2') s1
@@ -1211,25 +1235,19 @@ Section TSan.
       as [s1' [Hstep' Hsim']].
     destruct s1 as (((C1, L1), R1), W1).
     clear Hsteps IHHsteps; inversion Hstep; clarify.
-    - generalize (Hsim2222 x); intros (Hr & Hw & Hfinr & Hfinw).
+    - generalize (Hsim22 x); intros (Hr & Hw).
       rewrite <- join_le, Hw in HW.
       do 2 eexists; [econstructor; eauto | unfold upd; clarify].
       rewrite join_drop_le, Hr; clarify.
-      constructor; eauto.
-    - generalize (Hsim2222 x); intros (Hr & Hw & Hfinr & Hfinw).
+    - generalize (Hsim22 x); intros (Hr & Hw).
       rewrite <- join_le, Hw in HW.
       rewrite <- join_le, Hr in HR.
       do 2 eexists; [econstructor; eauto | unfold upd; clarify].
       rewrite join_id_r; clarify.
-      split; constructor; eauto.
     - do 2 eexists; [econstructor; eauto | unfold upd; clarify].
-      split; clarify.
     - do 2 eexists; [econstructor; eauto | unfold upd; clarify].
-      apply finite_join; auto.
     - do 2 eexists; [econstructor; eauto | unfold upd; clarify].
-      apply finite_join; auto.
     - do 2 eexists; [econstructor; eauto | unfold upd; clarify].
-      apply finite_join; auto.
     - specialize (IHHsteps _ Hsim'); clarify; do 2 eexists; eauto; econstructor;
         eauto.
   Qed.
@@ -1239,7 +1257,7 @@ Section TSan.
   Proof.
     split; intros [s Hs].
     - generalize (TS_sim2 Hs _ TS_sim0); clarify; eauto.
-    - generalize (TS_sim1 Hs _ TS_sim0); clarify; eauto.
+    - generalize (TS_sim1 Hs _ finite_s0 TS_sim0); clarify; eauto.
   Qed.
 
   Theorem TS_Correctness tr (Hfeasible : feasible tr) :
@@ -1247,5 +1265,920 @@ Section TSan.
   Proof.
     rewrite TS_iff; apply Correctness; auto.
   Qed.
+
+  Section Lockset.
+
+  (* Abstract Hybrid TSan *)
+  Variable (is_cond_var : lock -> bool).  
+
+  Record segment := { th : tid; vc : vector_clock; ls : list lock }.
+
+  Definition h_state := ((tid -> vector_clock * list lock) *
+   (lock -> vector_clock) * (var -> list segment) * (var -> list segment))%type.
+
+  Definition h_s0 : h_state := (fun t => (vc_inc t vc_bot, []), fun m => vc_bot,
+    fun x => [], fun x => []).
+
+  Definition make_seg C t := {| th := t; vc := fst (C t); ls := snd (C t) |}.
+
+  Inductive drop_seg V : list segment -> list segment -> Prop :=
+  | s_drop_nil : drop_seg V [] []
+  | s_drop_drop s ss ss' (Hle : vc_le (vc s) V) (HVs : drop_seg V ss ss') :
+      drop_seg V (s :: ss) ss'
+  | s_drop_keep s ss ss' (Hnle : ~vc_le (vc s) V) (HVs : drop_seg V ss ss') :
+      drop_seg V (s :: ss) (s :: ss').
+
+  Definition upd_vc (C : tid -> vector_clock * list lock) t V :=
+    upd C t (V, snd (C t)).
+
+  Inductive hTS_step : h_state -> operation -> h_state -> Prop :=
+  | h_on_read : forall C L R W t x ss' R' (HR : drop_seg (fst (C t)) (R x) ss')
+     (HR' : R' = upd R x (make_seg C t :: ss'))
+     (HW : Forall (fun sr => Forall (fun sw => vc_le (vc sw) (vc sr) \/
+        exists m, In m (ls sw) /\ In m (ls sr)) (W x)) (R' x)),
+     hTS_step (C, L, R, W) (rd t x) (C, L, R', W)
+  | h_on_write : forall C L R W t x ssr' ssw' R' W'
+     (HR : drop_seg (fst (C t)) (R x) ssr')
+     (HR' : R' = upd R x (make_seg C t :: ssr'))
+     (HW : drop_seg (fst (C t)) (W x) ssw')
+     (HW' : W' = upd W x (make_seg C t :: ssw'))
+     (HWW : Forall (fun sw1 => Forall (fun sw2 => sw1 = sw2 \/
+        exists m, In m (ls sw1) /\ In m (ls sw2)) (W' x)) (W' x))
+     (HWR : Forall (fun sr => Forall (fun sw => vc_le (vc sw) (vc sr) \/
+        exists m, In m (ls sw) /\ In m (ls sr)) (W' x)) (R' x)),
+     hTS_step (C, L, R, W) (wr t x) (C, L, R', W')
+  | h_on_signal : forall C L R W t m L' C' (Hcond : is_cond_var m = true)
+      (HL' : L' = upd L m (fst (C t)))
+      (HC' : C' = upd_vc C t (vc_inc t (fst (C t)))),
+     hTS_step (C, L, R, W) (rel t m) (C', L', R, W)
+  | h_on_wait : forall C L R W t m C' (Hcond : is_cond_var m = true)
+      (HC' : C' = upd_vc C t (vc_join (fst (C t)) (L m))),
+     hTS_step (C, L, R, W) (acq t m) (C', L, R, W)
+  | h_on_lock : forall C L R W t m C' (Hlock : is_cond_var m = false)
+      (HC' : C' = upd C t (fst (C t), m :: snd (C t)))
+      (* Is this okay? *) (Hfree : forall t, ~In m (snd (C t))),
+     hTS_step (C, L, R, W) (acq t m) (C', L, R, W)
+  | h_on_unlock : forall C L R W t m C' (Hlock : is_cond_var m = false)
+      (HC' : C' = upd C t (vc_inc t (fst (C t)),
+        filter (fun m' => negb (beq m' m)) (snd (C t))))
+      (**) (Hheld : In m (snd (C t)) /\ forall t', In m (snd (C t')) -> t' = t),
+     hTS_step (C, L, R, W) (rel t m) (C', L, R, W)
+  | h_on_fork : forall C L R W t u C'
+      (HC' : C' = upd_vc (upd_vc C u (vc_join (fst (C u)) (fst (C t))))
+        t (vc_inc t (fst (C t)))),
+     hTS_step (C, L, R, W) (fork t u) (C', L, R, W)
+  | h_on_join : forall C L R W t u C'
+      (HC' : C' = upd_vc (upd_vc C t (vc_join (fst (C t)) (fst (C u))))
+        u (vc_inc u (fst (C u)))),
+     hTS_step (C, L, R, W) (join t u) (C', L, R, W).
+
+  Definition hTS_step_star := rtc hTS_step.
+
+  Definition In_seg seg (s : h_state) := match s with (C, L, R, W) =>
+    C (th seg) = (vc seg, ls seg) \/ exists x, In seg (R x) \/ In seg (W x) end.
+
+  Definition h_well_formed (s : h_state) := match s with (C, L, R, W) =>
+    (forall u t, t <> u -> fst (C u) t < fst (C t) t) /\
+    (forall m t, L m t < fst (C t) t) /\
+    (forall s x t, In s (R x) ->
+       (vc s t < fst (C t) t \/ vc_le (vc s) (fst (C t)))) /\
+    (forall s x t, In s (W x) ->
+       (vc s t < fst (C t) t \/ vc_le (vc s) (fst (C t)))) /\
+    (forall t, finite (fst (C t))) /\ (forall m, finite (L m)) /\
+    (forall x, Forall (fun s => finite (vc s)) (R x) /\
+               Forall (fun s => finite (vc s)) (W x)) /\
+    (forall m, if is_cond_var m then forall seg, In_seg seg s -> ~In m (ls seg)
+       else vc_eq (L m) vc_bot) /\
+    (forall t1 t2 m, In m (snd (C t1)) -> In m (snd (C t2)) -> t1 = t2)
+  end.
+
+  Lemma h_wf0 : h_well_formed h_s0.
+  Proof.
+    unfold h_well_formed, h_s0; repeat split; intros; clarify;
+      unfold vc_inc, vc_bot; clarify.
+  Qed.
+
+  Lemma drop_seg_in : forall V ss ss' s (Hdrop : drop_seg V ss ss'),
+    In s ss' -> In s ss.
+  Proof.
+    intros; induction Hdrop; clarify.
+  Qed.
+
+  Instance vc_le_refl : Reflexive (vc_le(tid := tid)).
+  Proof. repeat intro; auto. Qed.
+  Hint Resolve vc_le_refl.
+
+  Lemma vc_join_le_l : forall (V1 V2 : vector_clock), vc_le V1 (vc_join V1 V2).
+  Proof.
+    repeat intro; apply Max.le_max_l.
+  Qed.
+
+  Lemma drop_seg_finite : forall V ss ss' (Hdrop : drop_seg V ss ss')
+    (Hfin : Forall (fun s => finite (vc s)) ss),
+    Forall (fun s => finite (vc s)) ss'.
+  Proof.
+    intros; induction Hdrop; clarify; inversion Hfin; clarify.
+  Qed.
+
+  Lemma in_seg_upd : forall C L R W seg t e, In_seg seg (upd C t e, L, R, W) ->
+    seg = {| th := t; vc := fst e; ls := snd e |} \/
+    In_seg seg (C, L, R, W).
+  Proof.
+    clarify.
+    unfold upd in *; clarify.
+    left; destruct seg; clarify.
+  Qed.
+
+  Lemma in_seg_wf : forall C L R W seg t (Hwf : h_well_formed (C, L, R, W))
+    (Hin : In_seg seg (C, L, R, W)),
+    vc seg t < fst (C t) t \/ vc_le (vc seg) (fst (C t)).
+  Proof.
+    clarify.
+    destruct Hin; clarify.
+    - destruct (eq_dec t (th seg)); clarsimp.
+      specialize (Hwf1 _ _ n); clarsimp.
+    - destruct H; [eapply Hwf221 | eapply Hwf2221]; eauto.
+  Qed.
+
+  Lemma h_wf_step s s' a (Hwf : h_well_formed s) (Hstep : hTS_step s a s') : 
+    h_well_formed s'.
+  Proof.
+    destruct s as (((C, L), R), W); 
+      destruct Hwf as (Hthreads & Hlocks & Hread & Hwrite & Hfin);
+      inversion Hstep; unfold upd in *; clarify.
+    - split; clarify; [|split; clarify].
+      + specialize (Hread s x0 t0); clarify.
+        destruct H; clarify.
+        * destruct (eq_dec t0 t); clarify.
+        * exploit drop_seg_in; eauto.
+      + split; [constructor|]; clarify; [|apply Hfin221].
+        eapply drop_seg_finite; eauto; apply Hfin221.
+      + specialize (Hfin2221 m); clarify.
+        destruct (eq_dec x x0); clarify; eauto.
+        apply Hfin2221; destruct H as [[? | ?] | ?]; clarify; eauto.
+        * destruct (C t); auto.
+        * exploit drop_seg_in; eauto.
+    - split; [|split; clarify; [|split]]; clarify.
+      + specialize (Hread s x0 t0); clarify.
+        destruct H; clarify.
+        * destruct (eq_dec t0 t); clarify.
+        * exploit (drop_seg_in s HR); eauto.
+      + specialize (Hwrite s x0 t0); clarify.
+        destruct H; clarify.
+        * destruct (eq_dec t0 t); clarify.
+        * exploit drop_seg_in; eauto.
+      + split; constructor; clarify; eapply drop_seg_finite; eauto;
+          apply Hfin221.
+      + specialize (Hfin2221 m); clarify.
+        destruct (eq_dec x x0); clarify; eauto.
+        apply Hfin2221; destruct H as [[? | ?] | [? | ?]]; clarify.
+        * destruct (C t); auto.
+        * exploit (drop_seg_in seg HR); eauto.
+        * destruct (C t); auto.
+        * exploit drop_seg_in; eauto.
+    - unfold upd_vc in *; repeat split; clarify.
+      + specialize (Hthreads _ _ H); unfold upd.
+        destruct (eq_dec t u), (eq_dec t t0); unfold vc_inc; clarify.
+      + specialize (Hlocks m0 t0); unfold upd.
+        destruct (eq_dec m m0), (eq_dec t t0); unfold vc_inc; clarify.
+      + specialize (Hread _ _ t0 H); unfold upd, vc_inc; clarify.
+        right; intro; clarify.
+      + specialize (Hwrite _ _ t0 H); unfold upd, vc_inc; clarify.
+        right; intro; clarify.
+      + unfold upd; clarify.
+      + apply Hfin221.
+      + apply Hfin221.
+      + specialize (Hfin2221 m0); destruct (is_cond_var m0) eqn: Hm; clarify.
+        unfold upd in *; clarify.
+        specialize (Hfin2221 (make_seg C (th seg))); clarify.
+        apply Hfin2221; destruct (C (th seg)); auto.
+      + unfold upd in *; destruct (eq_dec t t1), (eq_dec t t2); clarify; eauto.
+    - unfold upd_vc in *; repeat split; clarify.
+      + specialize (Hthreads _ _ H); specialize (Hlocks m t0); unfold upd.
+        destruct (eq_dec t u), (eq_dec t t0); unfold vc_join; clarify.
+        * rewrite Nat.max_lub_lt_iff; auto.
+        * rewrite Nat.max_lt_iff; auto.
+      + specialize (Hlocks m0 t0); unfold upd.
+        destruct (eq_dec m m0), (eq_dec t t0); unfold vc_join; clarify.
+        * rewrite Nat.max_lt_iff; auto.
+        * rewrite Nat.max_lt_iff; auto.
+      + specialize (Hread _ _ t0 H); unfold upd, vc_join; clarify.
+        rewrite Nat.max_lt_iff; clarify.
+        right; etransitivity; eauto; apply vc_join_le_l.
+      + specialize (Hwrite _ _ t0 H); unfold upd, vc_join; clarify.
+        rewrite Nat.max_lt_iff; clarify.
+        right; etransitivity; eauto; apply vc_join_le_l.
+      + unfold upd; clarify.
+        apply finite_join; auto.
+      + apply Hfin221.
+      + apply Hfin221.
+      + specialize (Hfin2221 m0); destruct (is_cond_var m0) eqn: Hm; clarify.
+        unfold upd in *; clarify.
+        specialize (Hfin2221 (make_seg C (th seg))); clarify.
+        apply Hfin2221; destruct (C (th seg)); auto.
+      + unfold upd in *; destruct (eq_dec t t1), (eq_dec t t2); clarify; eauto.
+    - repeat split; clarify.
+      + specialize (Hthreads _ _ H).
+        destruct (eq_dec t u), (eq_dec t t0); clarify.
+      + specialize (Hread _ _ t0 H); clarify.
+      + specialize (Hwrite _ _ t0 H); clarify.
+      + apply Hfin221.
+      + apply Hfin221.
+      + specialize (Hfin2221 m0); destruct (is_cond_var m0) eqn: Hm; clarify.
+        intro; destruct (eq_dec m m0); clarify.
+        specialize (Hfin2221 (make_seg C (th seg))); clarify.
+        use Hfin2221; clarify; destruct (C (th seg)); auto.
+      + unfold upd in *; destruct (eq_dec t t1), (eq_dec t t2); clarify; eauto.
+        * destruct H; clarify; eauto.
+          specialize (Hfree t2); clarify.
+        * destruct H0; clarify; eauto.
+          specialize (Hfree t1); clarify.
+    - repeat split; clarify.
+      + specialize (Hthreads _ _ H).
+        destruct (eq_dec t u), (eq_dec t t0); unfold vc_inc; clarify.
+      + unfold vc_inc; specialize (Hlocks m0 t0); clarify.
+      + unfold vc_inc; specialize (Hread _ _ t0 H); clarify.
+        left; apply le_lt_n_Sm; auto.
+      + unfold vc_inc; specialize (Hwrite _ _ t0 H); clarify.
+        left; apply le_lt_n_Sm; auto.
+      + apply Hfin221.
+      + apply Hfin221.
+      + specialize (Hfin2221 m0); destruct (is_cond_var m0) eqn: Hm; clarify.
+        rewrite filter_In; intro; destruct (eq_dec m m0); clarify.
+        specialize (Hfin2221 (make_seg C (th seg))); clarify.
+        use Hfin2221; clarify; destruct (C (th seg)); auto.
+      + unfold upd in *; destruct (eq_dec t t1), (eq_dec t t2); clarify;
+          try (rewrite filter_In in *; clarify); eauto.
+    - unfold upd_vc in *; repeat split; clarify.
+      + generalize (Hthreads _ _ H); intro; unfold upd.
+        destruct (eq_dec t u0), (eq_dec u t); unfold vc_inc, vc_join; clarify;
+          destruct (eq_dec t0 u0), (eq_dec u0 t0); clarify.
+        * rewrite Nat.max_lt_iff; auto.
+        * destruct (eq_dec u u0), (eq_dec t t0); clarify;
+            try (rewrite Nat.max_lub_lt_iff); try (rewrite Nat.max_lt_iff);
+            clarify.
+      + specialize (Hlocks m t0); unfold upd.
+        destruct (eq_dec t t0); unfold vc_inc, vc_join; clarify.
+        rewrite Nat.max_lt_iff; auto.
+      + specialize (Hread _ _ t0 H); unfold upd.
+        destruct (eq_dec t t0); unfold vc_inc, vc_join; clarify.
+        * right; intro; clarify.
+        * rewrite Nat.max_lt_iff; clarify.
+          right; etransitivity; eauto; apply vc_join_le_l.          
+      + specialize (Hwrite _ _ t0 H); unfold upd.
+        destruct (eq_dec t t0); unfold vc_inc, vc_join; clarify.
+        * right; intro; clarify.
+        * rewrite Nat.max_lt_iff; clarify.
+          right; etransitivity; eauto; apply vc_join_le_l.
+      + unfold upd; clarify.
+        apply finite_join; auto.
+      + apply Hfin221.
+      + apply Hfin221.
+      + specialize (Hfin2221 m); clarify.
+        specialize (Hfin2221 (make_seg C (th seg))); use Hfin2221.
+        unfold upd in *; destruct (eq_dec t (th seg)), (eq_dec u (th seg));
+          clarsimp.
+        { destruct (C (th seg)); auto. }
+      + unfold upd in *; destruct (eq_dec t t1), (eq_dec t t2); clarify;
+          destruct (eq_dec u t1), (eq_dec u t2); clarify; eauto.
+    - unfold upd_vc in *; repeat split; clarify.
+      + generalize (Hthreads _ _ H); intro; unfold upd.
+        destruct (eq_dec u u0); unfold vc_inc, vc_join; clarify;
+          destruct (eq_dec t0 u0), (eq_dec u0 t0); clarify.
+        * rewrite Nat.max_lt_iff; auto.
+        * destruct (eq_dec t u0), (eq_dec u t0); clarify;
+            try (rewrite Nat.max_lub_lt_iff); try (rewrite Nat.max_lt_iff);
+            clarify.
+      + specialize (Hlocks m t0); unfold upd.
+        destruct (eq_dec u t0); unfold vc_inc, vc_join; clarify.
+        rewrite Nat.max_lt_iff; auto.
+      + specialize (Hread _ _ t0 H); unfold upd.
+        destruct (eq_dec u t0); unfold vc_inc, vc_join; clarify.
+        * right; intro; clarify.
+        * rewrite Nat.max_lt_iff; clarify.
+          right; etransitivity; eauto; apply vc_join_le_l.          
+      + specialize (Hwrite _ _ t0 H); unfold upd.
+        destruct (eq_dec u t0); unfold vc_inc, vc_join; clarify.
+        * right; intro; clarify.
+        * rewrite Nat.max_lt_iff; clarify.
+          right; etransitivity; eauto; apply vc_join_le_l.          
+      + unfold upd; clarify.
+        apply finite_join; auto.
+      + apply Hfin221.
+      + apply Hfin221.
+      + specialize (Hfin2221 m); clarify.
+        specialize (Hfin2221 (make_seg C (th seg))); use Hfin2221.
+        unfold upd in *; destruct (eq_dec t (th seg)), (eq_dec u (th seg));
+          clarsimp.
+        { destruct (C (th seg)); auto. }
+      + unfold upd in *; destruct (eq_dec u t1), (eq_dec u t2); clarify;
+          destruct (eq_dec t t1), (eq_dec t t2); clarify; eauto.
+  Qed.
+
+  Corollary hTS_step_star_wf s s' tr (Hwf : h_well_formed s) 
+    (Hsteps : hTS_step_star s tr s') : h_well_formed s'.
+  Proof.
+    induction Hsteps; auto.
+    apply IHHsteps; eapply h_wf_step; eauto.
+  Qed.
+
+  Lemma vc_le_antisym : forall (V1 V2 : vector_clock)
+    (H1 : vc_le V1 V2) (H2 : vc_le V2 V1), vc_eq V1 V2.
+  Proof.
+    repeat intro; specialize (H1 t); specialize (H2 t); omega.
+  Qed.
+
+  Lemma vc_join_le_r : forall (V1 V2 : vector_clock), vc_le V2 (vc_join V1 V2).
+  Proof.
+    repeat intro; apply Max.le_max_r.
+  Qed.
+
+  Lemma drop_le_in_iff : forall V Vs Vs' V1 (Hdrop : drop_le V Vs Vs'),
+    In V1 Vs' <-> In V1 Vs /\ ~vc_le (snd V1) V.
+  Proof.
+    intros; induction Hdrop; split; clarify; rewrite IHHdrop in *; clarify.
+  Qed.    
+
+  Lemma drop_seg_in_iff : forall V ss ss' s (Hdrop : drop_seg V ss ss'),
+    In s ss' <-> In s ss /\ ~vc_le (vc s) V.
+  Proof.
+    intros; induction Hdrop; split; clarify; rewrite IHHdrop in *; clarify.
+  Qed.
+
+  Lemma map_upd_none : forall A (A_eq : EqDec_eq A) B (f g : A -> B) x l
+    (Hnone : Forall (fun y => y <> x) l),
+    map (fun y => if eq_dec x y then f y else g y) l = map g l.
+  Proof.
+    induction l; clarify.
+    inversion Hnone; clarsimp.
+  Qed.
+
+  Instance vc_inc_proper : Proper (eq ==> vc_eq ==> vc_eq) vc_inc.
+  Proof.
+    repeat intro; unfold vc_inc; clarify.
+  Qed.
+
+  Lemma join_le' : forall Vs t x, join_list Vs t <= x <->
+    Forall (fun V => V t <= x) Vs.
+  Proof.
+    induction Vs; split; clarify; unfold vc_join in *;
+      rewrite Nat.max_lub_iff in *.
+    - constructor; clarify; rewrite IHVs in *; auto.
+    - rewrite IHVs; inversion H; clarify.
+  Qed.
+
+  (* Interestingly, this isn't needed for the correctness of TS itself. *)
+  Definition TS_well_formed (s : state) := match s with (C, L, _, _) =>
+    (forall t u, t <> u -> C u t < C t t) /\ (forall m t, L m t < C t t) end.
+
+  Lemma TS_wf0 : TS_well_formed s0.
+  Proof.
+    split; clarify; unfold vc_inc, vc_bot; clarify.
+  Qed.
+
+  Lemma TS_wf_step : forall s a s' (Hstep : TS_step s a s')
+    (Hwf : TS_well_formed s), TS_well_formed s'.
+  Proof.
+    intros; inversion Hstep; clarify.
+    - split; unfold upd; clarify.
+      + specialize (Hwf1 _ _ H); destruct (eq_dec t u), (eq_dec t t0);
+          unfold vc_inc; clarify; omega.
+      + specialize (Hwf2 m0 t0); destruct (eq_dec m m0), (eq_dec t t0);
+          unfold vc_inc; clarify; omega.
+    - split; unfold upd; clarify.
+      + specialize (Hwf1 _ _ H); destruct (eq_dec t u), (eq_dec t t0);
+          unfold vc_join; clarify.
+        * rewrite Nat.max_lub_lt_iff; auto.
+        * rewrite Nat.max_lt_iff; auto.
+      + specialize (Hwf2 m0 t0); setoid_rewrite Nat.max_lt_iff; auto.
+    - split; unfold upd; clarify.
+      + destruct (eq_dec t u0), (eq_dec t t0); unfold vc_inc, vc_join; clarify.
+        * destruct (eq_dec t0 u0); clarify.
+          rewrite Nat.max_lt_iff; auto.
+        * specialize (Hwf1 _ _ H); clarify.
+          rewrite Nat.max_lub_lt_iff; auto.
+        * destruct (eq_dec u u0), (eq_dec u t0); clarify.
+          { rewrite Nat.max_lub_lt_iff; auto. }
+          { rewrite Nat.max_lt_iff; auto. }
+      + specialize (Hwf2 m t0); destruct (eq_dec t t0); unfold vc_join, vc_inc; 
+          clarify.
+        rewrite Nat.max_lt_iff; auto.
+    - split; unfold upd; clarify.
+      + destruct (eq_dec u u0), (eq_dec u t0); unfold vc_inc, vc_join; clarify.
+        * destruct (eq_dec t0 u0); clarify.
+          rewrite Nat.max_lt_iff; auto.
+        * specialize (Hwf1 _ _ H); clarify.
+          rewrite Nat.max_lub_lt_iff; auto.
+        * destruct (eq_dec t u0), (eq_dec t t0); clarify.
+          { rewrite Nat.max_lub_lt_iff; auto. }
+          { rewrite Nat.max_lt_iff; auto. }
+      + specialize (Hwf2 m t0); destruct (eq_dec u t0); unfold vc_join, vc_inc; 
+          clarify.
+        rewrite Nat.max_lt_iff; auto.
+  Qed.
+
+  Corollary TS_wf_step_star : forall s tr s' (Hsteps : TS_step_star s tr s')
+    (Hwf : TS_well_formed s), TS_well_formed s'.
+  Proof.
+    intros; induction Hsteps; clarify; eapply IHHsteps, TS_wf_step; eauto.
+  Qed.
+
+  Lemma vc_inc_le : forall (V : vector_clock) t, vc_le V (vc_inc t V).
+  Proof.
+    repeat intro; unfold vc_inc; clarify.
+  Qed.
+
+  Lemma vc_join_mono : forall (V1 V2 V1' V2' : vector_clock)
+    (Hle1 : vc_le V1 V1') (Hle2 : vc_le V2 V2'),
+    vc_le (vc_join V1 V2) (vc_join V1' V2').
+  Proof.
+    intros; etransitivity; [apply vc_join_mono_l | apply vc_join_mono_r]; auto.
+  Qed.
+
+  Definition hTS_sim (s1 : h_state) (s2 : state) := match s1, s2 with
+    (C1, L1, R1, W1), (C2, L2, R2, W2) =>
+    (forall t, vc_le
+      (join_list (fst (C1 t) :: map (fun m => L2 m) (snd (C1 t)))) (C2 t)) /\
+    (forall t, fst (C1 t) t = C2 t t) /\ (forall m, vc_le (L1 m) (L2 m)) /\
+    (forall m t, In m (snd (C1 t)) -> vc_le (L2 m) (C2 t)) /\
+    (forall x t V,
+     (In (t, V) (R2 x) -> exists s, In s (R1 x) /\ th s = t /\ vc_le (vc s) V /\
+        (forall t', (vc s t <= fst (C1 t') t -> vc_le V (C2 t')) /\
+           forall m, In m (ls s) -> In m (snd (C1 t')) -> vc_le V (C2 t')) /\
+        (forall m, vc s t <= L1 m t -> vc_le V (L2 m)) /\
+        (forall m, In m (ls s) -> In m (snd (C1 t)) \/ vc_le V (L2 m))) /\
+     (In (t, V) (W2 x) -> exists s, In s (W1 x) /\ th s = t /\ vc_le (vc s) V /\
+        (forall t', (vc s t <= fst (C1 t') t -> vc_le V (C2 t')) /\
+           forall m, In m (ls s) -> In m (snd (C1 t')) -> vc_le V (C2 t')) /\
+        (forall m, vc s t <= L1 m t -> vc_le V (L2 m)) /\
+        (forall m, In m (ls s) -> In m (snd (C1 t)) \/ vc_le V (L2 m))))
+  end.
+
+  Lemma hTS_sim0 : hTS_sim h_s0 s0.
+  Proof.
+    repeat split; clarify.
+    rewrite join_id_r; auto.
+  Qed.
+  
+  Lemma filter_join_le : forall A f f' (l : list A),
+    vc_le (join_list (map f (filter f' l))) (join_list (map f l)).
+  Proof.
+    induction l; clarify.
+    destruct (f' a); clarify.
+    - apply vc_join_mono_r; auto.
+    - etransitivity; eauto; apply vc_join_le_r.
+  Qed.
+
+  Lemma vc_inc_mono : forall (V1 V2 : vector_clock) t, vc_le V1 V2 ->
+    vc_le (vc_inc t V1) (vc_inc t V2).
+  Proof.
+    repeat intro; unfold vc_inc; clarify.
+    specialize (H t); omega.
+  Qed.
+
+  Lemma hTS_sim1 : forall s1 tr s1' (Hsteps : hTS_step_star s1 tr s1')
+    (Hwf : h_well_formed s1) s2 (Hsim : hTS_sim s1 s2)
+    (Hwft : TS_well_formed s2) (Hfin : finite_state s2),
+    exists s2', TS_step_star s2 tr s2' /\ hTS_sim s1' s2'.
+  Proof.
+    intros ????; induction Hsteps; intros.
+    { do 2 eexists; eauto; apply ss_refl. }
+    assert (exists s2', TS_step s2 l s2' /\ hTS_sim s' s2')
+      as [s2' [Hstep' Hsim']].
+    destruct s as (((C1, L1), R1), W1), s2 as (((C2, L2), R2), W2).
+    destruct Hwf as (Hclock & Hlock & Hread & Hwrite & Hcfin & Hlfin &
+      Hrwfin & Hcond & Hsep).
+    destruct Hsim as (Hclock_le & Hthread & Hlock_le & Hhold & Hrw).
+    clear Hsteps IHHsteps; inversion Hstep; clarify.
+    - specialize (Hfin22 x); destruct Hfin22 as [_ ?].
+      exploit finite_drop; eauto; clarify.
+      do 2 eexists; [econstructor; eauto | clarify].
+      + rewrite upd_new in HW; inversion HW as [|?? HC]; clarify.
+        rewrite Forall_forall in *; intros ? Hin.
+        rewrite in_map_iff in Hin; destruct Hin as [[t' V] [? Hin]]; subst.
+        specialize (Hrw x t' V); clarify.
+        specialize (HC _ Hrw21); clarify.
+        destruct HC; clarify.
+        * apply Hrw22221; auto.
+        * eapply Hrw22221; eauto.
+      + repeat split; clarify.
+        * specialize (Hrw x1 t0 V).
+          unfold upd in *; destruct (eq_dec x x1); clarify;
+            [|do 2 eexists; eauto].
+          destruct H1; clarify.
+          { do 2 eexists; eauto; clarify.
+            split; [etransitivity; [apply vc_join_le_l | apply Hclock_le]|].
+            repeat split; clarify.
+            { destruct (eq_dec t0 t'); clarify.
+              specialize (Hclock _ _ n); omega. }
+            { specialize (Hsep t0 t' m); clarify. }
+            { specialize (Hlock m t0); omega. } }
+          rewrite drop_le_in_iff in H1; eauto; clarify.
+          assert (In x ss').
+          { rewrite drop_seg_in_iff; eauto; clarify.
+            intro Hle; contradiction H12; apply Hrw12221; auto. }
+          do 2 eexists; eauto.
+        * apply Hrw; auto.
+    - do 2 eexists; [econstructor; eauto | clarify].
+      + repeat rewrite upd_new in HWR; inversion HWR as [|??? HR']; clarify.
+        rewrite Forall_forall in *; intros ? Hin.
+        rewrite in_map_iff in Hin; destruct Hin as [[t' V] [? Hin]]; subst.
+        specialize (Hrw x t' V); clarify.
+        specialize (Hrwfin x); destruct Hrwfin as [Hfinr _].
+        rewrite Forall_forall in Hfinr; specialize (Hfinr _ Hrw11).
+        destruct (finite_le_dec (fst (C1 t)) Hfinr).
+        * apply Hrw12221; auto.
+        * exploit HR'.
+          { rewrite drop_seg_in_iff; eauto. }
+          rewrite Forall_forall; intro HR''.
+          specialize (HR'' (make_seg C1 t)); clarify.
+          specialize (Hread _ _ t Hrw11); clarify.
+          assert (~vc_le (fst (C1 t)) (vc x0)).
+          { intro Hle; specialize (Hle t); exploit le_not_lt; eauto. }
+          clarify; eapply Hrw12221; eauto.
+      + repeat rewrite upd_new in HWW; inversion HWW as [|??? HW']; clarify.
+        rewrite Forall_forall in *; intros ? Hin.
+        rewrite in_map_iff in Hin; destruct Hin as [[t' V] [? Hin]]; subst.
+        specialize (Hrw x t' V); clarify.
+        specialize (Hrwfin x); destruct Hrwfin as [_ Hfinw].
+        rewrite Forall_forall in Hfinw; specialize (Hfinw _ Hrw21).
+        destruct (finite_le_dec (fst (C1 t)) Hfinw).
+        * apply Hrw22221; auto.
+        * exploit HW'.
+          { rewrite drop_seg_in_iff; eauto. }
+          rewrite Forall_forall; intro HW''.
+          specialize (HW'' (make_seg C1 t)); clarify.
+          destruct HW''; clarify.
+          { contradiction H; auto. }
+          eapply Hrw22221; eauto.
+      + repeat split; clarify.
+        * specialize (Hrw x0 t0 V).
+          unfold upd in *; destruct (eq_dec x x0); clarify;
+            [|do 2 eexists; eauto].
+          do 2 eexists; eauto; clarify.
+          split; [etransitivity; [apply vc_join_le_l | apply Hclock_le]|].
+          repeat split; clarify.
+          { destruct (eq_dec t0 t'); clarify.
+            specialize (Hclock _ _ n); omega. }
+          { specialize (Hsep t0 t' m); clarify. }
+          { specialize (Hlock m t0); omega. }
+        * specialize (Hrw x0 t0 V).
+          unfold upd in *; destruct (eq_dec x x0); clarify;
+            [|do 2 eexists; eauto].
+          do 2 eexists; eauto; clarify.
+          split; [etransitivity; [apply vc_join_le_l | apply Hclock_le]|].
+          repeat split; clarify.
+          { destruct (eq_dec t0 t'); clarify.
+            specialize (Hclock _ _ n); omega. }
+          { specialize (Hsep t0 t' m); clarify. }
+          { specialize (Hlock m t0); omega. }
+    - do 2 eexists; [econstructor; eauto | clarify].
+      repeat split; clarify.
+      + assert (Forall (fun m0 => m0 <> m) (snd (C1 t0))).
+        { rewrite Forall_forall; repeat intro; subst.
+          specialize (Hcond m); clarify.
+          specialize (Hcond (make_seg C1 t0)); use Hcond; clarify.
+          destruct (C1 t0); auto. }
+        unfold upd_vc, upd; destruct (eq_dec t t0);
+          rewrite (map_upd_none _ _ (fun m => L2 m)); clarify.
+        intro t; unfold vc_inc, vc_join; destruct (eq_dec t t0);
+          [subst | apply Hclock_le; auto].
+        rewrite Hthread, Max.max_l; auto.
+        rewrite join_le', Forall_forall; intros.
+        rewrite in_map_iff in *; clarify.
+        specialize (Hwft2 x0 t0); omega.
+      + unfold upd_vc, upd, vc_inc; clarify.
+      + unfold upd; clarify.
+        etransitivity; [apply vc_join_le_l | apply Hclock_le].
+      + specialize (Hhold m0 t0); use Hhold; unfold upd_vc, upd in *; clarify.
+        destruct (eq_dec m m0); clarify.
+        * destruct (eq_dec t t0); clarify; [apply vc_inc_le|].
+          specialize (Hcond m0); clarify.
+          specialize (Hcond (make_seg C1 t0)); use Hcond; clarify.
+          destruct (C1 t0); auto.
+        * etransitivity; eauto; apply vc_inc_le.
+      + specialize (Hrw x t0 V); clarify.
+        do 2 eexists; eauto; clarify.
+        repeat split; clarify.
+        * specialize (Hrw12221 t').
+          unfold upd_vc, upd in *; destruct (eq_dec t t'); clarify.
+          etransitivity; [|apply vc_inc_le].
+          apply Hrw122211.
+          specialize (Hread _ _ t' Hrw11); clarify.
+          unfold vc_inc in H0; clarify; omega.
+        * specialize (Hrw12221 t'); clarify.
+          specialize (Hrw122212 m0); clarify; use Hrw122212.
+          etransitivity; eauto; unfold upd; clarify; apply vc_inc_le.
+          { unfold upd_vc, upd in *; clarify. }
+        * unfold upd in *; clarify.
+          apply Hrw12221; auto.
+        * specialize (Hrw122222 m0); clarify.
+          unfold upd_vc, upd; destruct Hrw122222; [left | right]; clarify.
+          specialize (Hcond m0); clarify.
+          specialize (Hcond x0); use Hcond; clarify; eauto.
+      + specialize (Hrw x t0 V); clarify.
+        do 2 eexists; eauto; clarify.
+        repeat split; clarify.
+        * specialize (Hrw22221 t').
+          unfold upd_vc, upd in *; destruct (eq_dec t t'); clarify.
+          etransitivity; [|apply vc_inc_le].
+          apply Hrw222211.
+          specialize (Hwrite _ _ t' Hrw21); clarify.
+          unfold vc_inc in H0; clarify; omega.
+        * specialize (Hrw22221 t'); clarify.
+          specialize (Hrw222212 m0); clarify; use Hrw222212.
+          etransitivity; eauto; unfold upd; clarify; apply vc_inc_le.
+          { unfold upd_vc, upd in *; clarify. }
+        * unfold upd in *; clarify.
+          apply Hrw22221; auto.
+        * specialize (Hrw222222 m0); clarify.
+          unfold upd_vc, upd; destruct Hrw222222; [left | right]; clarify.
+          specialize (Hcond m0); clarify.
+          specialize (Hcond x0); use Hcond; clarify; eauto.
+    - do 2 eexists; [econstructor; eauto | clarify].
+      repeat split; clarify.
+      + unfold upd_vc, upd; clarify.
+        rewrite vc_join_assoc, (vc_join_sym (L1 m)).
+        rewrite <- vc_join_assoc.
+        apply vc_join_mono; auto.
+      + unfold upd_vc, upd; clarify.
+        setoid_rewrite Max.max_l; auto.
+        * specialize (Hlock m t0); omega.
+        * specialize (Hwft2 m t0); omega.
+      + unfold upd_vc, upd in *; clarify.
+        etransitivity; [apply Hhold | apply vc_join_le_l]; auto.
+      + specialize (Hrw x t0 V); clarify.
+        do 2 eexists; eauto; clarify.
+        repeat split; clarify.
+        * specialize (Hrw12221 t').
+          unfold upd_vc, upd in *; destruct (eq_dec t t'); clarify.
+          setoid_rewrite Nat.max_le_iff in H0; destruct H0.
+          { etransitivity; [|apply vc_join_le_l].
+            apply Hrw122211; auto. }
+          { etransitivity; [|apply vc_join_le_r].
+            apply Hrw122221; auto. }
+        * unfold upd_vc, upd in *; destruct (eq_dec t t'); clarify;
+            [|eapply Hrw12221; eauto].
+          specialize (Hrw12221 t'); clarify.
+          specialize (Hrw122212 m0); clarify.
+          etransitivity; [eauto | apply vc_join_le_l].
+        * unfold upd_vc, upd; clarify.
+      + specialize (Hrw x t0 V); clarify.
+        do 2 eexists; eauto; clarify.
+        repeat split; clarify.
+        * specialize (Hrw22221 t').
+          unfold upd_vc, upd in *; destruct (eq_dec t t'); clarify.
+          setoid_rewrite Nat.max_le_iff in H0; destruct H0.
+          { etransitivity; [|apply vc_join_le_l].
+            apply Hrw222211; auto. }
+          { etransitivity; [|apply vc_join_le_r].
+            apply Hrw222221; auto. }
+        * unfold upd_vc, upd in *; destruct (eq_dec t t'); clarify;
+            [|eapply Hrw22221; eauto].
+          specialize (Hrw22221 t'); clarify.
+          specialize (Hrw222212 m0); clarify.
+          etransitivity; [eauto | apply vc_join_le_l].
+        * unfold upd_vc, upd; clarify.
+    - do 2 eexists; [econstructor; eauto | clarify].
+      repeat split; clarify.
+      + unfold upd; clarify.
+        rewrite (vc_join_sym (L2 m)); rewrite <- vc_join_assoc.
+        apply vc_join_mono_l; auto.
+      + unfold upd; clarify.
+        setoid_rewrite Max.max_l; auto.
+        specialize (Hwft2 m t0); omega.
+      + unfold upd in *; clarify.
+        destruct H; [clarify; apply vc_join_le_r|].
+        etransitivity; [apply Hhold | apply vc_join_le_l]; auto.
+      + specialize (Hrw x t0 V); clarify.
+        do 2 eexists; eauto; clarify.
+        repeat split; clarify.
+        * specialize (Hrw12221 t').
+          unfold upd in *; destruct (eq_dec t t'); clarify.
+          etransitivity; [|apply vc_join_le_l].
+          apply Hrw122211; auto.
+        * unfold upd in *; destruct (eq_dec t t'); clarify;
+            [|eapply Hrw12221; eauto].
+          destruct H1; clarify.
+          { specialize (Hrw122222 m0); specialize (Hfree (th x0)); clarify.
+            etransitivity; [eauto | apply vc_join_le_r]. }
+          { specialize (Hrw12221 t'); clarify.
+            specialize (Hrw122212 m0); clarify.
+            etransitivity; [eauto | apply vc_join_le_l]. }
+        * unfold upd; clarify.
+          specialize (Hrw122222 m0); clarify.
+      + specialize (Hrw x t0 V); clarify.
+        do 2 eexists; eauto; clarify.
+        repeat split; clarify.
+        * specialize (Hrw22221 t').
+          unfold upd_vc, upd in *; destruct (eq_dec t t'); clarify.
+          etransitivity; [|apply vc_join_le_l].
+          apply Hrw222211; auto.
+        * unfold upd in *; destruct (eq_dec t t'); clarify;
+            [|eapply Hrw22221; eauto].
+          destruct H1; clarify.
+          { specialize (Hrw222222 m0); specialize (Hfree (th x0)); clarify.
+            etransitivity; [eauto | apply vc_join_le_r]. }
+          { specialize (Hrw22221 t'); clarify.
+            specialize (Hrw222212 m0); clarify.
+            etransitivity; [eauto | apply vc_join_le_l]. }
+        * unfold upd; clarify.
+          specialize (Hrw222222 m0); clarify.
+    - do 2 eexists; [econstructor; eauto | clarify].
+      repeat split; clarify.
+      + unfold upd; destruct (eq_dec t t0);
+          rewrite (map_upd_none _ _ (fun m => L2 m)); clarify.
+        etransitivity; [|apply vc_inc_mono, Hclock_le].
+        intro; unfold vc_inc, vc_join; destruct (eq_dec t t0);
+          [|clarify; apply vc_join_mono_r, filter_join_le].
+        repeat rewrite Max.max_l; auto.
+        * rewrite join_le', Forall_forall, Hthread; intros.
+          rewrite in_map_iff in *; clarify.
+          specialize (Hwft2 x0 t0); omega.
+        * rewrite join_le', Forall_forall, Hthread; intros.
+          rewrite in_map_iff in *; clarify.
+          specialize (Hwft2 x0 t0); omega.
+        * apply filter_Forall; unfold negb, beq; clarify.
+        * specialize (Hheld2 t0); rewrite Forall_forall; repeat intro; clarify.
+      + unfold upd, vc_inc; clarify.
+      + unfold upd; clarify.
+        etransitivity; eauto.
+      + specialize (Hhold m0 t0); unfold upd in *; destruct (eq_dec t t0);
+          clarify.
+        * rewrite filter_In in *; clarify.
+          destruct (eq_dec m m0); [|etransitivity; eauto]; apply vc_inc_le.
+        * specialize (Hheld2 t0); clarify.
+      + specialize (Hrw x t0 V); clarify.
+        do 2 eexists; eauto; clarify.
+        repeat split; clarify.
+        * specialize (Hrw12221 t').
+          unfold upd in *; destruct (eq_dec t t'); clarify.
+          etransitivity; [|apply vc_inc_le].
+          unfold vc_inc in *; destruct (eq_dec (th x0) t');
+            apply Hrw122211; auto.
+          subst; specialize (Hread _ _ (th x0) Hrw11); clarify; omega.
+        * unfold upd in *; destruct (eq_dec t t'); clarify;
+            [|eapply Hrw12221; eauto].
+          etransitivity; [|apply vc_inc_le].
+          rewrite filter_In in *; clarify.
+          eapply Hrw12221; eauto.
+        * unfold upd; clarify.
+          etransitivity; [apply Hrw122221 | apply Hhold]; eauto.
+        * specialize (Hrw122222 m0); clarify.
+          unfold upd; destruct (eq_dec m m0); [right|]; clarify.
+          { eapply Hrw12221; eauto. }
+          { left; rewrite filter_In; unfold negb, beq; clarify. }
+      + specialize (Hrw x t0 V); clarify.
+        do 2 eexists; eauto; clarify.
+        repeat split; clarify.
+        * specialize (Hrw22221 t').
+          unfold upd in *; destruct (eq_dec t t'); clarify.
+          etransitivity; [|apply vc_inc_le].
+          unfold vc_inc in *; destruct (eq_dec (th x0) t');
+            apply Hrw222211; auto.
+          subst; specialize (Hwrite _ _ (th x0) Hrw21); clarify; omega.
+        * unfold upd in *; destruct (eq_dec t t'); clarify;
+            [|eapply Hrw22221; eauto].
+          etransitivity; [|apply vc_inc_le].
+          rewrite filter_In in *; clarify.
+          eapply Hrw22221; eauto.
+        * unfold upd; clarify.
+          etransitivity; [apply Hrw222221 | apply Hhold]; eauto.
+        * specialize (Hrw222222 m0); clarify.
+          unfold upd; destruct (eq_dec m m0); [right|]; clarify.
+          { eapply Hrw22221; eauto. }
+          { left; rewrite filter_In; unfold negb, beq; clarify. }
+    - do 2 eexists; [econstructor; eauto | clarify].
+      repeat split; clarify.
+      + unfold upd_vc, upd; destruct (eq_dec t t0); clarify.
+        * intro; unfold vc_join, vc_inc; destruct (eq_dec t t0).
+          { rewrite Hthread, Max.max_l; auto.
+            rewrite join_le', Forall_forall; intros.
+            rewrite in_map_iff in *; clarify.
+            specialize (Hwft2 x0 t0); omega. }
+          { destruct (eq_dec u t0); clarify; apply Hclock_le. }
+        * rewrite vc_join_assoc, (vc_join_sym (fst (C1 t))).
+          rewrite <- vc_join_assoc; apply vc_join_mono; auto.
+          etransitivity; [apply vc_join_le_l | apply Hclock_le].
+      + unfold upd_vc, upd; destruct (eq_dec t t0); unfold vc_inc; clarify.
+        setoid_rewrite Max.max_l; auto.
+        * specialize (Hclock t t0); clarify; omega.
+        * specialize (Hwft1 t0 t); clarify; omega.
+      + specialize (Hhold m t0); use Hhold.
+        etransitivity; eauto; unfold upd; destruct (eq_dec t t0); clarify;
+          [apply vc_inc_le | apply vc_join_le_l].
+        { unfold upd_vc, upd in *; destruct (eq_dec t t0); clarify. }
+      + specialize (Hrw x t0 V); clarify.
+        do 2 eexists; eauto; clarify.
+        repeat split; clarify.
+        * unfold upd_vc, upd in *; destruct (eq_dec t t'); clarify.
+          { etransitivity; [|apply vc_inc_le].
+            unfold vc_inc in *; destruct (eq_dec (th x0) t');
+              apply Hrw12221; auto.
+            subst; specialize (Hread _ _ (th x0) Hrw11); clarify; omega. }
+          { generalize (Hrw12221 t'); clarify.
+            setoid_rewrite Nat.max_le_iff in H0; destruct H0.
+            { etransitivity; [apply Hrw12221 | apply vc_join_le_l]; auto. }
+            { etransitivity; [apply Hrw12221 | apply vc_join_le_r]; auto. } }
+        * unfold upd_vc, upd in *; destruct (eq_dec t t'); clarify;
+            destruct (eq_dec u t'); clarify.
+          { etransitivity; [eapply Hrw12221; eauto | apply vc_inc_le]. }
+          { etransitivity; [eapply Hrw12221; eauto | apply vc_inc_le]. }
+          { etransitivity; [eapply Hrw12221; eauto | apply vc_join_le_l]. }
+          { eapply Hrw12221; eauto. }
+        * unfold upd_vc, upd; destruct (eq_dec t (th x0)); clarify.
+      + specialize (Hrw x t0 V); clarify.
+        do 2 eexists; eauto; clarify.
+        repeat split; clarify.
+        * unfold upd_vc, upd in *; destruct (eq_dec t t'); clarify.
+          { etransitivity; [|apply vc_inc_le].
+            unfold vc_inc in *; destruct (eq_dec (th x0) t');
+              apply Hrw22221; auto.
+            subst; specialize (Hwrite _ _ (th x0) Hrw21); clarify; omega. }
+          { generalize (Hrw22221 t'); clarify.
+            setoid_rewrite Nat.max_le_iff in H0; destruct H0.
+            { etransitivity; [apply Hrw22221 | apply vc_join_le_l]; auto. }
+            { etransitivity; [apply Hrw22221 | apply vc_join_le_r]; auto. } }
+        * unfold upd_vc, upd in *; destruct (eq_dec t t'); clarify;
+            destruct (eq_dec u t'); clarify.
+          { etransitivity; [eapply Hrw22221; eauto | apply vc_inc_le]. }
+          { etransitivity; [eapply Hrw22221; eauto | apply vc_inc_le]. }
+          { etransitivity; [eapply Hrw22221; eauto | apply vc_join_le_l]. }
+          { eapply Hrw22221; eauto. }
+        * unfold upd_vc, upd; destruct (eq_dec t (th x0)); clarify.
+    - do 2 eexists; [econstructor; eauto | clarify].
+      repeat split; clarify.
+      + unfold upd_vc, upd; destruct (eq_dec u t0); clarify.
+        * intro; unfold vc_join, vc_inc; destruct (eq_dec t1 t0).
+          { rewrite Hthread, Max.max_l; auto.
+            rewrite join_le', Forall_forall; intros.
+            rewrite in_map_iff in *; clarify.
+            specialize (Hwft2 x0 t0); omega. }
+          { destruct (eq_dec t t0); clarify; apply Hclock_le. }
+        * rewrite vc_join_assoc, (vc_join_sym (fst (C1 u))).
+          rewrite <- vc_join_assoc; apply vc_join_mono; auto.
+          etransitivity; [apply vc_join_le_l | apply Hclock_le].
+      + unfold upd_vc, upd; destruct (eq_dec u t0); unfold vc_inc; clarify.
+        setoid_rewrite Max.max_l; auto.
+        * specialize (Hclock u t0); clarify; omega.
+        * specialize (Hwft1 t0 u); clarify; omega.
+      + specialize (Hhold m t0); use Hhold.
+        etransitivity; eauto; unfold upd; destruct (eq_dec u t0); clarify;
+          [apply vc_inc_le | apply vc_join_le_l].
+        { unfold upd_vc, upd in *; destruct (eq_dec u t0); clarify. }
+      + specialize (Hrw x t0 V); clarify.
+        do 2 eexists; eauto; clarify.
+        repeat split; clarify.
+        * unfold upd_vc, upd in *; destruct (eq_dec u t'); clarify.
+          { etransitivity; [|apply vc_inc_le].
+            unfold vc_inc in *; destruct (eq_dec (th x0) t');
+              apply Hrw12221; auto.
+            subst; specialize (Hread _ _ (th x0) Hrw11); clarify; omega. }
+          { generalize (Hrw12221 t'); clarify.
+            setoid_rewrite Nat.max_le_iff in H0; destruct H0.
+            { etransitivity; [apply Hrw12221 | apply vc_join_le_l]; auto. }
+            { etransitivity; [apply Hrw12221 | apply vc_join_le_r]; auto. } }
+        * unfold upd_vc, upd in *; destruct (eq_dec u t'); clarify;
+            destruct (eq_dec t t'); clarify.
+          { etransitivity; [eapply Hrw12221; eauto | apply vc_inc_le]. }
+          { etransitivity; [eapply Hrw12221; eauto | apply vc_inc_le]. }
+          { etransitivity; [eapply Hrw12221; eauto | apply vc_join_le_l]. }
+          { eapply Hrw12221; eauto. }
+        * unfold upd_vc, upd; destruct (eq_dec u (th x0)); clarify.
+      + specialize (Hrw x t0 V); clarify.
+        do 2 eexists; eauto; clarify.
+        repeat split; clarify.
+        * unfold upd_vc, upd in *; destruct (eq_dec u t'); clarify.
+          { etransitivity; [|apply vc_inc_le].
+            unfold vc_inc in *; destruct (eq_dec (th x0) t');
+              apply Hrw22221; auto.
+            subst; specialize (Hwrite _ _ (th x0) Hrw21); clarify; omega. }
+          { generalize (Hrw22221 t'); clarify.
+            setoid_rewrite Nat.max_le_iff in H0; destruct H0.
+            { etransitivity; [apply Hrw22221 | apply vc_join_le_l]; auto. }
+            { etransitivity; [apply Hrw22221 | apply vc_join_le_r]; auto. } }
+        * unfold upd_vc, upd in *; destruct (eq_dec u t'); clarify;
+            destruct (eq_dec t t'); clarify.
+          { etransitivity; [eapply Hrw22221; eauto | apply vc_inc_le]. }
+          { etransitivity; [eapply Hrw22221; eauto | apply vc_inc_le]. }
+          { etransitivity; [eapply Hrw22221; eauto | apply vc_join_le_l]. }
+          { eapply Hrw22221; eauto. }
+        * unfold upd_vc, upd; destruct (eq_dec u (th x0)); clarify.
+    - exploit IHHsteps; eauto.
+      { eapply h_wf_step; eauto. }
+      { eapply TS_wf_step; eauto. }
+      { eapply finite_step; eauto. }
+      clarify; do 2 eexists; [econstructor|]; eauto.
+  Qed.
+          
+  Theorem h_Soundness tr (Hfeasible : feasible tr) :
+    forall s', hTS_step_star h_s0 tr s' -> race_free tr.
+  Proof.
+    intros.
+    rewrite TS_Correctness; auto.
+    generalize (hTS_sim1 H h_wf0 _ hTS_sim0 TS_wf0 finite_s0); clarify; eauto.
+  Qed.
+
+  End Lockset.
 
 End TSan.
