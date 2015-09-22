@@ -16,16 +16,20 @@ Definition tid := nat.
 Inductive expr : Set :=
 | I (n : nat)
 | V (a : local)
-| Plus (e1 e2 : expr).
+| Plus (e1 e2 : expr)
+| Max (e1 e2 : expr).
+
+Definition ptr := (var * nat)%type.
 
 Inductive instr : Set :=
 | Assign (a : local) (e : expr)
-| Load (a : local) (x : var)
-| Store (x : var) (e : expr)
+| Load (a : local) (x : ptr)
+| Store (x : ptr) (e : expr)
 | Lock (m : lock)
 | Unlock (m : lock)
 | Spawn (a : local) (li : list instr)
-| Wait (a : local).
+| Wait (a : local)
+| Assert_le (e1 e2 : expr).
 
 Definition prog := list instr.
 
@@ -42,14 +46,15 @@ Section Semantics.
   | I n => n
   | V a => G a
   | Plus e1 e2 => eval G e1 + eval G e2
+  | Max e1 e2 => max (eval G e1) (eval G e2)
   end.
 
-  Definition operation := @operation tid var lock.
+  Definition operation := @operation tid ptr lock.
 
   Inductive conc_op : Type :=
-  | Read (t : tid) (x : var) (v : nat)
-  | Write (t : tid) (x : var) (v : nat)
-  | ARW (t : tid) (x : var) (v : nat) (v' : nat).
+  | Read (t : tid) (x : ptr) (v : nat)
+  | Write (t : tid) (x : ptr) (v : nat)
+  | ARW (t : tid) (x : ptr) (v : nat) (v' : nat).
 
   Definition thread_of c :=
     match c with
@@ -60,54 +65,62 @@ Section Semantics.
 
   Definition to_seq c :=
     match c with
-    | Read _ x v => [MRead (x, 0) v]
-    | Write _ x v => [MWrite (x, 0) v]
-    | ARW _ x v v' => [MRead (x, 0) v; MWrite (x, 0) v']
+    | Read _ x v => [MRead x v]
+    | Write _ x v => [MWrite x v]
+    | ARW _ x v v' => [MRead x v; MWrite x v']
     end.
 
-  Definition var_of c :=
+  Definition loc_of c :=
     match c with
     | Read _ x _ => x
     | Write _ x _ => x
     | ARW _ x _ _ => x
     end.
 
-  Definition synchronizes_with c1 c2 := var_of c1 = var_of c2 /\
+  Definition synchronizes_with c1 c2 := loc_of c1 = loc_of c2 /\
     exists t x v v', c1 = ARW t x v v' \/ c2 = ARW t x v v'.
 
   Instance Base : MM_base conc_op := { thread_of := thread_of;
     to_seq := to_seq; synchronizes_with := synchronizes_with }.
 
   Inductive exec P G :
-    option operation -> option conc_op -> state -> env -> Prop :=
+    option operation -> option conc_op -> option state -> env -> Prop :=
   | exec_assign t a e rest
       (Hassign : nth_error P t = Some (Assign a e :: rest)) :
       exec P G None None
-        (replace P t rest) (upd G t (upd (G t) a (eval (G t) e)))
+        (Some (replace P t rest)) (upd G t (upd (G t) a (eval (G t) e)))
   | exec_load t a x v rest
       (Hload : nth_error P t = Some (Load a x :: rest)) :
       exec P G (Some (rd t x)) (Some (Read t x v))
-        (replace P t rest) (upd G t (upd (G t) a v))
+        (Some (replace P t rest)) (upd G t (upd (G t) a v))
   | exec_store t x e rest
       (Hstore : nth_error P t = Some (Store x e :: rest)) :
       exec P G (Some (wr t x)) (Some (Write t x (eval (G t) e)))
-        (replace P t rest) G
+        (Some (replace P t rest)) G
   | exec_lock t m rest
       (Hlock : nth_error P t = Some (Lock m :: rest)) :
-      exec P G (Some (acq t m)) (Some (ARW t m 0 (S t)))
-        (replace P t rest) G
+      exec P G (Some (acq t m)) (Some (ARW t (m, 0) 0 (S t)))
+        (Some (replace P t rest)) G
   | exec_unlock t m rest
       (Hlock : nth_error P t = Some (Unlock m :: rest)) :
-      exec P G (Some (rel t m)) (Some (ARW t m (S t) 0))
-        (replace P t rest) G
+      exec P G (Some (rel t m)) (Some (ARW t (m, 0) (S t) 0))
+        (Some (replace P t rest)) G
   | exec_spawn t a li rest
       (Hspawn : nth_error P t = Some (Spawn a li :: rest)) :
       exec P G (Some (fork t (length P))) None
-        (replace P t rest ++ [li]) (upd G t (upd (G t) a (length P)))
+        (Some (replace P t rest ++ [li])) (upd G t (upd (G t) a (length P)))
   | exec_wait t a rest
       (Hwait : nth_error P t = Some (Wait a :: rest))
       (Hdone : nth_error P (G t a) = Some []) :
-      exec P G (Some (join t (G t a))) None (replace P t rest) G.
+      exec P G (Some (join t (G t a))) None (Some (replace P t rest)) G
+  | exec_assert_pass t e1 e2 rest
+      (Hassert : nth_error P t = Some (Assert_le e1 e2 :: rest))
+      (Hpass : eval (G t) e1 <= eval (G t) e2) :
+      exec P G None None (Some (replace P t rest)) G
+  | exec_assert_fail t e1 e2 rest
+      (Hassert : nth_error P t = Some (Assert_le e1 e2 :: rest))
+      (Hfail : ~eval (G t) e1 <= eval (G t) e2) :
+      exec P G None None None G.
 
   Definition opt_to_list A (x : option A) :=
     match x with
@@ -115,19 +128,20 @@ Section Semantics.
     | None => []
     end.
 
-  Inductive exec_star P G :
-    list operation -> list conc_op -> state -> env -> Prop :=
-  | exec_refl : exec_star P G [] [] P G
-  | exec_step o c P' G' (Hexec : exec P G o c P' G') lo lc P'' G''
+  Inductive exec_star : option state -> env ->
+    list operation -> list conc_op -> option state -> env -> Prop :=
+  | exec_refl P G : exec_star P G [] [] P G
+  | exec_step P G o c P' G' (Hexec : exec P G o c P' G') lo lc P'' G''
       (Hexec' : exec_star P' G' lo lc P'' G'') :
-      exec_star P G (opt_to_list o ++ lo) (opt_to_list c ++ lc) P'' G''.
+      exec_star (Some P) G (opt_to_list o ++ lo) (opt_to_list c ++ lc) P'' G''.
 
   Instance var_eq : EqDec_eq var. eq_dec_inst. Qed.
   
   Context (ML : Memory_Layout nat var_eq) (MM : @Memory_Model _ _ _ _ _ _ Base).
 
   Definition result P lo lc := exists P' G',
-    exec_star (init_state P) init_env lo lc P' G' /\
-      Forall (fun li => li = []) P' /\ consistent lc.
+    exec_star (Some (init_state P)) init_env lo lc P' G' /\
+      (match P' with Some ll => Forall (fun li => li = []) ll
+       | None => True end) /\ consistent lc.
 
 End Semantics.

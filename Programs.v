@@ -16,7 +16,7 @@ Definition p1_t1 (l : lock) :=
     Lock l;
     Assign a (I 0);
     Assign a (Plus (V a) (I 1)); 
-    Store x (V a);
+    Store (x, 0) (V a);
     
     Unlock l
 ].
@@ -24,9 +24,9 @@ Definition p1_t1 (l : lock) :=
 Definition p1_t2 (l : lock):=
 [
     Lock l;
-    Load b x;
+    Load b (x, 0);
     Assign b (Plus (V b) (I 2));
-    Store x (V b);
+    Store (x, 0) (V b);
     Unlock l
 ].
 
@@ -48,22 +48,47 @@ Definition p2 :=
     Wait(t2)
 ].
 
-Definition handler (cop : conc_op):=
+(*Definition handler (cop : conc_op):=
 match cop with
 | Read t x v =>  [
                      Load 0 x (* race detection code here?*)
 ]
 | _ => []
+end.*)
+
+Fixpoint set_vc (tgt : var (* loc of target VC *))
+  (src : var (* loc of source VC *)) (z : nat (* thread bound/size of VCs *))
+  (tmp : local (* a local to use as temp *)) :=
+(* Move all z of the timestamps in src into tgt. *)
+match z with
+| O => []
+| S n => Load tmp (src, n) :: Store (tgt, n) (V tmp) :: set_vc tgt src n tmp
 end.
 
-Definition instrument_instr(ins : instr) (t: tid): prog :=
-match ins with
-| Load a x   => Load a x::(handler (Read t x a))
+Definition inc_vc t tgt tmp := [
+  Load tmp (tgt, t);
+  Assign tmp (Plus (V tmp) (I 1));
+  Store (tgt, t) (V tmp)
+].
+
+(* Since everything is a nat, we can use C + t as the t component of C. *)
+Definition unlock_handler t l (C : var (* start of thread VCs *))
+  (L : var (* start of lock VCs *)) z tmp :=
+  set_vc (L + l) (C + t) z tmp ++ inc_vc t (C + t) tmp.
+
+(* The instrumentation pass is provided locations to store each of the
+   race detection state components. *)
+Definition instrument_instr (C L R W : var) z tmp (ins : instr) (t : tid)
+  : prog :=
+(match ins with
+(* | Load a x   => load_handler t x a*)
+(* | ... *)
+| Unlock l   => unlock_handler t l C L z tmp
 | _          => []
-end.
+end) ++ [ins].
 
-Fixpoint instrument(p: prog)(t: tid) : prog:=
+Fixpoint instrument C L R W z tmp (p: prog) (t: tid) : prog:=
 match p with
 | [] => []
-| ins::inss => (instrument_instr ins t)++(instrument inss t)
+| ins::inss => (instrument_instr C L R W z tmp ins t)++(instrument C L R W z tmp inss t)
 end.
