@@ -61,14 +61,15 @@ Definition wait_handler t a C z tmp1 tmp2 :=
   max_vc (C + t) (C + a) z tmp1 tmp2.
 (* The instrumentation pass is provided locations to store each of the
    race detection state components. *)
+
 Definition instrument_instr (C L R W : var) z tmp1 tmp2 (ins : instr) (t : tid)
   : prog :=
 (match ins with
  | Load a (x, 0)   => load_handler t x C R W z tmp1 tmp2 ++ [ins]
  | Store (x, 0) e  => store_handler t x C R W z tmp1 tmp2 ++ [ins]
- | Lock l          =>  lock_handler t l C L z tmp1 tmp2 ++ [ins]
+ | Lock l          => [ins] ++ lock_handler t l C L z tmp1 tmp2
  | Unlock l   => unlock_handler t l C L z tmp1 tmp2 ++ [ins]
- | Spawn a li =>  spawn_handler t a C z tmp1 ++ [ins] 
+ | Spawn a li =>  spawn_handler t a C z tmp1 ++ [ (instrument C L R W z tmp1 tmp2 li a)] 
  | Wait a     => [ins] ++ wait_handler t a C z tmp1 tmp2  (* the wait_handler should be called after the wait returns*)
  | _          => [ins]
 end).
