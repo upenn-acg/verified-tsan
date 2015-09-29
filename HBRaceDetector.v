@@ -55,22 +55,27 @@ Definition lock_handler t l C L z tmp1 tmp2 :=
 Definition unlock_handler t l (C : var (* start of thread VCs *))
   (L : var (* start of lock VCs *)) z tmp1 tmp2 :=
   max_vc (L + l) (C + t) z tmp1 tmp2 ++ inc_vc t (C + t) tmp1.
-Definition spawn_handler t a C z tmp :=
-  set_vc (C + a) (C + t) z tmp ++ inc_vc t (C + t) tmp.
-Definition wait_handler t a C z tmp1 tmp2 :=
-  max_vc (C + t) (C + a) z tmp1 tmp2.
+Definition spawn_handler t u C z tmp :=
+  set_vc (C + u) (C + t) z tmp ++ inc_vc t (C + t) tmp.
+Definition wait_handler t u C z tmp1 tmp2 :=
+  max_vc (C + t) (C + u) z tmp1 tmp2.
 (* The instrumentation pass is provided locations to store each of the
    race detection state components. *)
 
-Definition instrument_instr (C L R W : var) z tmp1 tmp2 (ins : instr) (t : tid)
+Fixpoint instrument_instr (C L R W : var) z tmp1 tmp2 (ins : instr) (t : tid)
   : prog :=
+let instrument := fix f p t :=
+  match p with
+  | [] => []
+  | ins::inss => (instrument_instr C L R W z tmp1 tmp2 ins t)++(f inss t)
+  end in
 (match ins with
  | Load a (x, 0)   => load_handler t x C R W z tmp1 tmp2 ++ [ins]
  | Store (x, 0) e  => store_handler t x C R W z tmp1 tmp2 ++ [ins]
  | Lock l          => [ins] ++ lock_handler t l C L z tmp1 tmp2
  | Unlock l   => unlock_handler t l C L z tmp1 tmp2 ++ [ins]
- | Spawn a li =>  spawn_handler t a C z tmp1 ++ [ (instrument C L R W z tmp1 tmp2 li a)] 
- | Wait a     => [ins] ++ wait_handler t a C z tmp1 tmp2  (* the wait_handler should be called after the wait returns*)
+ | Spawn u li =>  spawn_handler t u C z tmp1 ++ [Spawn u (instrument li u)] 
+ | Wait u     => [ins] ++ wait_handler t u C z tmp1 tmp2  (* the wait_handler should be called after the wait returns*)
  | _          => [ins]
 end).
 
