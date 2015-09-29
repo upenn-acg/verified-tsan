@@ -27,19 +27,17 @@ Inductive instr : Set :=
 | Store (x : ptr) (e : expr)
 | Lock (m : lock)
 | Unlock (m : lock)
-| Spawn (a : local) (li : list instr)
-| Wait (a : local)
+| Spawn (t : tid) (li : list instr)
+| Wait (t : tid)
 | Assert_le (e1 e2 : expr).
 
 Definition prog := list instr.
 
 Section Semantics.
-  Variable (tid_eq : EqDec_eq tid).
-
-  Definition state := list (list instr).
+  Definition state := list (tid * list instr).
   Definition env := tid -> local -> nat.
 
-  Definition init_state (P : prog) := [P].
+  Definition init_state (P : prog) := [(0, P)].
   Definition init_env (t : tid) (a : local) := 0.
 
   Fixpoint eval G e := match e with
@@ -85,40 +83,39 @@ Section Semantics.
 
   Inductive exec P G :
     option operation -> option conc_op -> option state -> env -> Prop :=
-  | exec_assign t a e rest
-      (Hassign : nth_error P t = Some (Assign a e :: rest)) :
+  | exec_assign P1 P2 t a e rest
+      (Hassign : P = P1 ++ (t, Assign a e :: rest) :: P2) :
       exec P G None None
-        (Some (replace P t rest)) (upd G t (upd (G t) a (eval (G t) e)))
-  | exec_load t a x v rest
-      (Hload : nth_error P t = Some (Load a x :: rest)) :
+        (Some (P1 ++ (t, rest) :: P2)) (upd G t (upd (G t) a (eval (G t) e)))
+  | exec_load P1 P2 t a x v rest
+      (Hload : P = P1 ++ (t, Load a x :: rest) :: P2) :
       exec P G (Some (rd t x)) (Some (Read t x v))
-        (Some (replace P t rest)) (upd G t (upd (G t) a v))
-  | exec_store t x e rest
-      (Hstore : nth_error P t = Some (Store x e :: rest)) :
+        (Some (P1 ++ (t, rest) :: P2)) (upd G t (upd (G t) a v))
+  | exec_store P1 P2 t x e rest
+      (Hstore : P = P1 ++ (t, Store x e :: rest) :: P2) :
       exec P G (Some (wr t x)) (Some (Write t x (eval (G t) e)))
-        (Some (replace P t rest)) G
-  | exec_lock t m rest
-      (Hlock : nth_error P t = Some (Lock m :: rest)) :
+        (Some (P1 ++ (t, rest) :: P2)) G
+  | exec_lock P1 P2 t m rest
+      (Hlock : P = P1 ++ (t, Lock m :: rest) :: P2) :
       exec P G (Some (acq t m)) (Some (ARW t (m, 0) 0 (S t)))
-        (Some (replace P t rest)) G
-  | exec_unlock t m rest
-      (Hlock : nth_error P t = Some (Unlock m :: rest)) :
+        (Some (P1 ++ (t, rest) :: P2)) G
+  | exec_unlock P1 P2 t m rest
+      (Hlock : P = P1 ++ (t, Unlock m :: rest) :: P2) :
       exec P G (Some (rel t m)) (Some (ARW t (m, 0) (S t) 0))
-        (Some (replace P t rest)) G
-  | exec_spawn t a li rest
-      (Hspawn : nth_error P t = Some (Spawn a li :: rest)) :
+        (Some (P1 ++ (t, rest) :: P2)) G
+  | exec_spawn P1 P2 t u li rest
+      (Hspawn : P = P1 ++ (t, Spawn u li :: rest) :: P2) :
       exec P G (Some (fork t (length P))) None
-        (Some (replace P t rest ++ [li])) (upd G t (upd (G t) a (length P)))
-  | exec_wait t a rest
-      (Hwait : nth_error P t = Some (Wait a :: rest))
-      (Hdone : nth_error P (G t a) = Some []) :
-      exec P G (Some (join t (G t a))) None (Some (replace P t rest)) G
-  | exec_assert_pass t e1 e2 rest
-      (Hassert : nth_error P t = Some (Assert_le e1 e2 :: rest))
+           (Some (P1 ++ (t, rest) :: (u, li) :: P2)) G
+  | exec_wait P1 P2 t u rest
+      (Hwait : P = P1 ++ (t, Wait u :: rest) :: P2) (Hdone : In (u, []) P) :
+      exec P G (Some (join t u)) None (Some (P1 ++ (t, rest) :: P2)) G
+  | exec_assert_pass P1 P2 t e1 e2 rest
+      (Hassert : P = P1 ++ (t, Assert_le e1 e2 :: rest) :: P2)
       (Hpass : eval (G t) e1 <= eval (G t) e2) :
-      exec P G None None (Some (replace P t rest)) G
-  | exec_assert_fail t e1 e2 rest
-      (Hassert : nth_error P t = Some (Assert_le e1 e2 :: rest))
+      exec P G None None (Some (P1 ++ (t, rest) :: P2)) G
+  | exec_assert_fail P1 P2 t e1 e2 rest
+      (Hassert : P = P1 ++ (t, Assert_le e1 e2 :: rest) :: P2)
       (Hfail : ~eval (G t) e1 <= eval (G t) e2) :
       exec P G None None None G.
 
@@ -141,7 +138,7 @@ Section Semantics.
 
   Definition result P lo lc := exists P' G',
     exec_star (Some (init_state P)) init_env lo lc P' G' /\
-      (match P' with Some ll => Forall (fun li => li = []) ll
+      (match P' with Some ll => Forall (fun li => snd li = []) ll
        | None => True end) /\ consistent lc.
 
 End Semantics.
