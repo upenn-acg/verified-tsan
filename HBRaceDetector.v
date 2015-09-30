@@ -1,8 +1,48 @@
 Require Import Lang.
 Require Import Util.
+Require Import VectorClocks.
 Set Implicit Arguments.
 
 Definition move src tgt tmp := [Load tmp src; Store tgt (V tmp)].
+
+Lemma exec_step' : forall P G o c P' G' rd mops
+  (Hexec : exec P G o c P' G') lo lc P'' G''
+  (Hexec' : exec_star P' G' lo lc P'' G'')
+  (Hrd : rd = opt_to_list o ++ lo)
+  (Hmops : mops = opt_to_list c ++ lc),
+  exec_star (Some P) G rd mops P'' G''.
+Proof.
+  clarify; eapply exec_step; eauto.
+Qed.
+
+Lemma upd_same : forall G t a v,
+  (upd_env G t a v) t a = v.
+Proof.
+  unfold upd_env, upd; clarify.
+Qed.
+
+Lemma move_spec : forall src tgt tmp P P1 P2 G t rest v
+  (Hmove : P = P1 ++ (t, move src tgt tmp ++ rest) :: P2),
+  exec_star (Some P) G
+            [rd t src; wr t tgt] [Read t src v; Write t tgt v]
+    (Some (P1 ++ (t, rest) :: P2)) (upd_env G t tmp v).
+Proof.
+  intros.
+  eapply exec_step'.
+  - apply exec_load.
+    unfold move in Hmove; eauto.
+  - simpl.
+    eapply exec_step'.
+    + apply exec_store.
+      eauto.
+    + apply exec_refl.
+    + auto.
+    + auto.
+  - auto.
+  - simpl.
+    rewrite upd_same.
+    auto.
+Qed.
 
 Fixpoint set_vc (tgt : var (* loc of target VC *))
   (src : var (* loc of source VC *)) (z : nat (* thread bound/size of VCs *))

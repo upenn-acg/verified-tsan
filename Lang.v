@@ -81,20 +81,26 @@ Section Semantics.
   Instance Base : MM_base conc_op := { thread_of := thread_of;
     to_seq := to_seq; synchronizes_with := synchronizes_with }.
 
+  Definition upd_env G (t : tid) (a : local) (v : nat) :=
+    upd G t (upd (G t) a v).
+
   Inductive exec P G :
     option operation -> option conc_op -> option state -> env -> Prop :=
   | exec_assign P1 P2 t a e rest
       (Hassign : P = P1 ++ (t, Assign a e :: rest) :: P2) :
       exec P G None None
-        (Some (P1 ++ (t, rest) :: P2)) (upd G t (upd (G t) a (eval (G t) e)))
+        (Some (P1 ++ (t, rest) :: P2)) (upd_env G t a (eval (G t) e))
+
   | exec_load P1 P2 t a x v rest
       (Hload : P = P1 ++ (t, Load a x :: rest) :: P2) :
       exec P G (Some (rd t x)) (Some (Read t x v))
-        (Some (P1 ++ (t, rest) :: P2)) (upd G t (upd (G t) a v))
+        (Some (P1 ++ (t, rest) :: P2)) (upd_env G t a v)
+
   | exec_store P1 P2 t x e rest
       (Hstore : P = P1 ++ (t, Store x e :: rest) :: P2) :
       exec P G (Some (wr t x)) (Some (Write t x (eval (G t) e)))
         (Some (P1 ++ (t, rest) :: P2)) G
+
   | exec_lock P1 P2 t m rest
       (Hlock : P = P1 ++ (t, Lock m :: rest) :: P2) :
       exec P G (Some (acq t m)) (Some (ARW t (m, 0) 0 (S t)))
@@ -103,17 +109,21 @@ Section Semantics.
       (Hlock : P = P1 ++ (t, Unlock m :: rest) :: P2) :
       exec P G (Some (rel t m)) (Some (ARW t (m, 0) (S t) 0))
         (Some (P1 ++ (t, rest) :: P2)) G
+
   | exec_spawn P1 P2 t u li rest
       (Hspawn : P = P1 ++ (t, Spawn u li :: rest) :: P2) :
-      exec P G (Some (fork t (length P))) None
+      exec P G (Some (fork t u)) None
            (Some (P1 ++ (t, rest) :: (u, li) :: P2)) G
+
   | exec_wait P1 P2 t u rest
       (Hwait : P = P1 ++ (t, Wait u :: rest) :: P2) (Hdone : In (u, []) P) :
       exec P G (Some (join t u)) None (Some (P1 ++ (t, rest) :: P2)) G
+
   | exec_assert_pass P1 P2 t e1 e2 rest
       (Hassert : P = P1 ++ (t, Assert_le e1 e2 :: rest) :: P2)
       (Hpass : eval (G t) e1 <= eval (G t) e2) :
       exec P G None None (Some (P1 ++ (t, rest) :: P2)) G
+
   | exec_assert_fail P1 P2 t e1 e2 rest
       (Hassert : P = P1 ++ (t, Assert_le e1 e2 :: rest) :: P2)
       (Hfail : ~eval (G t) e1 <= eval (G t) e2) :
