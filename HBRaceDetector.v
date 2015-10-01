@@ -149,8 +149,9 @@ Proof.
    eauto.  
   -intros.
    rewrite Hset_vc.
+   (*
    eapply set_vc_spec_step in Hset_vc.
-   rewrite set_vc_step in Hset_vc.
+   rewrite set_vc_step in Hset_vc.*)
    apply nonempty_list in Hvs.
    inversion Hvs.
    inversion H.
@@ -170,10 +171,8 @@ Proof.
     apply IHn.
     *auto.
     *auto.
-Grab Existential Variables.   
-   Abort.
+Qed.
  
-
 Definition inc_vc t tgt tmp := [
   Load tmp (tgt, t);
   Assign tmp (Plus (V tmp) (I 1));
