@@ -90,22 +90,88 @@ Proof.
   eapply exec_refl.
 Qed.
 
+Lemma events_set_vc_step: forall src tgt n t,
+  events_set_vc src tgt (S n) t = (events_move (src,n) (tgt,n) t)++events_set_vc src tgt n t.
+Proof.
+  intros.
+  eauto.
+Qed.
 
-Lemma set_vc_spec_n : forall tgt src n tmp P G P1 P2 t rest v vss 
+Lemma mops_set_vc_step: forall src tgt n t v vss,
+  mops_set_vc src tgt (S n) t (v::vss)= (mops_move (src,n) (tgt,n) t v)++mops_set_vc src tgt n t vss.
+Proof.
+  intros.
+  eauto.
+Qed.
+
+Lemma set_vc_step: forall  tgt src n tmp,
+  set_vc tgt src (S n) tmp =(move (src,n) (tgt,n) tmp)++set_vc tgt src n tmp.
+Proof.
+  intros.
+  eauto.
+Qed.
+
+Lemma nonempty_list: forall (ls : list nat) n, 
+  length ls = S n -> exists x xs, ls=x::xs /\ length xs=n.
+Proof.
+Admitted.
+
+Lemma set_vc_spec_step : forall tgt src n tmp P G P1 P2 t rest v 
+(Hset_vc: P=P1++(t, set_vc tgt src (S n) tmp++ rest)::P2),
+ exec_star (Some P) G
+          (events_move (src,n) (tgt,n) t) (mops_move (src,n) (tgt,n) t v) (Some (P1++(t, set_vc tgt src n tmp++rest)::P2)) (upd_env G t tmp v).
+Proof.
+  intros.
+  rewrite Hset_vc.
+  rewrite set_vc_step.
+  apply move_spec.
+  auto.
+Qed.
+
+Lemma exec_star_trans : forall P G P' P'' G' G'' e1 m1 e2 m2,
+  exec_star (Some P) G e1 m1 (Some P') G' -> exec_star (Some P') G' e2 m2 (Some P'') G''-> exec_star (Some P) G (e1++e2) (m1++m2) (Some P'') G''.
+Proof.
+Admitted. 
+
+Lemma set_vc_spec_n : forall n tgt src tmp P G P1 P2 t rest v vss 
 (Hset_vc: P=P1++(t, set_vc tgt src (S n) tmp++ rest)::P2) (Hvs: length vss=n),
  exec_star (Some P) G
           (events_set_vc src tgt (S n) t) (mops_set_vc src tgt (S n) t (vss++[v])) (Some (P1++(t,rest)::P2)) (upd_env G t tmp v).
 Proof.
   
-  intros.
+  intros n.
   induction n.
 
-  -apply empty_list in Hvs.
+  -intros.
+   apply empty_list in Hvs.
    clarify.
    apply move_spec.
+   eauto.  
+  -intros.
+   rewrite Hset_vc.
+   eapply set_vc_spec_step in Hset_vc.
+   rewrite set_vc_step in Hset_vc.
+   apply nonempty_list in Hvs.
+   inversion Hvs.
+   inversion H.
+   inversion H0.
+   rewrite H1.
+   assert (Hd: (x::x0)++[v]=x::(x0++[v])).
    eauto.
-  -Abort.
-  
+   rewrite Hd.
+   rewrite events_set_vc_step,mops_set_vc_step, set_vc_step.
+   eapply exec_star_trans.
+   +rewrite <- set_vc_step.
+    apply set_vc_spec_step.
+    eauto.
+   +assert( Hupd: upd_env G t tmp v = upd_env (upd_env G t tmp x) t tmp v).  
+    rewrite upd_overwrite. auto.
+    rewrite Hupd.
+    apply IHn.
+    *auto.
+    *auto.
+Grab Existential Variables.   
+   Abort.
  
 
 Definition inc_vc t tgt tmp := [
