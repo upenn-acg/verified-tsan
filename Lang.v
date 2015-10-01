@@ -29,7 +29,9 @@ Inductive instr : Set :=
 | Unlock (m : lock)
 | Spawn (t : tid) (li : list instr)
 | Wait (t : tid)
-| Assert_le (e1 e2 : expr).
+| Assert_le (e1 e2 : expr)
+(*| Nop*).
+
 
 Definition prog := list instr.
 
@@ -127,7 +129,10 @@ Section Semantics.
   | exec_assert_fail P1 P2 t e1 e2 rest
       (Hassert : P = P1 ++ (t, Assert_le e1 e2 :: rest) :: P2)
       (Hfail : ~eval (G t) e1 <= eval (G t) e2) :
-      exec P G None None None G.
+      exec P G None None None G
+  (*| exec_nop P1 P2 t rest
+      (Hnop : P=P1++(t,Nop::rest)::P2):
+      exec P G None None (Some (P1++(t,rest)::P2)) G*).
 
   Definition opt_to_list A (x : option A) :=
     match x with
