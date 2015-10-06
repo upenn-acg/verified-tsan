@@ -616,10 +616,49 @@ Proof.
 Qed.
        
      
-     
- 
-  
+Lemma hb_check_pass_spec_n: forall n C1 C2 t tmp1 tmp2 P G P1 P2 rest v1 v2 vs1 vs2
+ (Hhb_check_spec: P= P1++(t,hb_check C1 C2 (S n) tmp1 tmp2++rest)::P2) 
+ (Htmp: tmp1 <> tmp2) (Hvs1: length vs1 = n) (Hvs2: length vs2 = n) 
+ (Hfirst_gt: first_gt (vs1++[v1]) (vs2++[v2]) (S n)= None),
+ exec_star (Some P) G (events_hb_check C1 C2 (vs1++[v1]) (vs2++[v2]) (S n) t)
+           (mops_hb_check C1 C2 (vs1++[v1]) (vs2++[v2]) (S n) t) 
+           (Some (P1++(t,rest)::P2)) (upd_env (upd_env G t tmp1 v1) t tmp2 v2). 
+Proof.
+  intro n.
+  induction n;intros.
+  -apply empty_list in Hvs1. apply empty_list in Hvs2. clarify.
+   apply assert_le_pass_spec; eauto.
+   apply ble_nat_implies_le in cond. eauto.
+  -apply nonempty_list in Hvs1;apply nonempty_list in Hvs2;
+  inversion Hvs1; inversion Hvs2; inversion H; inversion H0;
+  inversion H1; inversion H2.
 
+  rewrite H3, H5, list_cons_plus_assoc in Hfirst_gt. 
+  rewrite list_cons_plus_assoc, first_gt_step in Hfirst_gt.
+  
+    destruct (ble_nat x x0) eqn:Hxx0; eauto.
+    +rewrite H3,H5.
+     repeat rewrite list_cons_plus_assoc.
+     rewrite events_hb_check_step, mops_hb_check_step.
+     rewrite Hhb_check_spec, Hxx0,  hb_check_step.
+     eapply exec_star_trans.
+     *apply assert_le_pass_spec; clarify.
+      apply ble_nat_implies_le in Hxx0. eauto.
+     *clarify.
+      assert(Hupd: (upd_env (upd_env G t tmp1 v1) t tmp2 v2)= upd_env (upd_env (upd_env (upd_env G t tmp1 x) t tmp2 x0) t tmp1 v1) t tmp2 v2).
+       symmetry. rewrite upd_assoc. rewrite upd_overwrite.
+       rewrite upd_assoc. rewrite upd_overwrite. eauto.
+       clarify. eauto.
+      rewrite Hupd.
+      eapply IHn; eauto.
+     +rewrite H3,H5.
+      repeat rewrite list_cons_plus_assoc.
+
+      rewrite events_hb_check_step, mops_hb_check_step.
+     rewrite Hhb_check_spec, Hxx0,  hb_check_step.
+     inversion Hfirst_gt.
+Qed.     
+   
 (* Since everything is a nat, we can use C + t as the t component of C. *)
 Definition load_handler t x C R (W : var) z tmp1 tmp2 := 
   hb_check W C z tmp1 tmp2 ++
