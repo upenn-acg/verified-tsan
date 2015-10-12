@@ -1,6 +1,7 @@
 Require Import Lang.
 Require Import Util.
 Require Import VectorClocks.
+Require Import FunctionalExtensionality.
 Set Implicit Arguments.
 
 Definition move src tgt tmp := [Load tmp src; Store tgt (V tmp)].
@@ -24,8 +25,9 @@ Qed.
 Lemma upd_overwrite : forall G t a v1 v2,
   upd_env (upd_env G t a v1) t a v2 = upd_env G t a v2.
 Proof.
-  Admitted.
-
+  intros; extensionality t'; extensionality v'.
+  unfold upd_env, upd; clarify.
+Qed.
 
 Definition events_move (src tgt:ptr) (t:tid): list Lang.operation := [rd t src; wr t tgt].
 
@@ -77,7 +79,9 @@ match (z,vs) with
 end.
 
 Lemma empty_list : forall (vs:list nat) (Hl: (length vs) = 0), vs=[]. 
-Admitted.
+Proof.
+  destruct vs; clarify.
+Qed.
 
 Lemma set_vc_spec_0 : forall src tgt tmp P G P1 P2 t rest 
 (Hset_vc0: P=P1++(t, set_vc src tgt 0 tmp ++ rest)::P2),
@@ -114,7 +118,8 @@ Qed.
 Lemma nonempty_list: forall (ls : list nat) n, 
   length ls = S n -> exists x xs, ls=x::xs /\ length xs=n.
 Proof.
-Admitted.
+  destruct ls; clarify; eauto.
+Qed.
 
 Lemma set_vc_spec_step : forall src tgt n tmp P G P1 P2 t rest v 
 (Hset_vc: P=P1++(t, set_vc src tgt (S n) tmp++ rest)::P2),
@@ -131,7 +136,10 @@ Qed.
 Lemma exec_star_trans : forall P G P' S G' G'' e1 m1 e2 m2,
   exec_star (Some P) G e1 m1 (Some P') G' -> exec_star (Some P') G' e2 m2 S G''-> exec_star (Some P) G (e1++e2) (m1++m2) S G''.
 Proof.
-Admitted. 
+  intros ?????????? Hexec; induction Hexec; clarify.
+  eapply exec_step'; eauto; clarsimp.
+Qed.
+
 Lemma list_cons_plus_assoc: forall (T:Type) (x:T) (x0 y: list T),
  (x::x0)++y=x::(x0++y).
 Proof.
@@ -245,15 +253,16 @@ Lemma upd_diff : forall G t a1 a2 v1 v2
  (Ha: a1<>a2),
  (upd_env (upd_env G t a1 v1) t a2 v2) t a1 = v1. 
 Proof.
-  intros.
-Admitted.
+  intros; unfold upd_env, upd; clarify.
+Qed.
 
 Lemma upd_assoc: forall G t a1 a2 v1 v2
  (Ha: a1<>a2),
  upd_env (upd_env G t a1 v1) t a2 v2 = upd_env (upd_env G t a2 v2) t a1 v1.
 Proof.
-  intros.
-Admitted.
+  intros; extensionality t'; extensionality v'.
+  unfold upd_env, upd; clarify.
+Qed.
 
 Lemma max_spec : forall P P1 P2 rest G src tgt tmp1 tmp2 v1 v2 t
  (Hmax_spec: P= P1++((t, max src tgt tmp1 tmp2++rest)::P2)) (Hdist: tmp1<> tmp2),
@@ -302,7 +311,7 @@ end.
 Fixpoint mops_max_vc (src tgt: var) (vs1 vs2: list nat) (t:tid) (z:nat) : list conc_op:=
 match (z,vs1,vs2) with
 |(0,[],[]) => []
-|(S n,v1::vss1,v2::vss2) => mops_max (src,n) (tgt,n) v1 v2 t ++ mops_max_vc src tgt vss1 vss2 t z 
+|(S n,v1::vss1,v2::vss2) => mops_max (src,n) (tgt,n) v1 v2 t ++ mops_max_vc src tgt vss1 vss2 t n
 | _ => []
 end. 
 Lemma max_vc_spec_0 : forall src tgt tmp1 tmp2 P G P1 P2 t rest
@@ -325,11 +334,12 @@ Proof.
 Qed.
 
 Lemma mops_max_vc_step: forall src tgt n v1 v2 vss1 vss2 t,
-  mops_max_vc src tgt (v1::vss1) (v2::vss2) t (S n)= mops_max (src,n) (tgt,n) v1 v2 t ++ mops_max_vc src tgt vss1 vss2 t n.
+  mops_max_vc src tgt (v1::vss1) (v2::vss2) t (S n) =
+  mops_max (src,n) (tgt,n) v1 v2 t ++ mops_max_vc src tgt vss1 vss2 t n.
 Proof.
   intros.
   eauto.
-Admitted.
+Qed.
 
 Lemma max_vc_step: forall  src tgt n tmp1 tmp2,
   max_vc src tgt (S n) tmp1 tmp2 = max (src,n) (tgt,n) tmp1 tmp2++ max_vc src tgt  n tmp1 tmp2.
@@ -390,15 +400,7 @@ Proof.
    rewrite Hupd. 
    apply IHn; eauto.
 Qed. 
-Fixpoint ble_nat (n m : nat) : bool :=
-  match n with
-  | O => true
-  | S n' =>
-      match m with
-      | O => false
-      | S m' => ble_nat n' m'
-      end
-  end.    
+
 Definition assert_le (a b : ptr) (tmp1 tmp2:local): prog :=
 [
     Load tmp1 a;
@@ -417,16 +419,6 @@ Definition mops_assert_le (a b : ptr) (v1 v2: nat) (t: tid): list conc_op :=
   Read t a v1;
   Read t b v2
 ].
-
-Lemma ble_nat_implies_le: forall v1 v2,
- ble_nat v1 v2 = true -> v1 <=v2.
-Proof.
-  Admitted.
-
-Lemma nble_nat_implies_nle: forall v1 v2,
- ble_nat v1 v2 = false ->~ v1 <= v2.
-Proof.
-  Admitted.
 
 Lemma assert_le_fail_spec: forall P P1 P2 rest G a b tmp1 tmp2 t v1 v2
  (Hassert_le_spec: P=P1++(t,assert_le a b tmp1 tmp2++rest)::P2) (Htmp: tmp1<>tmp2) (Hv1v2: ~ v1 <= v2),
@@ -494,14 +486,14 @@ Qed.
 Fixpoint events_hb_check (C1 C2: var) (vs1 vs2: list nat) (z:nat) (t:tid) : list Lang.operation :=
 match (z,vs1,vs2) with
 | (S n, v1::vss1, v2::vss2) => events_assert_le (C1,n) (C2,n) t++
-                               if ble_nat v1 v2 then events_hb_check C1 C2 vss1 vss2 n t else []
+                               if leb v1 v2 then events_hb_check C1 C2 vss1 vss2 n t else []
 | _ => []
 end.
 
 Lemma events_hb_check_step : forall C1 C2 v1 v2 vs1 vs2 n t,
  events_hb_check C1 C2 (v1::vs1) (v2::vs2) (S n) t = 
  events_assert_le (C1,n) (C2,n) t ++ 
- if ble_nat v1 v2 then events_hb_check C1 C2 vs1 vs2 n t else [].
+ if leb v1 v2 then events_hb_check C1 C2 vs1 vs2 n t else [].
 Proof.
   intros. auto.
 Qed.
@@ -511,7 +503,7 @@ Qed.
 Fixpoint mops_hb_check (C1 C2: var) (vs1 vs2: list nat) (z:nat) (t:tid) : list conc_op :=
 match (z,vs1,vs2) with
 | (S n, v1::vss1, v2::vss2) => mops_assert_le (C1,n) (C2,n) v1 v2 t ++ 
-                               (if ble_nat v1 v2 then mops_hb_check C1 C2 vss1 vss2 n t
+                               (if leb v1 v2 then mops_hb_check C1 C2 vss1 vss2 n t
                                else [])
 | _ => []
 end.
@@ -519,7 +511,7 @@ end.
 Lemma mops_hb_check_step : forall C1 C2 v1 v2 vs1 vs2 n t,
  mops_hb_check C1 C2 (v1::vs1) (v2::vs2) (S n) t =
  mops_assert_le (C1,n) (C2,n) v1 v2 t ++
- if ble_nat v1 v2 then mops_hb_check C1 C2 vs1 vs2 n t else [].
+ if leb v1 v2 then mops_hb_check C1 C2 vs1 vs2 n t else [].
 Proof.
   intros. auto.
 Qed.
@@ -563,12 +555,12 @@ Qed.
     
 Fixpoint first_gt l1 l2 z :=
 match (z,l1,l2) with
-| (S n, x1::xs1, x2::xs2) => if ble_nat x1 x2 then first_gt xs1 xs2 n else Some (x1,x2) 
+| (S n, x1::xs1, x2::xs2) => if leb x1 x2 then first_gt xs1 xs2 n else Some (x1,x2) 
 | _   => None
 end.
 
 Lemma first_gt_step: forall x1 x2 xs1 xs2 n,
-first_gt (x1::xs1) (x2::xs2) (S n) = if ble_nat x1 x2 then first_gt xs1 xs2 n else Some (x1,x2).
+first_gt (x1::xs1) (x2::xs2) (S n) = if leb x1 x2 then first_gt xs1 xs2 n else Some (x1,x2).
 Proof.
   intros. eauto.
 Qed.
@@ -589,16 +581,15 @@ Proof.
   -apply empty_list in H4. apply empty_list in H6. clarify.
    eapply assert_le_fail_spec;eauto.
    +clarify.
-   +apply nble_nat_implies_nle in cond. eauto.
-   
+   +rewrite <- leb_le; intro; clarify.
   - rewrite H3, H5, first_gt_step in Hfirst_gt. 
-    destruct (ble_nat x x0) eqn:Hxx0; eauto.
+    destruct (leb x x0) eqn:Hxx0; eauto.
     +rewrite H3,H5. 
      rewrite events_hb_check_step, mops_hb_check_step.
      rewrite Hhb_check_spec, Hxx0,  hb_check_step.
      eapply exec_star_trans.
      *apply assert_le_pass_spec; clarify.
-      apply ble_nat_implies_le in Hxx0. eauto.
+      rewrite leb_le in *; auto.
      *clarify.
       assert(Hupd: (upd_env (upd_env G t tmp1 v1) t tmp2 v2)= upd_env (upd_env (upd_env (upd_env G t tmp1 x) t tmp2 x0) t tmp1 v1) t tmp2 v2).
        symmetry. rewrite upd_assoc. rewrite upd_overwrite.
@@ -612,7 +603,7 @@ Proof.
      inversion Hfirst_gt.
      rewrite <- H8, <- H9.
      eapply assert_le_fail_spec; clarify.
-     apply nble_nat_implies_nle in Hxx0. eauto.
+     rewrite <- leb_le; intro; clarify.
 Qed.
        
      
@@ -628,7 +619,7 @@ Proof.
   induction n;intros.
   -apply empty_list in Hvs1. apply empty_list in Hvs2. clarify.
    apply assert_le_pass_spec; eauto.
-   apply ble_nat_implies_le in cond. eauto.
+   rewrite leb_le in cond; auto.
   -apply nonempty_list in Hvs1;apply nonempty_list in Hvs2;
   inversion Hvs1; inversion Hvs2; inversion H; inversion H0;
   inversion H1; inversion H2.
@@ -636,14 +627,14 @@ Proof.
   rewrite H3, H5, list_cons_plus_assoc in Hfirst_gt. 
   rewrite list_cons_plus_assoc, first_gt_step in Hfirst_gt.
   
-    destruct (ble_nat x x0) eqn:Hxx0; eauto.
+    destruct (leb x x0) eqn:Hxx0; eauto.
     +rewrite H3,H5.
      repeat rewrite list_cons_plus_assoc.
      rewrite events_hb_check_step, mops_hb_check_step.
      rewrite Hhb_check_spec, Hxx0,  hb_check_step.
      eapply exec_star_trans.
      *apply assert_le_pass_spec; clarify.
-      apply ble_nat_implies_le in Hxx0. eauto.
+      rewrite leb_le in *; auto.
      *clarify.
       assert(Hupd: (upd_env (upd_env G t tmp1 v1) t tmp2 v2)= upd_env (upd_env (upd_env (upd_env G t tmp1 x) t tmp2 x0) t tmp1 v1) t tmp2 v2).
        symmetry. rewrite upd_assoc. rewrite upd_overwrite.
@@ -680,9 +671,6 @@ Proof.
   intros.
   apply max_vc_spec_n; eauto.
 Qed.
-Lemma list_app_assoc: forall (X: Type) (l1 l2 l3:list X), (l1++l2)++l3=l1++l2++l3.
-Proof.
-Admitted.
 
 Definition unlock_handler t l (C : var (* start of thread VCs *))
   (L : var (* start of lock VCs *)) z tmp1 tmp2 :=
@@ -695,7 +683,7 @@ Lemma unlock_handler_spec_n : forall n C l L tmp1 tmp2 P G P1 P2 t rest v1 vss1 
 Proof.
   intros.
   apply exec_star_trans with (P':=P1++(t,inc_vc t (C+t) tmp1++rest)::P2) (G':=upd_env (upd_env G t tmp1 v1) t tmp2 (Peano.max v1 v2)).
-  -apply max_vc_spec_n. rewrite <-list_app_assoc. eauto. auto. auto. auto.
+  -apply max_vc_spec_n. rewrite app_assoc. eauto. auto. auto. auto.
   -assert(Hoverwrite: upd_env (upd_env G t tmp2 (Peano.max v1 v2)) t tmp1 (vt+1) = upd_env (upd_env (upd_env G t tmp1 v1) t tmp2 (Peano.max v1 v2)) t tmp1 (vt+1)).
     symmetry. rewrite upd_assoc. rewrite upd_overwrite. rewrite upd_assoc. eauto.
     eauto. eauto.
@@ -716,7 +704,7 @@ Proof.
   unfold spawn_handler in Hset_vc.
   apply exec_star_trans with (P':=P1++(t,inc_vc t (C+t) tmp++rest)::P2) (G':=upd_env G t tmp v). 
   -eapply set_vc_spec_n;eauto.
-   rewrite <-list_app_assoc. eauto.
+   rewrite app_assoc. eauto.
   -assert(Hoverwrite:upd_env G t tmp (vt+1) =upd_env (upd_env G t tmp v) t tmp (vt+1)).
    rewrite <- upd_overwrite with (v1:=v). eauto.
    rewrite Hoverwrite.
