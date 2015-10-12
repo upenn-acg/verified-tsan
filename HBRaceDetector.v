@@ -55,13 +55,13 @@ Proof.
     auto.
 Qed.
 
-Fixpoint set_vc (tgt : var (* loc of target VC *))
-  (src : var (* loc of source VC *)) (z : nat (* thread bound/size of VCs *))
+Fixpoint set_vc (src : var (* loc of source VC *)) (tgt : var (* loc of target VC *))
+  (z : nat (* thread bound/size of VCs *))
   (tmp : local (* a local to use as temp *)) :=
 (* Move all z of the timestamps in src into tgt. *)
 match z with
 | 0 => []
-| S n =>  move (src,n) (tgt,n) tmp++set_vc tgt src n tmp 
+| S n =>  move (src,n) (tgt,n) tmp++set_vc src tgt n tmp 
 end.
 
 Fixpoint events_set_vc (src tgt: var) (z : nat) (t : tid) : list Lang.operation:=
@@ -79,8 +79,8 @@ end.
 Lemma empty_list : forall (vs:list nat) (Hl: (length vs) = 0), vs=[]. 
 Admitted.
 
-Lemma set_vc_spec_0 : forall tgt src tmp P G P1 P2 t rest 
-(Hset_vc0: P=P1++(t, set_vc tgt src 0 tmp ++ rest)::P2),
+Lemma set_vc_spec_0 : forall src tgt tmp P G P1 P2 t rest 
+(Hset_vc0: P=P1++(t, set_vc src tgt 0 tmp ++ rest)::P2),
 exec_star (Some P) G [] [] (Some (P1++(t,rest)::P2)) G.
 Proof.
   intros.
@@ -104,8 +104,8 @@ Proof.
   eauto.
 Qed.
 
-Lemma set_vc_step: forall  tgt src n tmp,
-  set_vc tgt src (S n) tmp =(move (src,n) (tgt,n) tmp)++set_vc tgt src n tmp.
+Lemma set_vc_step: forall  src tgt n tmp,
+  set_vc src tgt (S n) tmp =(move (src,n) (tgt,n) tmp)++set_vc src tgt n tmp.
 Proof.
   intros.
   eauto.
@@ -116,10 +116,10 @@ Lemma nonempty_list: forall (ls : list nat) n,
 Proof.
 Admitted.
 
-Lemma set_vc_spec_step : forall tgt src n tmp P G P1 P2 t rest v 
-(Hset_vc: P=P1++(t, set_vc tgt src (S n) tmp++ rest)::P2),
+Lemma set_vc_spec_step : forall src tgt n tmp P G P1 P2 t rest v 
+(Hset_vc: P=P1++(t, set_vc src tgt (S n) tmp++ rest)::P2),
  exec_star (Some P) G
-          (events_move (src,n) (tgt,n) t) (mops_move (src,n) (tgt,n) t v) (Some (P1++(t, set_vc tgt src n tmp++rest)::P2)) (upd_env G t tmp v).
+          (events_move (src,n) (tgt,n) t) (mops_move (src,n) (tgt,n) t v) (Some (P1++(t, set_vc src tgt n tmp++rest)::P2)) (upd_env G t tmp v).
 Proof.
   intros.
   rewrite Hset_vc.
@@ -139,8 +139,8 @@ Proof.
   auto.
 Qed.
 
-Lemma set_vc_spec_n : forall n tgt src tmp P G P1 P2 t rest v vss 
-(Hset_vc: P=P1++(t, set_vc tgt src (S n) tmp++ rest)::P2) (Hvs: length vss=n),
+Lemma set_vc_spec_n : forall n src tgt tmp P G P1 P2 t rest v vss 
+(Hset_vc: P=P1++(t, set_vc src tgt (S n) tmp++ rest)::P2) (Hvs: length vss=n),
  exec_star (Some P) G
           (events_set_vc src tgt (S n) t) (mops_set_vc src tgt (S n) t (vss++[v])) (Some (P1++(t,rest)::P2)) (upd_env G t tmp v).
 Proof.
@@ -287,10 +287,10 @@ Proof.
    unfold mops_max. clarify. repeat rewrite upd_same. rewrite upd_diff; eauto.
 Qed.
  
-Fixpoint max_vc tgt src z tmp1 tmp2 :=
+Fixpoint max_vc src tgt z tmp1 tmp2 :=
 match z with
 | 0 => []
-| S n => max (tgt,n) (src,n) tmp1 tmp2++ max_vc tgt src n tmp1 tmp2
+| S n => max (src,n) (tgt,n) tmp1 tmp2++ max_vc src tgt n tmp1 tmp2
 end.
 
 Fixpoint events_max_vc (src tgt:var) (t: tid) (z:nat): list Lang.operation:=
@@ -331,8 +331,8 @@ Proof.
   eauto.
 Admitted.
 
-Lemma max_vc_step: forall  tgt src n tmp1 tmp2,
-  max_vc tgt src (S n) tmp1 tmp2 = max (tgt,n) (src,n) tmp1 tmp2++ max_vc tgt src n tmp1 tmp2.
+Lemma max_vc_step: forall  src tgt n tmp1 tmp2,
+  max_vc src tgt (S n) tmp1 tmp2 = max (src,n) (tgt,n) tmp1 tmp2++ max_vc src tgt  n tmp1 tmp2.
 Proof.
   intros.
   eauto.
@@ -669,18 +669,75 @@ Definition store_handler t x C (R:var) W z tmp1 tmp2 :=
   hb_check R C z tmp1 tmp2 ++
   move (C + t, t) (W + x, t) tmp1.
 Definition lock_handler t l C L z tmp1 tmp2 :=
-  max_vc (C+t) (L+l) z tmp1 tmp2.
-  
+  max_vc (L+l) (C+t) z tmp1 tmp2.
+
+Lemma lock_handler_spec_n : forall n t l C L tmp1 tmp2 P G P1 P2 rest v1 v2 vss1 vss2
+
+(Hmax_vc: P=P1++(t, lock_handler t l C L (S n) tmp1 tmp2 ++ rest)::P2) (Htmp: tmp1 <> tmp2) (Hvs1: length vss1=n) (Hvs2: length vss2=n),
+ exec_star (Some P) G
+          (events_max_vc (L+l) (C+t) t (S n)) (mops_max_vc (L+l) (C+t) (vss1++[v1]) (vss2++[v2]) t (S n)) (Some (P1++(t,rest)::P2)) (upd_env (upd_env G t tmp1 v1) t tmp2 (Peano.max v1 v2)).  
+Proof.
+  intros.
+  apply max_vc_spec_n; eauto.
+Qed.
+Lemma list_app_assoc: forall (X: Type) (l1 l2 l3:list X), (l1++l2)++l3=l1++l2++l3.
+Proof.
+Admitted.
+
 Definition unlock_handler t l (C : var (* start of thread VCs *))
   (L : var (* start of lock VCs *)) z tmp1 tmp2 :=
-  max_vc (L + l) (C + t) z tmp1 tmp2 ++ inc_vc t (C + t) tmp1.
+  max_vc (C + t) (L+l) z tmp1 tmp2 ++ inc_vc t (C + t) tmp1.
+
+Lemma unlock_handler_spec_n : forall n C l L tmp1 tmp2 P G P1 P2 t rest v1 vss1 v2 vss2 vt
+(Hset_vc: P=P1++(t, unlock_handler t l C L (S n) tmp1 tmp2++ rest)::P2) (Hvs1: length vss1=n) (Hvs2: length vss2=n) (Htmp: tmp1<>tmp2),
+ exec_star (Some P) G
+          (events_max_vc (C+t)(L+l) t (S n)++(events_inc_vc (C+t) t)) (mops_max_vc (C+t) (L+l )(vss1++[v1]) (vss2++[v2]) t (S n) ++ (mops_inc_vc (C+t) vt t)) (Some (P1++(t,rest)::P2)) (upd_env (upd_env G t tmp2 (Peano.max v1 v2)) t tmp1 (vt+1)).
+Proof.
+  intros.
+  apply exec_star_trans with (P':=P1++(t,inc_vc t (C+t) tmp1++rest)::P2) (G':=upd_env (upd_env G t tmp1 v1) t tmp2 (Peano.max v1 v2)).
+  -apply max_vc_spec_n. rewrite <-list_app_assoc. eauto. auto. auto. auto.
+  -assert(Hoverwrite: upd_env (upd_env G t tmp2 (Peano.max v1 v2)) t tmp1 (vt+1) = upd_env (upd_env (upd_env G t tmp1 v1) t tmp2 (Peano.max v1 v2)) t tmp1 (vt+1)).
+    symmetry. rewrite upd_assoc. rewrite upd_overwrite. rewrite upd_assoc. eauto.
+    eauto. eauto.
+   rewrite Hoverwrite.
+   apply inc_vc_spec. 
+   eauto.
+Qed.
+
 Definition spawn_handler t u C z tmp :=
-  set_vc (C + u) (C + t) z tmp ++ inc_vc t (C + t) tmp.
+  set_vc (C + t) (C + u) z tmp ++ inc_vc t (C + t) tmp.
+
+Lemma spawn_handler_spec_n : forall n C u tmp P G P1 P2 t rest v vss vt
+(Hset_vc: P=P1++(t, spawn_handler t u C (S n) tmp++ rest)::P2) (Hvs: length vss=n),
+ exec_star (Some P) G
+          (events_set_vc (C+t)(C+u) (S n) t++(events_inc_vc (C+t) t)) (mops_set_vc (C+t) (C+u) (S n) t (vss++[v])++ (mops_inc_vc (C+t) vt t)) (Some (P1++(t,rest)::P2)) (upd_env G t tmp (vt+1)).
+Proof.
+  intros.
+  unfold spawn_handler in Hset_vc.
+  apply exec_star_trans with (P':=P1++(t,inc_vc t (C+t) tmp++rest)::P2) (G':=upd_env G t tmp v). 
+  -eapply set_vc_spec_n;eauto.
+   rewrite <-list_app_assoc. eauto.
+  -assert(Hoverwrite:upd_env G t tmp (vt+1) =upd_env (upd_env G t tmp v) t tmp (vt+1)).
+   rewrite <- upd_overwrite with (v1:=v). eauto.
+   rewrite Hoverwrite.
+   apply inc_vc_spec. eauto.
+Qed.
+   
+    
+
 Definition wait_handler t u C z tmp1 tmp2 :=
-  max_vc (C + t) (C + u) z tmp1 tmp2.
+  max_vc (C + u) (C + t) z tmp1 tmp2.
 (* The instrumentation pass is provided locations to store each of the
    race detection state components. *)
+Lemma wait_handler_spec_n : forall n t u C tmp1 tmp2 P G P1 P2 rest v1 v2 vss1 vss2
 
+(Hmax_vc: P=P1++(t, wait_handler t u C (S n) tmp1 tmp2 ++ rest)::P2) (Htmp: tmp1 <> tmp2) (Hvs1: length vss1=n) (Hvs2: length vss2=n),
+ exec_star (Some P) G
+          (events_max_vc (C+u) (C+t) t (S n)) (mops_max_vc (C+u) (C+t) (vss1++[v1]) (vss2++[v2]) t (S n)) (Some (P1++(t,rest)::P2)) (upd_env (upd_env G t tmp1 v1) t tmp2 (Peano.max v1 v2)).  
+Proof.
+  intros.
+  apply max_vc_spec_n; eauto.
+Qed.
 Fixpoint instrument_instr (C L R W : var) z tmp1 tmp2 (ins : instr) (t : tid)
   : prog :=
 let instrument := fix f p t :=
