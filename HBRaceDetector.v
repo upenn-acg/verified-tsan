@@ -705,10 +705,10 @@ Lemma store_handler_norace_spec_n: forall n x C R W t tmp1 tmp2 P G P1 P2 rest v
  exec_star (Some P) G 
            (events_hb_check W C (vs1++[v1]) (vs2++[v2]) (S n) t ++ 
             events_hb_check R C (vs3++[v3]) (vs2++[v2]) (S n) t ++               
-            events_move (C+t,t) (R+x, t) t)
+            events_move (C+t,t) (W+x, t) t)
            (mops_hb_check W C (vs1++[v1]) (vs2++[v2]) (S n) t ++ 
             mops_hb_check R C (vs3++[v3]) (vs2++[v2]) (S n) t ++
-            mops_move (C+t,t) (R+x, t) t v2) 
+            mops_move (C+t,t) (W+x, t) t v2) 
            (Some (P1++(t,rest)::P2)) (upd_env (upd_env G t tmp1 v2) t tmp2 v2).
 Proof.
   intros.
@@ -728,9 +728,10 @@ Proof.
    assert(Hupd: upd_env (upd_env G t tmp1 v2) t tmp2 v2=
                 upd_env (upd_env (upd_env G t tmp1 v3) t tmp2 v2) t tmp1 v2
          ).
-    symmetry. rewrite upd_assoc. rewrite upd_overwrite. eauto.eauto.
+    symmetry. rewrite upd_assoc. rewrite upd_overwrite. eauto. eauto.
    rewrite Hupd. 
    apply move_spec. eauto.
+Qed.
    
 apply hb_check_pass_spec_n; eauto.
 Definition lock_handler t l C L z tmp1 tmp2 :=
