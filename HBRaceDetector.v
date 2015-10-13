@@ -697,9 +697,50 @@ Definition store_handler t x C (R:var) W z tmp1 tmp2 :=
   hb_check W C z tmp1 tmp2 ++
   hb_check R C z tmp1 tmp2 ++
   move (C + t, t) (W + x, t) tmp1.
+Lemma store_handler_race_waw_spec_n: forall n x C R W t tmp1 tmp2 P G P1 P2 rest v1 v2 vs1 vs2
+ (Hstore_handler_spec: P= P1++(t,store_handler t x C R W (S n) tmp1 tmp2++rest)::P2) 
+ (Htmp: tmp1 <> tmp2) (Hvs1: length vs1 = S n) (Hvs2: length vs2 = S n) 
+ (Hfirst_gt: first_gt vs1 vs2 (S n)= Some (v1,v2)),
+ exec_star (Some P) G (events_hb_check W C vs1 vs2 (S n) t)
+           (mops_hb_check W C vs1 vs2 (S n) t) 
+           None (upd_env (upd_env G t tmp1 v1) t tmp2 v2). 
+Proof.
+  intros.
+  unfold store_handler in Hstore_handler_spec.
+  apply hb_check_fail_spec_n with (P1:=P1) (P2:=P2) (rest:=hb_check R C (S n) tmp1 tmp2 ++ move (C+t, t) (W+x,t) tmp1++rest); eauto.
+  repeat rewrite <- app_assoc in Hstore_handler_spec.  eauto.
+Qed.
+
+Lemma store_handler_race_war_spec_n: forall n x C R W t tmp1 tmp2 P G P1 P2 rest ve1 ve2 ve3 v2 v3 vs1 vs2 vs3
+ (Hstore_handler_spec: P= P1++(t,store_handler t x C R W (S n) tmp1 tmp2++rest)::P2) 
+ (Htmp: tmp1 <> tmp2) (Hvs1: length vs1 = n) (Hvs2: length vs2 = n) (Hvs3: length vs3 = n) 
+ (Hfirst_gt12: first_gt (vs1++[ve1]) (vs2++[ve2]) (S n)= None)
+ (Hfirst_gt32: first_gt (vs3++[ve3]) (vs2++[ve2]) (S n)= Some (v3,v2)),
+
+ exec_star (Some P) G 
+           (events_hb_check W C (vs1++[ve1]) (vs2++[ve2]) (S n) t ++
+            events_hb_check R C (vs3++[ve3]) (vs2++[ve2]) (S n) t)
+           (mops_hb_check W C (vs1++[ve1]) (vs2++[ve2]) (S n) t ++
+            mops_hb_check R C (vs3++[ve3]) (vs2++[ve2]) (S n) t) 
+           None (upd_env (upd_env G t tmp1 v3) t tmp2 v2). 
+Proof.
+  intros.
+  apply exec_star_trans with (P':=P1++(t,hb_check R C (S n) tmp1 tmp2 ++ move (C+t,t) (W+x, t) tmp1 ++ rest)::P2) (G':=upd_env (upd_env G t tmp1 ve1) t tmp2 ve2).
+  -apply hb_check_pass_spec_n; eauto.
+   unfold store_handler in Hstore_handler_spec.
+   repeat rewrite <- app_assoc in Hstore_handler_spec. eauto.
+  -assert(Hupd: upd_env (upd_env G t tmp1 v3) t tmp2 v2 =
+                upd_env (upd_env (upd_env (upd_env G t tmp1 ve1) t tmp2 ve2) t tmp1 v3) t tmp2 v2).
+    symmetry. rewrite upd_assoc. rewrite upd_overwrite. rewrite upd_assoc. rewrite upd_overwrite. eauto.
+    eauto.
+    eauto.
+   rewrite Hupd.
+   eapply hb_check_fail_spec_n; eauto;
+   clarify; rewrite app_length; rewrite plus_comm; eauto.
+Qed.
 
 Lemma store_handler_norace_spec_n: forall n x C R W t tmp1 tmp2 P G P1 P2 rest v1 v2 v3 vs1 vs2 vs3
- (Hload_handler_spec: P= P1++(t,store_handler t x C R W (S n) tmp1 tmp2++rest)::P2) 
+ (Hstore_handler_spec: P= P1++(t,store_handler t x C R W (S n) tmp1 tmp2++rest)::P2) 
  (Htmp: tmp1 <> tmp2) 
  (Hvs1: length vs1 = n) (Hvs2: length vs2 = n) (Hvs3: length vs3 =n) 
  (Hfirst_gt12: first_gt (vs1++[v1]) (vs2++[v2]) (S n)= None)
@@ -716,8 +757,8 @@ Proof.
   intros.
   apply exec_star_trans with (P':=P1++(t,hb_check R C (S n) tmp1 tmp2++move (C+t, t) (W+x, t) tmp1  ++rest)::P2) (G':= upd_env (upd_env G t tmp1 v1) t tmp2 v2).  
   -apply hb_check_pass_spec_n; eauto.
-   unfold store_handler in Hload_handler_spec.
-   repeat rewrite <- app_assoc in Hload_handler_spec. eauto.
+   unfold store_handler in Hstore_handler_spec.
+   repeat rewrite <- app_assoc in Hstore_handler_spec. eauto.
   -apply exec_star_trans with (P':=P1++(t,move (C+t, t) (W+x, t) tmp1  ++rest)::P2) (G':= upd_env (upd_env G t tmp1 v3) t tmp2 v2).
    assert(Hupd: upd_env (upd_env G t tmp1 v3) t tmp2 v2 = 
                 upd_env (upd_env (upd_env (upd_env G t tmp1 v1) t tmp2 v2) t tmp1 v3) t tmp2 v2).
@@ -828,6 +869,7 @@ end.
 
 Section SC.
 
+<<<<<<< HEAD
 Context (ML : Memory_Layout nat var_eq).
 
 Definition consistent (m : list conc_op) := @SC _ _ _ ML _ _ Base m.
