@@ -1,6 +1,6 @@
-Require Import Lang.
 Require Import Util.
 Require Import VectorClocks.
+Require Import Lang.
 Require Import FunctionalExtensionality.
 Set Implicit Arguments.
 
@@ -29,7 +29,7 @@ Proof.
   unfold upd_env, upd; clarify.
 Qed.
 
-Definition events_move (src tgt:ptr) (t:tid): list Lang.operation := [rd t src; wr t tgt].
+Definition events_move (src tgt:ptr) (t:tid): list operation := [rd t src; wr t tgt].
 
 Definition mops_move (src tgt: ptr) (t:tid) (v:nat): list conc_op := [Read t src v; Write t tgt v].
 
@@ -66,7 +66,7 @@ match z with
 | S n =>  move (src,n) (tgt,n) tmp++set_vc src tgt n tmp 
 end.
 
-Fixpoint events_set_vc (src tgt: var) (z : nat) (t : tid) : list Lang.operation:=
+Fixpoint events_set_vc (src tgt: var) (z : nat) (t : tid) : list operation:=
 match z with
 | O => []
 | S n => (events_move (src,n) (tgt,n) t)++events_set_vc src tgt n t
@@ -191,7 +191,7 @@ Definition inc_vc t tgt tmp := [
   Store (tgt, t) (V tmp)
 ].
 
-Definition events_inc_vc (tgt:var) (t:tid): list Lang.operation:=
+Definition events_inc_vc (tgt:var) (t:tid): list operation:=
   [rd t (tgt,t); wr t (tgt,t)]. 
 Definition mops_inc_vc (tgt:var) (v:nat) (t:tid): list conc_op:=
   [Read t (tgt,t) v; Write t (tgt,t) (v+1) ].
@@ -235,7 +235,7 @@ Definition max src tgt tmp1 tmp2 :=
   Store tgt (V tmp2)
 ].
 
-Definition events_max (src tgt:ptr) (t:tid) : list Lang.operation :=
+Definition events_max (src tgt:ptr) (t:tid) : list operation :=
 [
   rd t src ;
   rd t tgt ;
@@ -302,7 +302,7 @@ match z with
 | S n => max (src,n) (tgt,n) tmp1 tmp2++ max_vc src tgt n tmp1 tmp2
 end.
 
-Fixpoint events_max_vc (src tgt:var) (t: tid) (z:nat): list Lang.operation:=
+Fixpoint events_max_vc (src tgt:var) (t: tid) (z:nat): list operation:=
 match z with
 |0 => []
 |S n => events_max (src,n) (tgt,n) t ++ events_max_vc src tgt t n
@@ -408,7 +408,7 @@ Definition assert_le (a b : ptr) (tmp1 tmp2:local): prog :=
     Assert_le (V tmp1) (V tmp2)
 ].
 
-Definition events_assert_le(a b: ptr) (t:tid) : list Lang.operation :=
+Definition events_assert_le(a b: ptr) (t:tid) : list operation :=
 [
   rd t a;
   rd t b
@@ -483,7 +483,7 @@ Proof.
   eauto.
 Qed.
 
-Fixpoint events_hb_check (C1 C2: var) (vs1 vs2: list nat) (z:nat) (t:tid) : list Lang.operation :=
+Fixpoint events_hb_check (C1 C2: var) (vs1 vs2: list nat) (z:nat) (t:tid) : list operation :=
 match (z,vs1,vs2) with
 | (S n, v1::vss1, v2::vss2) => events_assert_le (C1,n) (C2,n) t++
                                if leb v1 v2 then events_hb_check C1 C2 vss1 vss2 n t else []
@@ -748,3 +748,39 @@ match p with
 | [] => []
 | ins::inss => (instrument_instr C L R W z tmp1 tmp2 ins t)++(instrument C L R W z tmp1 tmp2 inss t)
 end.
+
+
+Section SC.
+
+Definition clocks_sim (m : list conc_op) 
+
+Definition state_sim (P1 P2 : state) := True.
+Definition env_sim (G1 G2 : env) := True.
+Definition mem_sim (m1 : option conc_op) (m2 : list conc_op) := True.
+
+Instance ptr_eq : EqDec_eq ptr.
+Proof. eq_dec_inst. Qed.
+
+Lemma instrument_sim_safe : forall (*C L R W z tmp1 tmp2*) P P1 P2 G1 G2 h
+  (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2)
+  m (Hroot : exec_star (Some (init_state P)) init_env h m (Some P1) G1)
+  o c P1' G1' (Hstep : exec P1 G1 o c (Some P1') G1')
+  s (Hsafe : step_star s0 (h ++ opt_to_list o) s),
+  exists lo lc P2' G2', exec_star (Some P2) G2 lo lc (Some P2') G2' /\
+    state_sim P1' P2' /\ env_sim G1' G2' /\ mem_sim c lc.
+Admitted.
+
+Lemma instrument_sim_race : forall (*C L R W z tmp1 tmp2*) P P1 P2 G1 G2 h
+  (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2)
+  m (Hroot : exec_star (Some (init_state P)) init_env h m (Some P1) G1)
+  o c P1' G1' (Hstep : exec P1 G1 o c (Some P1') G1')
+  (Hrace : forall s, ~step_star s0 (h ++ opt_to_list o) s),
+  exists lo lc G2', exec_star (Some P2) G2 lo lc None G2'.
+Admitted.
+
+Theorem instrument_correct : forall C L R W z tmp1 tmp2 P h m P' G'
+  (HP : exec_star (Some (init_state P)) init_env h m (Some P') G'),
+  (exists h2 m2 P2' G2', exec_star
+     (Some (init_state (instrument C L R W z tmp1 tmp2 P 0))) init_env h2 m2
+     (Some P2') G2') <-> exists s, step_star s0 h s.
+Admitted.
