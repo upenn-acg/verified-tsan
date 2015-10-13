@@ -15,24 +15,20 @@ Set Implicit Arguments.
 Section Concurrency.
   Context `(ML : Memory_Layout) {thread : Type}.
 
-(*  Definition thread_trace := thread -> mem.*)
-  (* For now we'll just assume that each thread only has ops by that thread. *)
-
-(*  Definition private m t l :=
-    Forall (fun c => thread_of c <> t -> independent (loc_of c) l) m.
-  Definition private_op m c := private m (thread_of c) (loc_of c).*)
-
   Definition seq_con := @block_model.consistent _ _ _ ML.
   Definition mem_op := mem_op block val.
-
-  (* Take in per-thread traces, assume scheduler/linearizer that relates them
-     to full traces, quantify over valid linearizations (consistent with
-     synchronization)? *)
 
   Class MM_base (conc_op : Type) :=
     { thread_of : conc_op -> thread;
       to_seq : conc_op -> list mem_op;
-      synchronizes_with : conc_op -> conc_op -> Prop }.
+      lower := fun m => flatten (map to_seq m);
+      synchronizes_with : conc_op -> conc_op -> Prop;
+      drop_b_reads : block -> list conc_op -> list conc_op;
+      drop_b_reads_spec : forall b ops, lower (drop_b_reads b ops) =
+       filter (fun op => not_read op || negb (beq (block_of op) b)) (lower ops);
+      read_safe : forall c i p v
+        (Hread : nth_error (to_seq c) i = Some (MRead p v)) j (Hlt : j < i) v',
+        nth_error (to_seq c) j <> Some (MWrite p v') }.
 
   Context `{Mb : MM_base}.
 
@@ -364,7 +360,7 @@ Section Concurrency.
 
   Definition not_read := @not_read block val.
 
-  Require Import Sorting.Permutation.
+(*  Require Import Sorting.Permutation.
 
   Inductive linearization (m m' : list _) : Prop :=
     linI p (Hp : Permutation (interval 0 (length m)) p)
@@ -582,9 +578,7 @@ Section Concurrency.
     - eapply hb_prog; eauto; erewrite perm_index_nth; eauto.
     - eapply hb_sync; eauto; erewrite perm_index_nth; eauto.
     - eapply hb_trans; [apply IHHhb1 | apply IHHhb2]; eapply hb_lin_lt; eauto.
-  Qed.
-
-  Definition lower m := flatten (map to_seq m).
+  Qed.*)
 
   Lemma lower_app : forall m1 m2, lower (m1 ++ m2) = lower m1 ++ lower m2.
   Proof.
@@ -613,11 +607,64 @@ Section Concurrency.
 
   Definition b_not_read b op := not_read op && beq (block_of op) b.
 
+  Lemma b_not_read_spec : forall b m, filter (b_not_read b) m =
+    filter not_read (proj_block m b).
+  Proof.
+    intros; setoid_rewrite filter_filter; apply filter_ext.
+    rewrite Forall_forall; auto.
+  Qed.
+
   Definition race_free m := forall i j (Hdiff : i <> j) a b
     (Ha : inth m i = Some a) (Hb : inth m j = Some b)
     (Hint : exists bl op1 op2 o, In op1 (to_seq a) /\ In op2 (to_seq b) /\
       op_modifies _ op1 (bl, o) = true /\ block_of op2 = bl),
     happens_before m i j \/ happens_before m j i.
+
+  Lemma inth_plus : forall A (l1 : list A) l2 i,
+    inth (iapp l1 l2) (length l1 + i) = inth l2 i.
+  Proof.
+    intros; rewrite iapp_nth, lt_dec_plus_r, minus_plus; auto.
+  Qed.
+
+  Corollary inth_length : forall A (l1 : list A) x l2,
+    inth (iapp l1 (icons x l2)) (length l1) = Some x.
+  Proof. intros; rewrite (plus_n_O (length l1)), inth_plus; auto. Qed.
+
+  Lemma hb_replace1 : forall c c' (Ht : thread_of c = thread_of c')
+    (Hsync : forall a, (synchronizes_with a c <-> synchronizes_with a c') /\
+       (synchronizes_with c a <-> synchronizes_with c' a)) m1 m2 i j,
+    happens_before (iapp m1 (icons c m2)) i j ->
+    happens_before (iapp m1 (icons c' m2)) i j.
+  Proof.
+    intros; induction H.
+    - rewrite (iapp_split_nth _ _ _ _ c') in Ha;
+        rewrite (iapp_split_nth _ _ _ _ c') in Hb.
+      destruct (eq_dec i (length m1)), (eq_dec j (length m1)); clarify.
+      + omega.
+      + rewrite Ht in Hthread; eapply hb_prog; eauto; apply inth_length.
+      + rewrite Ht in Hthread; eapply hb_prog; eauto; apply inth_length.
+      + eapply hb_prog; eauto.
+    - rewrite (iapp_split_nth _ _ _ _ c') in Ha;
+        rewrite (iapp_split_nth _ _ _ _ c') in Hb.
+      destruct (eq_dec i (length m1)), (eq_dec j (length m1)); clarify.
+      + omega.
+      + specialize (Hsync b); destruct Hsync as [_ Hsync].
+        rewrite Hsync in Hsync0; eapply hb_sync; eauto; apply inth_length.
+      + specialize (Hsync a); destruct Hsync as [Hsync _].
+        rewrite Hsync in Hsync0; eapply hb_sync; eauto; apply inth_length.
+      + eapply hb_sync; eauto.
+    - eapply hb_trans; eauto.
+  Qed.
+
+  Corollary hb_replace : forall c c' (Ht : thread_of c = thread_of c')
+    (Hsync : forall a, (synchronizes_with a c <-> synchronizes_with a c') /\
+       (synchronizes_with c a <-> synchronizes_with c' a)) m1 m2 i j,
+    happens_before (iapp m1 (icons c m2)) i j <->
+    happens_before (iapp m1 (icons c' m2)) i j.
+  Proof.
+    split; apply hb_replace1; auto.
+    split; symmetry; apply Hsync.
+  Qed.
 
   Lemma drop_race_free_single : forall m1 c m2 (b : block)
     (Hrf : race_free (iapp m1 (icons c m2)))
@@ -646,17 +693,12 @@ Section Concurrency.
     consistent_nil : consistent inil;
     read_free : forall (m : list _) (Hno_reads : (forall r p v, ~reads m r p v))
       (Hwrite : write_alloc (lower m)), consistent m <-> seq_con (lower m);
-    read_write : forall m r p v (Hcon : consistent m)
-      (Hread : reads m r p v), exists w, r <> w /\ writes m w p v /\
+    read_write : forall m r p v (Hread_init : read_init (lower m))
+      (Hcon : consistent m) (Hread : reads m r p v), 
+      exists w, r <> w /\ writes m w p v /\
       (forall w2 v2, writes m w2 p v2 ->
          ~(happens_before m w w2 /\ happens_before m w2 r)) /\
        ~happens_before m r w;
-    read_safe : forall c i p v
-      (Hread : nth_error (to_seq c) i = Some (MRead p v)) j (Hlt : j < i) v',
-      nth_error (to_seq c) j <> Some (MWrite p v');
-    drop_b_reads : block -> list conc_op -> list conc_op;
-    drop_b_reads_spec : forall b ops, lower (drop_b_reads b ops) =
-      filter (fun op => not_read op || negb (beq (block_of op) b)) (lower ops);
     drop_wf : forall m1 ops m2 b, well_formed (iapp m1 (iapp ops m2)) ->
       well_formed (iapp m1 (iapp (drop_b_reads b ops) m2));
     drop_race_free : forall m1 c m2 b (Hwf : well_formed (iapp m1 (icons c m2)))
@@ -681,9 +723,350 @@ Section Concurrency.
     consistent (iapp m1 (iapp (drop_b_reads b ops) m2)) /\
       seq_con (filter (b_not_read b) (lower m1) ++ proj_block (lower ops) b) }.
 
-  Context {MM : Memory_Model}.
+  Lemma lower_cons : forall x l, lower (x :: l) = to_seq x ++ lower l.
+  Proof. auto. Qed.
+
+  Corollary lower_single : forall x, lower [x] = to_seq x.
+  Proof. intro; rewrite lower_cons; clarsimp. Qed.
+
+  Lemma nth_error_plus : forall A (l1 l2 : list A) i,
+    nth_error (l1 ++ l2) (length l1 + i) = nth_error l2 i.
+  Proof.
+    intros; rewrite nth_error_app, lt_dec_plus_r, minus_plus; auto.
+  Qed.
+
+  Lemma read_init_drop_b : forall ops b m1 m2
+    (Hread : read_init (iapp m1 (iapp (lower ops) m2))),
+    read_init (iapp m1 (iapp (lower (drop_b_reads b ops)) m2)).
+  Proof.
+    intros ? ?.
+    generalize (drop_b_reads_spec b ops); intro Hdrop; rewrite Hdrop.
+    clear Hdrop; induction (lower ops); clarify.
+    specialize (IHl (m1 ++ [a]) m2);
+      repeat rewrite <- iapp_app in IHl; clarify.
+    destruct a; clarsimp.
+    eapply read_init_drop; eauto.
+  Qed.
+
+  Corollary read_init_drop_b' : forall m1 ops m2 b
+    (Hread : read_init (m1 ++ lower ops ++ m2)),
+    read_init (m1 ++ lower (drop_b_reads b ops) ++ m2).
+  Proof.
+    intros; repeat rewrite to_ilist_app in *; apply read_init_drop_b; auto.
+  Qed.
+
+  Lemma write_alloc_drop_b : forall ops b m1 m2
+    (Hread : write_alloc (iapp m1 (iapp (lower ops) m2))),
+    write_alloc (iapp m1 (iapp (lower (drop_b_reads b ops)) m2)).
+  Proof.
+    intros ? ?.
+    generalize (drop_b_reads_spec b ops); intro Hdrop; rewrite Hdrop.
+    clear Hdrop; induction (lower ops); clarify.
+    specialize (IHl (m1 ++ [a]) m2);
+      repeat rewrite <- iapp_app in IHl; clarify.
+    destruct a; clarsimp.
+    eapply write_alloc_drop; eauto.
+  Qed.
+
+  Corollary write_alloc_drop_b' : forall m1 ops m2 b
+    (Hwrite : write_alloc (m1 ++ lower ops ++ m2)),
+    write_alloc (m1 ++ lower (drop_b_reads b ops) ++ m2).
+  Proof.
+    intros; repeat rewrite to_ilist_app in *; apply write_alloc_drop_b; auto.
+  Qed.
+
+  Lemma drop_reads : forall m1 c m2 p v (Hread : In (MRead p v) (to_seq c)),
+    length (filter (fun op => negb (not_read op))
+      (lower (m1 ++ drop_b_reads (fst p) [c] ++ m2))) <
+    length (filter (fun op => negb (not_read op)) (lower (m1 ++ c :: m2))).
+  Proof.
+    intros; repeat rewrite lower_app; rewrite lower_cons.
+    repeat rewrite filter_app, app_length.
+    apply plus_lt_compat_l, plus_lt_compat_r.
+    rewrite drop_b_reads_spec, lower_single, filter_comm.
+    exploit in_split; eauto.
+    clear; clarsimp; repeat rewrite filter_app; clarify.
+    destruct p; unfold negb at 3; clarify.
+    repeat rewrite app_length; apply plus_le_lt_compat; [apply filter_length|].
+    simpl; eapply le_lt_trans; [apply filter_length | auto].
+  Qed.
+
+  Lemma last_drop : forall r m1 ops m2 b p a (Hrange : r < length (lower m1) \/
+    r >= length (lower m1) + length (lower ops)),
+    last_op (firstn (adjust_range (lower m1) (lower ops)
+      (lower (drop_b_reads b ops)) r)
+      (lower m1 ++ lower (drop_b_reads b ops) ++ lower m2)) (Ptr p) a <->
+    last_op (firstn r (lower m1 ++ lower ops ++ lower m2)) (Ptr p) a.
+  Proof.
+    intros.
+    unfold adjust_range; repeat rewrite firstn_app;
+      destruct (lt_dec r (length (lower m1))).
+    - rewrite not_le_minus_0; [clarify | omega].
+      repeat rewrite NPeano.Nat.sub_0_l; clarify; reflexivity.
+    - rewrite firstn_length'; [|omega].
+      rewrite firstn_length'; [|omega].
+      setoid_rewrite firstn_length' at 2; [|omega].
+      setoid_rewrite firstn_length' at 2; [|omega].
+      rewrite minus_comm, NPeano.Nat.add_sub; [|omega].
+      rewrite minus_comm; [|omega].
+      rewrite drop_b_reads_spec.
+      setoid_rewrite <- last_op_filter; repeat rewrite filter_app.
+      rewrite filter_filter.
+      setoid_rewrite (filter_ext _ not_read) at 2; [reflexivity|].
+      rewrite Forall_forall; unfold andb, orb; clarify.
+  Qed.
+
+  Corollary last_drop' : forall r m1 c m2 b p a (Hrange : r < length (lower m1) 
+    \/ r >= length (lower m1) + length (to_seq c)),
+    last_op (firstn (adjust_range (lower m1) (to_seq c)
+      (lower (drop_b_reads b [c])) r)
+      (lower m1 ++ lower (drop_b_reads b [c]) ++ lower m2)) (Ptr p) a <->
+    last_op (firstn r (lower m1 ++ to_seq c ++ lower m2)) (Ptr p) a.
+  Proof. intros; rewrite <- lower_single in *; apply last_drop; auto. Qed.
 
   Variable (val_eq : EqDec_eq val).
+
+  Lemma in_range_dec : forall i a b, (i < a \/ i >= b) \/ (a <= i < b).
+  Proof. intros; omega. Qed.
+
+  Lemma adjust_range_nth' : forall A (l1 l2 l3 l2' : list A) i
+    (Hout : i < length l1 \/ i >= length l1 + length l2),
+    nth_error (l1 ++ l2' ++ l3) (adjust_range l1 l2 l2' i) =
+    nth_error (l1 ++ l2 ++ l3) i.
+  Proof.
+    intros; unfold adjust_range; repeat rewrite nth_error_app;
+      destruct (lt_dec i (length l1)); clarify.
+    destruct (lt_dec (i - length l1) (length l2)); [omega|].
+    destruct (lt_dec (i - length l2 + length l2') (length l1)); [omega|].
+    destruct (lt_dec (i - length l2 + length l2' - length l1) (length l2'));
+      [omega|].
+    assert (i - length l2 + length l2' - length l1 - length l2' =
+      i - length l1 - length l2) as Heq.
+    { rewrite minus_comm, NPeano.Nat.add_sub, minus_comm; auto.
+      - rewrite plus_comm; auto.
+      - omega. }
+    rewrite Heq; auto.
+  Qed.
+
+  Lemma drop_SC : forall m1 ops m2 (Hseq : SC (m1 ++ ops ++ m2))
+    (Hread : read_init (lower (m1 ++ ops ++ m2)))
+    (Hwrite : write_alloc (lower (m1 ++ ops ++ m2))) b,
+    SC (m1 ++ drop_b_reads b ops ++ m2).
+  Proof.
+    unfold SC; intros.
+    setoid_rewrite consistent_split_reads in Hseq; auto.
+    repeat rewrite lower_app in *.
+    setoid_rewrite consistent_split_reads;
+      [|apply read_init_drop_b' | apply write_alloc_drop_b']; clarify.
+    split.
+    - rewrite drop_b_reads_spec; repeat rewrite filter_app in *.
+      rewrite filter_filter; setoid_rewrite (filter_ext _ not_read) at 2; auto.
+      rewrite Forall_forall; unfold andb; clarify.
+    - intros.
+      destruct (in_range_dec r (length (lower m1))
+        (length (lower m1) + length (lower (drop_b_reads b ops))))
+        as [Hrange | [Hrange1 Hrange2]].
+      + specialize (Hseq2 (adjust_range (lower m1) (lower (drop_b_reads b ops))
+          (lower ops) r)); rewrite adjust_range_nth' in Hseq2; auto.
+        specialize (Hseq2 _ _ H).
+        rewrite <- (adjust_adjust (lower m1) (lower (drop_b_reads b ops))
+          (lower ops) Hrange), last_drop; auto.
+        { unfold adjust_range; destruct (lt_dec r (length (lower m1))); clarify;
+            omega. }
+      + rewrite nth_error_app in *; destruct (lt_dec r (length (lower m1)));
+          [omega|].
+        rewrite nth_error_app in *; destruct (lt_dec (r - length (lower m1))
+          (length (lower (drop_b_reads b ops)))); [|omega].
+        rewrite drop_b_reads_spec in H.
+        exploit nth_filter_split; eauto; intros (l1 & l2 & Hl & Hr & ?);
+          clarify.
+        specialize (Hseq2 (length (lower m1) + length l1));
+          rewrite nth_error_plus, Hl in Hseq2.
+        rewrite <- app_assoc in Hseq2; simpl in Hseq2.
+        specialize (Hseq2 _ _ (nth_error_split _ _ _)).
+        rewrite firstn_app, firstn_length', minus_plus in Hseq2; [|omega].
+        rewrite firstn_app, firstn_length, minus_diag in Hseq2; clarify.
+        rewrite drop_b_reads_spec, Hl, filter_app.
+        rewrite firstn_app, firstn_length', Hr; [|omega].
+        rewrite <- app_assoc, firstn_app, firstn_length, minus_diag; clarify.
+        rewrite app_nil_r in *.
+        rewrite <- last_op_filter in Hseq2; rewrite <- last_op_filter.
+        repeat rewrite filter_app in *.
+        rewrite filter_filter; setoid_rewrite (filter_ext _ not_read) at 2;
+          auto.
+        rewrite Forall_forall; unfold andb; clarify.
+  Qed.
+
+  Lemma merge_SC : forall m1 ops m2 b
+    (Hread : read_init (lower (m1 ++ ops ++ m2)))
+    (Hwrite : write_alloc (lower (m1 ++ ops ++ m2)))
+    (Hseq : SC (m1 ++ (drop_b_reads b ops) ++ m2))
+    (Hseq' : seq_con (filter (b_not_read b) (lower m1) ++
+                      proj_block (lower ops) b)),
+    SC (m1 ++ ops ++ m2).
+  Proof.
+    unfold SC; intros.
+    repeat rewrite lower_app in *.
+    setoid_rewrite consistent_split_reads; auto.
+    setoid_rewrite consistent_split_reads in Hseq;
+      [|apply read_init_drop_b' | apply write_alloc_drop_b']; clarify.
+    split.
+    { rewrite drop_b_reads_spec in Hseq1; repeat rewrite filter_app in *.
+      rewrite filter_filter in Hseq1; setoid_rewrite (filter_ext _ not_read)
+        in Hseq1 at 2; auto.
+      rewrite Forall_forall; unfold andb; clarify. }
+    intros ??? Hreads.
+    destruct (in_range_dec r (length (lower m1))
+      (length (lower m1) + length (lower ops))) as [Hrange | [Hrange1 Hrange2]].
+    - specialize (Hseq2 (adjust_range (lower m1) (lower ops) (lower
+        (drop_b_reads b ops)) r)); rewrite adjust_range_nth' in Hseq2; auto.
+      specialize (Hseq2 _ _ Hreads); rewrite last_drop in Hseq2; auto.
+    - rewrite nth_error_app in *; destruct (lt_dec r (length (lower m1)));
+        [omega|].
+      rewrite nth_error_app in *; destruct (lt_dec (r - length (lower m1))
+        (length (lower ops))); [|omega].
+      exploit nth_error_split'; eauto; intros (l1 & l2 & Hr & Hl).
+      rewrite firstn_app, firstn_length', Hl; [|omega].
+      rewrite <- app_assoc; simpl.
+      rewrite <- Hr, firstn_app, firstn_length, minus_diag; clarify.
+      destruct p as (b', o); destruct (eq_dec b' b).
+      + subst; rewrite Hl in Hseq'.
+        rewrite proj_block_app in Hseq'; clarify.
+        rewrite app_assoc, to_ilist_app in Hseq'.
+        generalize (read_justified_op _ _ _ _ Hseq'); intro Hlast; use Hlast.
+        rewrite last_op_proj, app_nil_r; simpl.
+        setoid_rewrite proj_block_app.
+        rewrite <- last_op_filter; rewrite <- last_op_filter in Hlast.
+        repeat rewrite filter_app in *.
+        rewrite b_not_read_spec, filter_filter in Hlast.
+        erewrite filter_ext in Hlast; eauto.
+        rewrite Forall_forall; clarsimp.
+        { rewrite app_assoc in Hread; generalize (read_init_app _ _ Hread).
+          intro Hread1; generalize (read_init_proj _ Hread1 b).
+          rewrite Hl; repeat setoid_rewrite proj_block_app; intro Hread2.
+          generalize (read_init_filter' _ _ Hread2).
+          rewrite b_not_read_spec; clarify.
+          rewrite <- iapp_app; repeat rewrite to_ilist_app in *; auto. }
+      + rewrite drop_b_reads_spec, Hl in Hseq2.
+        specialize (Hseq2 (length (lower m1) + length (filter (fun op =>
+          block_model.not_read op || negb (beq (block_of op) b)) l1))).
+        rewrite nth_error_plus, filter_app in Hseq2; clarify.
+        unfold negb, beq in Hseq2; destruct (eq_dec b' b); clarify.
+        rewrite <- app_assoc in Hseq2; simpl in Hseq2.
+        specialize (Hseq2 _ _ (nth_error_split _ _ _)).
+        rewrite firstn_app, firstn_length', minus_plus, firstn_app,
+          firstn_length, minus_diag in Hseq2; [clarify | omega].
+        rewrite app_nil_r in *.
+        rewrite <- last_op_filter in Hseq2; rewrite <- last_op_filter.
+        repeat rewrite filter_app in *.
+        rewrite filter_filter in Hseq2;
+          setoid_rewrite (filter_ext _ not_read) in Hseq2 at 2; auto.
+        rewrite Forall_forall; unfold andb; clarify.
+  Qed.
+
+  Variable (b0 : block).
+
+  Section SC.
+
+    Hypothesis drop_race_free : forall m1 c m2 b
+      (Hrf : race_free (iapp m1 (icons c m2))),
+      race_free (iapp m1 (iapp (drop_b_reads b [c]) m2)).
+
+    Global Instance SC_MM : Memory_Model := { consistent := fun m =>
+      exists m', to_ilist m' = m /\ SC m';
+      well_formed := fun m => exists m', to_ilist m' = m /\
+        read_init (lower m') /\ write_alloc (lower m') }.
+    Proof.
+      - exists []; unfold SC; clarify.
+        apply block_model.consistent_nil; auto.
+      - unfold SC; split; clarify; eauto.
+        exploit to_ilist_inj; eauto; clarify.
+      - clarify.
+        exploit to_ilist_inj; eauto; clarify.
+        destruct Hread as (opr & Hr & Hopr).
+        rewrite inth_nth_error in Hr; exploit nth_error_split'; eauto;
+          intros (m1 & m2 & ?); clarify.
+        exploit in_split; eauto; intros (l1 & l2 & Hl).
+        unfold SC in Hcon2; rewrite lower_app, lower_cons, Hl
+          in Hread_init, Hcon2.
+        rewrite <- app_assoc, app_assoc in Hread_init, Hcon2; clarify.
+        rewrite to_ilist_app in Hread_init, Hcon2.
+        generalize (read_justified_op _ _ _ _ Hcon2 Hread_init);
+          intros (w & Hlast & Hw).
+        rewrite inth_nth_error, nth_error_app in Hw;
+          destruct (lt_dec w (length (lower m1))).
+        exploit nth_lower_split; eauto;
+          intros (m1' & opw & m2' & i & ? & Hi & ?); clarify.
+        generalize (nth_error_in _ _ Hi); intro.
+        exists (length m1'); repeat split.
+        + rewrite app_length; simpl; omega.
+        + unfold writes; rewrite <- app_assoc, inth_nth_error.
+          simpl; rewrite nth_error_split; eauto.
+        + unfold writes; intros ?? Hwrite [Hhb1 Hhb2]; clarify.
+          generalize (hb_lt Hhb1), (hb_lt Hhb2); intros.
+          rewrite inth_nth_error, nth_error_app in Hwrite1; clarify.
+          rewrite nth_error_app in Hwrite1; destruct (lt_dec w2 (length m1'));
+            [omega|].
+          destruct (w2 - length m1') eqn: Hminus; [omega | clarify].
+          inversion Hlast.
+          rewrite inth_nth_error, nth_error_app in Hop1; clarify.
+          rewrite Hw in Hop1; clarify.
+          exploit nth_error_split'; eauto; intros (l1' & l2' & ?); clarify.
+          generalize (in_nth_error _ _ Hwrite2); intros (i2 & Hlt2 & Hi2).
+          specialize (Hlast0 (length (lower m1') + (length (to_seq opw) +
+            (length (lower l1') + i2)))).
+          rewrite lower_app, lower_cons, lower_app, lower_cons in Hlast0.
+          repeat rewrite <- app_assoc in Hlast0.
+          rewrite inth_nth_error in Hlast0;
+            repeat rewrite nth_error_plus in Hlast0.
+          generalize (nth_error_lt _ _ Hi); intro.
+          rewrite nth_error_app in Hlast0; clarify.
+          specialize (Hlast0 _ Hi2); clarify; omega.
+        + intro Hhb; generalize (hb_lt Hhb); rewrite app_length; omega.
+        + generalize (read_safe opr); rewrite Hl; intro Hsafe.
+          specialize (Hsafe (length l1)); rewrite nth_error_split in Hsafe.
+          exploit nth_error_lt; eauto; intro Hlt.
+          specialize (Hsafe _ _ eq_refl _ Hlt v);
+            rewrite nth_error_app in Hsafe; clarify.
+      - clarify.
+        exploit to_ilist_app_inv; eauto; clarify.
+        exploit (to_ilist_app_inv ops); eauto; clarify.
+        exists (m1 ++ drop_b_reads b ops ++ x); split;
+          [repeat rewrite to_ilist_app; auto|].
+        repeat rewrite lower_app in *; split;
+          [apply read_init_drop_b' | apply write_alloc_drop_b']; auto.
+      - intros; apply drop_race_free; auto.
+      - clarify.
+        exploit to_ilist_app_inv; eauto; clarify.
+        exploit (to_ilist_app_inv ops); eauto; clarify.
+        split; intro Hcon; clarify.
+        + repeat rewrite <- to_ilist_app in *.
+          exploit to_ilist_inj; eauto; clarify.
+          split.
+          * do 2 eexists; eauto.
+            apply drop_SC; auto.
+          * unfold SC in *; repeat rewrite lower_app in *.
+            rewrite app_assoc in *; generalize (read_init_app _ _ Hwf21),
+              (write_alloc_app _ _ Hwf22), (consistent_app _ _ Hcon2);
+              intros ? ? Hcon.
+            generalize (consistent_proj _ b Hcon); intro Hcon'; clarify.
+            setoid_rewrite proj_block_app in Hcon'.
+            rewrite consistent_core_ops in Hcon'.
+            rewrite proj_idem in Hcon'.
+            rewrite b_not_read_spec; clarify.
+            { apply filter_Forall; unfold beq; clarify. }
+            { rewrite <- proj_block_app; apply read_init_proj; auto. }
+            { rewrite <- proj_block_app; apply write_alloc_proj; auto. }
+        + exploit to_ilist_app_inv; eauto; clarify.
+          exploit (to_ilist_app_inv (drop_b_reads b ops)); eauto; clarify.
+          exploit to_ilist_inj; eauto; clarify.
+          do 2 eexists; eauto.
+          eapply merge_SC; eauto.
+    Defined.
+
+  End SC.
+
+  Context {MM : Memory_Model}.
 
 (* Well-synchronized programs *)
 
@@ -714,28 +1097,6 @@ Section Concurrency.
     erewrite Hdrop, filter_filter, filter_ext; eauto.
     rewrite Forall_forall; clarify.
     rewrite absoption_andb; auto.
-  Qed.
-
-  Lemma in_range_dec : forall i a b, (i < a \/ i >= b) \/ (a <= i < b).
-  Proof. intros; omega. Qed.
-
-  Lemma adjust_range_nth' : forall A (l1 l2 l3 l2' : list A) i
-    (Hout : i < length l1 \/ i >= length l1 + length l2),
-    nth_error (l1 ++ l2' ++ l3) (adjust_range l1 l2 l2' i) =
-    nth_error (l1 ++ l2 ++ l3) i.
-  Proof.
-    intros; unfold adjust_range; repeat rewrite nth_error_app;
-      destruct (lt_dec i (length l1)); clarify.
-    destruct (lt_dec (i - length l1) (length l2)); [omega|].
-    destruct (lt_dec (i - length l2 + length l2') (length l1)); [omega|].
-    destruct (lt_dec (i - length l2 + length l2' - length l1) (length l2'));
-      [omega|].
-    assert (i - length l2 + length l2' - length l1 - length l2' =
-      i - length l1 - length l2) as Heq.
-    { rewrite minus_comm, NPeano.Nat.add_sub, minus_comm; auto.
-      - rewrite plus_comm; auto.
-      - omega. }
-    rewrite Heq; auto.
   Qed.
 
   (* up? *)
@@ -827,69 +1188,6 @@ Section Concurrency.
           rewrite firstn_length'; eauto; omega.
   Qed.
 
-  Lemma read_init_drop_b : forall ops b m1 m2
-    (Hread : read_init (iapp m1 (iapp (lower ops) m2))),
-    read_init (iapp m1 (iapp (lower (drop_b_reads b ops)) m2)).
-  Proof.
-    intros ? ?.
-    generalize (drop_b_reads_spec b ops); intro Hdrop; rewrite Hdrop.
-    clear Hdrop; induction (lower ops); clarify.
-    specialize (IHl (m1 ++ [a]) m2);
-      repeat rewrite <- iapp_app in IHl; clarify.
-    destruct a; clarsimp.
-    eapply read_init_drop; eauto.
-  Qed.
-
-  Corollary read_init_drop_b' : forall m1 ops m2 b
-    (Hread : read_init (m1 ++ lower ops ++ m2)),
-    read_init (m1 ++ lower (drop_b_reads b ops) ++ m2).
-  Proof.
-    intros; repeat rewrite to_ilist_app in *; apply read_init_drop_b; auto.
-  Qed.
-
-  Lemma write_alloc_drop_b : forall ops b m1 m2
-    (Hread : write_alloc (iapp m1 (iapp (lower ops) m2))),
-    write_alloc (iapp m1 (iapp (lower (drop_b_reads b ops)) m2)).
-  Proof.
-    intros ? ?.
-    generalize (drop_b_reads_spec b ops); intro Hdrop; rewrite Hdrop.
-    clear Hdrop; induction (lower ops); clarify.
-    specialize (IHl (m1 ++ [a]) m2);
-      repeat rewrite <- iapp_app in IHl; clarify.
-    destruct a; clarsimp.
-    eapply write_alloc_drop; eauto.
-  Qed.
-
-  Corollary write_alloc_drop_b' : forall m1 ops m2 b
-    (Hwrite : write_alloc (m1 ++ lower ops ++ m2)),
-    write_alloc (m1 ++ lower (drop_b_reads b ops) ++ m2).
-  Proof.
-    intros; repeat rewrite to_ilist_app in *; apply write_alloc_drop_b; auto.
-  Qed.
-
-  (* Annoying that this is necessary. *)
-  Lemma lower_cons : forall x l, lower (x :: l) = to_seq x ++ lower l.
-  Proof. auto. Qed.
-
-  Corollary lower_single : forall x, lower [x] = to_seq x.
-  Proof. intro; rewrite lower_cons; clarsimp. Qed.
-
-  Lemma drop_reads : forall m1 c m2 p v (Hread : In (MRead p v) (to_seq c)),
-    length (filter (fun op => negb (not_read op))
-      (lower (m1 ++ drop_b_reads (fst p) [c] ++ m2))) <
-    length (filter (fun op => negb (not_read op)) (lower (m1 ++ c :: m2))).
-  Proof.
-    intros; repeat rewrite lower_app; rewrite lower_cons.
-    repeat rewrite filter_app, app_length.
-    apply plus_lt_compat_l, plus_lt_compat_r.
-    rewrite drop_b_reads_spec, lower_single, filter_comm.
-    exploit in_split; eauto.
-    clear; clarsimp; repeat rewrite filter_app; clarify.
-    destruct p; unfold negb at 3; clarify.
-    repeat rewrite app_length; apply plus_le_lt_compat; [apply filter_length|].
-    simpl; eapply le_lt_trans; [apply filter_length | auto].
-  Qed.
-
   Lemma race_free_mods_read : forall m i j a p v o (Hrf : race_free m)
     (Hdiff : i <> j)  (Hmods : mods m i (fst p, o)) (Ha : inth m j = Some a)
     (Hread : In (MRead p v) (to_seq a)),
@@ -900,35 +1198,11 @@ Section Concurrency.
     do 3 eexists; eauto.
   Qed.
 
-  Lemma last_drop : forall r m1 c m2 b p a (Hrange : r < length (lower m1) \/
-    r >= length (lower m1) + length (to_seq c)),
-    last_op (firstn (adjust_range (lower m1) (to_seq c)
-      (lower (drop_b_reads b [c])) r)
-      (lower m1 ++ lower (drop_b_reads b [c]) ++ lower m2)) (Ptr p) a <->
-    last_op (firstn r (lower m1 ++ to_seq c ++ lower m2)) (Ptr p) a.
-  Proof.
-    intros.
-    unfold adjust_range; repeat rewrite firstn_app;
-      destruct (lt_dec r (length (lower m1))).
-    - rewrite not_le_minus_0; [clarify | omega].
-      repeat rewrite NPeano.Nat.sub_0_l; clarify; reflexivity.
-    - rewrite firstn_length'; [|omega].
-      rewrite firstn_length'; [|omega].
-      setoid_rewrite firstn_length' at 2; [|omega].
-      setoid_rewrite firstn_length' at 2; [|omega].
-      rewrite minus_comm, NPeano.Nat.add_sub; [|omega].
-      rewrite minus_comm; [|omega].
-      rewrite drop_b_reads_spec, lower_single.
-      setoid_rewrite <- last_op_filter; repeat rewrite filter_app.
-      rewrite filter_filter.
-      setoid_rewrite (filter_ext _ not_read) at 2; [reflexivity|].
-      rewrite Forall_forall; unfold andb, orb; clarify.
-  Qed.
-
-  Lemma race_free_read : forall m r p v (Hcon : consistent m)
-    (Hrf : race_free m) (Hread : reads m r p v), exists w, writes m w p v /\
-    happens_before m w r /\
-    forall w2 v2, w2 < r -> writes m w2 p v2 -> hbe m w2 w.
+  Lemma race_free_read : forall m r p v (Hread_init : read_init (lower m))
+    (Hcon : consistent m) (Hrf : race_free m)
+    (Hread : reads m r p v), exists w, writes m w p v /\
+      happens_before m w r /\
+      forall w2 v2, w2 < r -> writes m w2 p v2 -> hbe m w2 w.
   Proof.
     intros.
     exploit read_write; eauto; intros [w Hw]; exists w; clarify.
@@ -980,7 +1254,7 @@ Section Concurrency.
   Qed.
 
   (* We could let m be infinite and do "for all prefixes" instead if we want. *)
-  Theorem race_free_SC : forall (b0 : block) (m : list _) (Hrf : race_free m)
+  Theorem race_free_SC : forall (m : list _) (Hrf : race_free m)
     (Hread : read_init (lower m)) (Hwrite : write_alloc (lower m))
     (Hwf : well_formed m), consistent m <-> SC m.
   Proof.
@@ -1034,71 +1308,7 @@ Section Concurrency.
         rewrite <- lower_app; auto. }
       use H; clarify.
       use H; clarify.
-      + repeat rewrite lower_app in *.
-        setoid_rewrite consistent_split_reads; auto.
-        setoid_rewrite consistent_split_reads in H; auto;
-          destruct H as [Hseq Hreads].
-        simpl; repeat rewrite filter_app in *.
-        rewrite drop_b_filter in Hseq.
-        rewrite <- filter_app in Hseq; rewrite <- lower_app in Hseq; clarify.
-        setoid_rewrite consistent_split_reads in Hcon2; clarify.
-        rewrite lower_cons in *.
-        destruct (in_range_dec r (length (lower m1))
-          (length (lower m1) + length (to_seq c))) as [? | [Hrange1 Hrange2]].
-        * specialize (Hreads (adjust_range (lower m1) (to_seq c)
-            (lower (drop_b_reads (fst p) [c])) r));
-            rewrite adjust_range_nth' in Hreads; auto.
-          specialize (Hreads _ _ H).
-          rewrite last_drop in Hreads; auto.
-        * rewrite drop_b_reads_spec, lower_single in Hreads; clarify.
-          generalize (le_not_lt _ _ Hrange1); rewrite nth_error_app in *;
-            clarify.
-          rewrite nth_error_app in *; destruct (lt_dec (r - length (lower m1))
-            (length (to_seq c))); [|omega].
-          exploit nth_error_split'; eauto; intros (l1 & l2 & Hlen & Hc);
-            rewrite Hc, filter_app in *; clarify.
-          destruct p0 as (b', o); destruct (negb (beq b' (fst p))) eqn: Hb;
-            unfold negb, beq in Hb; clarify.
-          { rewrite <- app_assoc in Hreads; simpl in Hreads;
-              rewrite app_assoc in Hreads.
-            specialize (Hreads (length (lower m1 ++ filter
-              (fun op => not_read op || negb (beq (block_of op) (fst p))) l1))).
-            rewrite nth_error_split in Hreads; specialize (Hreads _ _ eq_refl).
-            rewrite firstn_app, firstn_length, minus_diag in Hreads; clarify.
-            rewrite <- last_op_filter in Hreads;
-              repeat rewrite filter_app in Hreads.
-            rewrite filter_filter in Hreads.
-            rewrite firstn_app, firstn_length'; [|omega].
-            rewrite <- app_assoc in *.
-            rewrite <- Hlen, firstn_app, firstn_length, minus_diag; clarify.
-            rewrite <- last_op_filter; repeat rewrite filter_app; simpl.
-            setoid_rewrite (filter_ext _ not_read) in Hreads at 2; auto.
-            { rewrite Forall_forall; unfold andb, orb; clarify. } }
-          { rewrite <- app_assoc, proj_block_app in Hcon22; clarify.
-            rewrite app_assoc in Hcon22; specialize (Hcon22 (length (filter
-              (b_not_read (fst p)) (lower m1) ++ proj_block l1 (fst p)))).
-            rewrite nth_error_split in Hcon22; specialize (Hcon22 _ _ eq_refl).
-            rewrite firstn_app, firstn_length, minus_diag in Hcon22; clarify.
-            rewrite last_op_proj in Hcon22; rewrite <- last_op_filter in Hcon22.
-            repeat rewrite proj_block_app, filter_app in Hcon22.
-            rewrite proj_filter_comm, proj_idem, filter_filter in Hcon22.
-            rewrite firstn_app, firstn_length'; [|omega].
-            rewrite <- app_assoc in *.
-            rewrite <- Hlen, firstn_app, firstn_length, minus_diag; clarify.
-            rewrite last_op_proj; rewrite <- last_op_filter;
-              repeat (setoid_rewrite proj_block_app; rewrite filter_app); simpl.
-            erewrite filter_ext in Hcon22; eauto.
-            { rewrite Forall_forall; unfold b_not_read; intros.
-              unfold proj_block in *; rewrite filter_In in *; unfold andb;
-                clarify. } }
-        * generalize (write_alloc_proj _ Hwrite0 (fst p)).
-          rewrite <- write_alloc_filter; setoid_rewrite proj_block_app;
-            intro Hw.
-          simpl; rewrite app_nil_r, lower_single in *.
-          rewrite <- write_alloc_filter; repeat rewrite filter_app in *.
-          unfold proj_block at 1 in Hw; rewrite filter_filter in *;
-            erewrite filter_ext; eauto.
-          { clear; rewrite Forall_forall; unfold b_not_read, andb; clarify. }
+      + rewrite split_app; rewrite <- app_assoc; eapply merge_SC; eauto.
       + repeat rewrite to_ilist_app in *; apply drop_wf; auto.
       + repeat rewrite to_ilist_app in *; apply drop_race_free; auto.
       + rewrite Heqnreads; eapply drop_reads; eauto.
@@ -1109,15 +1319,14 @@ Section Concurrency.
         { rewrite to_ilist_app in *; auto. }
         { unfold reads.
           clear Hfind211; do 2 eexists; eauto.
-          instantiate (1 := length m1); rewrite iapp_nth, lt_dec_eq, minus_diag;
-            auto. }
+          instantiate (1 := length m1); rewrite inth_nth_error;
+            apply nth_error_split. }
         intros [w Hw]; exists w; clarify.
         rewrite plus_0_r; exploit hb_lt; eauto; clarify.
         unfold writes in *; clarify.
-        rewrite iapp_nth in *; clarify.
-        rewrite inth_nth_error, nth_error_app; clarify.
+        rewrite inth_nth_error, nth_error_app in *; clarify.
         split; eauto; clarify.
-        eapply Hw22; auto.
+        rewrite to_ilist_app in Hw22; eapply Hw22; auto.
         rewrite inth_nth_error, nth_error_app, iapp_nth in *; clarify; eauto.
       + rewrite NPeano.Nat.add_sub.
         destruct p; rewrite to_ilist_app in *; eapply race_free_after; eauto.
@@ -1165,8 +1374,6 @@ Section Concurrency.
       { eapply write_alloc_app; rewrite split_app, lower_app in Hwrite; eauto. }
       rewrite to_ilist_app in Hwf; erewrite private_seq; clarify; eauto 2.
       repeat rewrite <- to_ilist_app; clarify.
-      setoid_rewrite consistent_split_reads in Hcon; auto;
-        destruct Hcon as [Hseq Hreads].
       split.
       + assert (read_init (lower (m1 ++ drop_b_reads (fst p) [c] ++ m2)))
           as Hread'.
@@ -1180,42 +1387,10 @@ Section Concurrency.
         { rewrite Heqnreads; eapply drop_reads; eauto. }
         { repeat rewrite to_ilist_app in *; apply drop_race_free; auto. }
         { repeat rewrite to_ilist_app in *; apply drop_wf; auto. }
+        apply drop_SC; auto.
+      + setoid_rewrite consistent_split_reads in Hcon; auto;
+          destruct Hcon as [Hseq Hreads].
         setoid_rewrite consistent_split_reads; auto.
-        repeat rewrite lower_app in *; rewrite lower_cons in *;
-          repeat rewrite filter_app in *; rewrite drop_b_filter, lower_single;
-          clarify.
-        destruct (in_range_dec r (length (lower m1))
-          (length (lower m1) + length (lower (drop_b_reads (fst p) [c]))))
-          as [? | [Hrange1 Hrange2]].
-        * specialize (Hreads (adjust_range (lower m1)
-            (lower (drop_b_reads (fst p) [c])) (to_seq c) r));
-            rewrite adjust_range_nth' in Hreads; auto.
-          specialize (Hreads p0 v0); clarify.
-          rewrite <- last_drop, adjust_adjust in Hreads; auto.
-          { unfold adjust_range; clarify; omega. }
-        * generalize (le_not_lt _ _ Hrange1); rewrite nth_error_app in *;
-            clarify.
-          rewrite nth_error_app in *; destruct (lt_dec (r - length (lower m1))
-            (length (lower (drop_b_reads (fst p) [c])))); [|omega].
-          rewrite drop_b_reads_spec, lower_single in H0.
-          exploit nth_error_in; eauto; intro Hin.
-          exploit nth_filter_split; eauto; intros (l1 & l2 & Hc & Hlen & ?);
-            rewrite Hc in *.
-          rewrite <- app_assoc, app_assoc in Hreads; simpl in Hreads.
-          specialize (Hreads (length (lower m1 ++ l1)));
-            rewrite nth_error_split in Hreads; specialize (Hreads _ _ eq_refl).
-          rewrite firstn_app, firstn_length, minus_diag in Hreads; clarify.
-          rewrite drop_b_reads_spec, lower_single, Hc, filter_app.
-          rewrite filter_In in Hin; clarify.
-          rewrite <- app_assoc in *; simpl.
-          rewrite firstn_app, firstn_length', Hlen, firstn_app, firstn_length,
-            minus_diag; [clarify | omega].
-          rewrite <- last_op_filter, filter_app in Hreads;
-            rewrite <- last_op_filter, filter_app; rewrite app_nil_r in *.
-          rewrite filter_filter; setoid_rewrite (filter_ext _ not_read) at 2;
-            auto.
-          { rewrite Forall_forall; unfold andb, orb; clarify. }
-      + setoid_rewrite consistent_split_reads; auto.
         * split.
           { rewrite lower_app, lower_cons in Hread, Hwrite, Hseq.
             generalize (consistent_proj _ (fst p) Hseq (read_init_none _)).
@@ -1340,7 +1515,7 @@ Section Concurrency.
   Hypothesis alpha : forall (m : list _), consistent m ->
     race_free m \/ exists m', evst_of m' = evst_of m /\ SC m' /\ ~race_free m'.
 
-  Theorem race_free_SC' : forall (b0 : block) E
+  Theorem race_free_SC' : forall E
     (Hrf : forall m, evst_of m = E -> SC m -> race_free m)
     m (HE : evst_of m = E)
     (Hread : read_init (flatten (map to_seq m)))

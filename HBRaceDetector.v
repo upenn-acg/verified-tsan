@@ -1,5 +1,7 @@
 Require Import Util.
 Require Import VectorClocks.
+Require Import block_model.
+Require Import conc_model.
 Require Import Lang.
 Require Import FunctionalExtensionality.
 Set Implicit Arguments.
@@ -733,7 +735,6 @@ Proof.
    apply move_spec. eauto.
 Qed.
    
-apply hb_check_pass_spec_n; eauto.
 Definition lock_handler t l C L z tmp1 tmp2 :=
   max_vc (L+l) (C+t) z tmp1 tmp2.
 
@@ -827,25 +828,111 @@ end.
 
 Section SC.
 
-Definition clocks_sim (m : list conc_op) 
+Context (ML : Memory_Layout nat var_eq).
 
-Definition state_sim (P1 P2 : state) := True.
-Definition env_sim (G1 G2 : env) := True.
-Definition mem_sim (m1 : option conc_op) (m2 : list conc_op) := True.
+Definition consistent (m : list conc_op) := @SC _ _ _ ML _ _ Base m.
+
+Definition can_read (m : list conc_op) p v := consistent (m ++ [Read 0 p v]).
+
+Variables (C L R W : var) (zt zl zv : nat) (tmp1 tmp2 : local).
+
+Definition clock_match m V x := forall t, t < zt -> can_read m (x, t) (V t).
+
+Definition clocks_sim (m : list conc_op) s :=
+  (forall t, t < zt -> clock_match m (clock_of s t) (C + t)) /\
+  (forall l, l < zl -> clock_match m (lock_of s l) (L + l)) /\
+  (forall v, v < zv -> clock_match m (read_of s v) (R + v) /\
+     clock_match m (write_of s v) (W + v)).
+
+Fixpoint expr_fresh (v : local) (e : expr) :=
+  match e with
+  | I _ => True
+  | V v' => v <> v'
+  | Plus e1 e2 => expr_fresh v e1 /\ expr_fresh v e2
+  | Max e1 e2 => expr_fresh v e1 /\ expr_fresh v e2
+  end.
+
+Fixpoint fresh (v : local) (i : instr) :=
+  let list_fresh := fix list_fresh l :=
+    match l with
+    | [] => True
+    | i :: rest => fresh v i /\ list_fresh rest
+    end in
+  match i with
+  | Assign v' e => v <> v' /\ expr_fresh v e
+  | Load v' _ => v <> v'
+  | Store _ e => expr_fresh v e
+  | Assert_le e1 e2 => expr_fresh v e1 /\ expr_fresh v e2
+  | Spawn _ li => list_fresh li
+  | _ => True
+  end.
+
+Definition state_sim (P1 P2 : state) := Forall2 (fun t1 t2 => fst t1 = fst t2 /\
+  snd t2 = instrument C L R W zt tmp1 tmp2 (snd t1) (fst t1)) P1 P2.
+Definition env_sim (G1 G2 : env) := forall t v, v <> tmp1 -> v <> tmp2 ->
+  G1 t v = G2 t v.
+Definition fresh_tmps (P : state) :=
+  Forall (fun e => Forall (fun i => fresh tmp1 i /\ fresh tmp2 i) (snd e)) P.
+
+Definition meta_loc (x : ptr) := C <= fst x < C + zt \/
+  L <= fst x < L + zl \/ R <= fst x < R + zv \/ W <= fst x < W + zv.
+
+Definition mem_sim (m1 : option conc_op) (m2 : list conc_op) :=
+  forall c, In c (opt_to_list m1) <-> In c m2 /\ ~meta_loc (loc_of c).
 
 Instance ptr_eq : EqDec_eq ptr.
 Proof. eq_dec_inst. Qed.
 
-Lemma instrument_sim_safe : forall (*C L R W z tmp1 tmp2*) P P1 P2 G1 G2 h
-  (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2)
+Lemma fresh_tmps_step : forall P G o c P' G' (Hfresh : fresh_tmps P)
+  (Hstep : exec P G o c P' G'),
+  match P' with Some P' => fresh_tmps P' | None => True end.
+Proof.
+  unfold fresh_tmps; intros; induction Hstep; clarify; rewrite Forall_app in *;
+    clarify; inversion Hfresh2 as [|? ? Hi]; clarify; inversion Hi; clarify;
+    constructor; auto.
+  constructor; auto.
+  clear - H21 H22.
+  induction li; clarify.
+Qed.
+
+Lemma eval_sim : forall G1 G2 e (Hsim : forall v, ~expr_fresh v e ->
+  G1 v = G2 v), eval G1 e = eval G2 e.
+Proof.
+  induction e; clarify.
+  - rewrite IHe1, IHe2; auto.
+    + intros; apply Hsim; intro; clarify.
+    + intros; apply Hsim; intro; clarify.
+  - rewrite IHe1, IHe2; auto.
+    + intros; apply Hsim; intro; clarify.
+    + intros; apply Hsim; intro; clarify.
+Qed.
+
+Lemma instrument_sim_safe : forall P P1 P2 G1 G2 h
+  (HPsim : state_sim P1 P2) (Hfresh : fresh_tmps P1) (HGsim : env_sim G1 G2)
   m (Hroot : exec_star (Some (init_state P)) init_env h m (Some P1) G1)
   o c P1' G1' (Hstep : exec P1 G1 o c (Some P1') G1')
   s (Hsafe : step_star s0 (h ++ opt_to_list o) s),
   exists lo lc P2' G2', exec_star (Some P2) G2 lo lc (Some P2') G2' /\
-    state_sim P1' P2' /\ env_sim G1' G2' /\ mem_sim c lc.
+    state_sim P1' P2' /\ fresh_tmps P1' /\ env_sim G1' G2' /\ mem_sim c lc.
+Proof.
+  intros.
+  exploit fresh_tmps_step; eauto; simpl; intro Hfresh'.
+  inversion Hstep; clarify; exploit Forall2_app_inv_l; eauto 2;
+    intros (P0' & P3' & HP0 & Hrest & ?);
+    inversion Hrest as [|? (?, ?) ? ? ? HP3]; clarify.
+  - do 5 eexists; [|split; [|clarify; split]].
+    + eapply exec_step; [|apply exec_refl].
+      apply exec_assign; eauto.
+    + apply Forall2_app; auto.
+    + repeat intro; unfold upd_env, upd; clarify.
+      setoid_rewrite Forall_app in Hfresh; clarify.
+      inversion Hfresh2 as [|? ? Hi]; clarify; inversion Hi; clarify.
+      apply eval_sim; intros; apply HGsim; intro; clarify.
+    + split; clarify.
+  - 
 Admitted.
 
-Lemma instrument_sim_race : forall (*C L R W z tmp1 tmp2*) P P1 P2 G1 G2 h
+Lemma instrument_sim_race : forall P P1 P2 G1 G2 h
   (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2)
   m (Hroot : exec_star (Some (init_state P)) init_env h m (Some P1) G1)
   o c P1' G1' (Hstep : exec P1 G1 o c (Some P1') G1')
@@ -859,3 +946,5 @@ Theorem instrument_correct : forall C L R W z tmp1 tmp2 P h m P' G'
      (Some (init_state (instrument C L R W z tmp1 tmp2 P 0))) init_env h2 m2
      (Some P2') G2') <-> exists s, step_star s0 h s.
 Admitted.
+
+End SC.

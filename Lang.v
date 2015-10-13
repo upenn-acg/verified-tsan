@@ -80,8 +80,35 @@ Section Semantics.
   Definition synchronizes_with c1 c2 := loc_of c1 = loc_of c2 /\
     exists t x v v', c1 = ARW t x v v' \/ c2 = ARW t x v v'.
 
-  Instance Base : MM_base conc_op := { thread_of := thread_of;
-    to_seq := to_seq; synchronizes_with := synchronizes_with }.
+  Instance var_eq : EqDec_eq var. eq_dec_inst. Qed.
+ 
+  Fixpoint drop_b_reads b l :=
+    match l with
+    | [] => []
+    | Read t x v :: rest => if eq_dec (fst x) b then drop_b_reads b rest
+                            else Read t x v :: drop_b_reads b rest
+    | ARW t x v v' :: rest => if eq_dec (fst x) b
+                              then Write t x v' :: drop_b_reads b rest
+                              else ARW t x v v' :: drop_b_reads b rest
+    | c :: rest => c :: drop_b_reads b rest
+    end.
+
+  Hint Rewrite nth_error_single : util.
+
+  Instance Base : @MM_base _ _ var_eq _ _ := { thread_of := thread_of;
+    to_seq := to_seq; synchronizes_with := synchronizes_with;
+    drop_b_reads := drop_b_reads }.
+  Proof.
+    - induction ops; clarify.
+      rewrite filter_app; destruct a; clarify.
+      + destruct x as (b', ?); unfold negb, beq; clarify.
+        rewrite IHops; auto.
+      + rewrite IHops; auto.
+      + destruct x as (b', ?); unfold negb, beq; simpl; destruct (eq_dec b' b);
+          clarify; rewrite IHops; auto.
+    - destruct c; clarsimp.
+      destruct i; clarsimp; omega.
+  Defined.        
 
   Definition upd_env G (t : tid) (a : local) (v : nat) :=
     upd G t (upd (G t) a v).
@@ -147,9 +174,9 @@ Section Semantics.
       (Hexec' : exec_star P' G' lo lc P'' G'') :
       exec_star (Some P) G (opt_to_list o ++ lo) (opt_to_list c ++ lc) P'' G''.
 
-  Instance var_eq : EqDec_eq var. eq_dec_inst. Qed.
-  
-  Context (ML : Memory_Layout nat var_eq) (MM : @Memory_Model _ _ _ _ _ _ Base).
+  Set Printing All.
+ 
+  Context (ML : Memory_Layout nat var_eq) (MM : @Memory_Model _ _ _ ML _ conc_op Base).
 
   Definition result P lo lc := exists P' G',
     exec_star (Some (init_state P)) init_env lo lc P' G' /\
