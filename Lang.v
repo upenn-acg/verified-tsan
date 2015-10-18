@@ -49,7 +49,8 @@ Section Semantics.
   | Max e1 e2 => max (eval G e1) (eval G e2)
   end.
 
-  Definition operation := @operation tid ptr lock.
+  (* For now, race detection will treat each block as a single location. *)
+  Definition operation := @operation tid var lock.
 
   Inductive conc_op : Type :=
   | Read (t : tid) (x : ptr) (v : nat)
@@ -122,12 +123,12 @@ Section Semantics.
 
   | exec_load P1 P2 t a x v rest
       (Hload : P = P1 ++ (t, Load a x :: rest) :: P2) :
-      exec P G (Some (rd t x)) (Some (Read t x v))
+      exec P G (Some (rd t (fst x))) (Some (Read t x v))
         (Some (P1 ++ (t, rest) :: P2)) (upd_env G t a v)
 
   | exec_store P1 P2 t x e rest
       (Hstore : P = P1 ++ (t, Store x e :: rest) :: P2) :
-      exec P G (Some (wr t x)) (Some (Write t x (eval (G t) e)))
+      exec P G (Some (wr t (fst x))) (Some (Write t x (eval (G t) e)))
         (Some (P1 ++ (t, rest) :: P2)) G
 
   | exec_lock P1 P2 t m rest
@@ -174,8 +175,6 @@ Section Semantics.
       (Hexec' : exec_star P' G' lo lc P'' G'') :
       exec_star (Some P) G (opt_to_list o ++ lo) (opt_to_list c ++ lc) P'' G''.
 
-  Set Printing All.
- 
   Context (ML : Memory_Layout nat var_eq) (MM : @Memory_Model _ _ _ ML _ conc_op Base).
 
   Definition result P lo lc := exists P' G',
