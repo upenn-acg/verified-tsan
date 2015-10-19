@@ -1264,7 +1264,7 @@ Proof.
       contradiction H2.
       rewrite Forall_app in Ht; clarify.
       inversion Ht2; clarify.
-      destruct H1; [eapply mops_hb_check_meta; eauto|].
+      rewrite in_app in H1; destruct H1; [eapply mops_hb_check_meta; eauto|].
       destruct H; clarify; unfold meta_loc; simpl; omega.
   - 
         
