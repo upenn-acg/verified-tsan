@@ -524,17 +524,17 @@ Proof.
   eauto.
 Qed.
 
-Fixpoint events_hb_check (C1 C2: var) (vs1 vs2: list nat) (z:nat) (t:tid) : list operation :=
-match (z,vs1,vs2) with
-| (S n, v1::vss1, v2::vss2) => events_assert_le C1 C2 t++
-                               if leb v1 v2 then events_hb_check C1 C2 vss1 vss2 n t else []
+Fixpoint events_hb_check (C1 C2: var) (vs1 vs2: list nat) (t:tid) : list operation :=
+match (vs1,vs2) with
+| (v1::vss1, v2::vss2) => events_assert_le C1 C2 t++
+                               if leb v1 v2 then events_hb_check C1 C2 vss1 vss2 t else []
 | _ => []
 end.
 
-Lemma events_hb_check_step : forall C1 C2 v1 v2 vs1 vs2 n t,
- events_hb_check C1 C2 (v1::vs1) (v2::vs2) (S n) t = 
+Lemma events_hb_check_step : forall C1 C2 v1 v2 vs1 vs2 t,
+ events_hb_check C1 C2 (v1::vs1) (v2::vs2) t = 
  events_assert_le C1 C2 t ++ 
- if leb v1 v2 then events_hb_check C1 C2 vs1 vs2 n t else [].
+ if leb v1 v2 then events_hb_check C1 C2 vs1 vs2 t else [].
 Proof.
   intros. auto.
 Qed.
@@ -594,14 +594,14 @@ Proof.
   eapply assert_le_pass_spec; eauto; clarify.
 Qed.
     
-Fixpoint first_gt l1 l2 z :=
-match (z,l1,l2) with
-| (S n, x1::xs1, x2::xs2) => if leb x1 x2 then first_gt xs1 xs2 n else Some (x1,x2) 
+Fixpoint first_gt l1 l2 :=
+match (l1,l2) with
+| (x1::xs1, x2::xs2) => if leb x1 x2 then first_gt xs1 xs2 else Some (x1,x2) 
 | _   => None
 end.
 
-Lemma first_gt_step: forall x1 x2 xs1 xs2 n,
-first_gt (x1::xs1) (x2::xs2) (S n) = if leb x1 x2 then first_gt xs1 xs2 n else Some (x1,x2).
+Lemma first_gt_step: forall x1 x2 xs1 xs2,
+first_gt (x1::xs1) (x2::xs2) = if leb x1 x2 then first_gt xs1 xs2 else Some (x1,x2).
 Proof.
   intros. eauto.
 Qed.
@@ -609,8 +609,8 @@ Qed.
 Lemma hb_check_fail_spec_n: forall n C1 C2 t tmp1 tmp2 P G P1 P2 rest v1 v2 vs1 vs2
  (Hhb_check_spec: P= P1++(t,hb_check C1 C2 (S n) tmp1 tmp2++rest)::P2) 
  (Htmp: tmp1 <> tmp2) (Hvs1: length vs1 = S n) (Hvs2: length vs2 = S n) 
- (Hfirst_gt: first_gt vs1 vs2 (S n)= Some (v1,v2)),
- exec_star (Some P) G (events_hb_check C1 C2 vs1 vs2 (S n) t)
+ (Hfirst_gt: first_gt vs1 vs2 = Some (v1,v2)),
+ exec_star (Some P) G (events_hb_check C1 C2 vs1 vs2 t)
            (mops_hb_check C1 C2 vs1 vs2 (S n) t) 
            None (upd_env (upd_env G t tmp1 v1) t tmp2 v2). 
 Proof.
@@ -646,12 +646,12 @@ Proof.
      eapply assert_le_fail_spec; clarify.
      rewrite <- leb_le; intro; clarify.
 Qed.
-       
+
 Corollary hb_check_fail_spec: forall n C1 C2 t tmp1 tmp2 P G P1 P2 rest v1 v2
   vs1 vs2 (Hhb_check_spec: P= P1++(t,hb_check C1 C2 n tmp1 tmp2++rest)::P2) 
  (Htmp: tmp1 <> tmp2) (Hvs1: length vs1 = n) (Hvs2: length vs2 = n) 
- (Hfirst_gt: first_gt vs1 vs2 n = Some (v1,v2)),
- exec_star (Some P) G (events_hb_check C1 C2 vs1 vs2 n t)
+ (Hfirst_gt: first_gt vs1 vs2 = Some (v1,v2)),
+ exec_star (Some P) G (events_hb_check C1 C2 vs1 vs2 t)
    (mops_hb_check C1 C2 vs1 vs2 n t)
    None (upd_env (upd_env G t tmp1 v1) t tmp2 v2).
 Proof.
@@ -663,8 +663,8 @@ Qed.
 Lemma hb_check_pass_spec_n: forall n C1 C2 t tmp1 tmp2 P G P1 P2 rest v1 v2 vs1 vs2
  (Hhb_check_spec: P= P1++(t,hb_check C1 C2 (S n) tmp1 tmp2++rest)::P2) 
  (Htmp: tmp1 <> tmp2) (Hvs1: length vs1 = n) (Hvs2: length vs2 = n) 
- (Hfirst_gt: first_gt (vs1++[v1]) (vs2++[v2]) (S n)= None),
- exec_star (Some P) G (events_hb_check C1 C2 (vs1++[v1]) (vs2++[v2]) (S n) t)
+ (Hfirst_gt: first_gt (vs1++[v1]) (vs2++[v2]) = None),
+ exec_star (Some P) G (events_hb_check C1 C2 (vs1++[v1]) (vs2++[v2]) t)
            (mops_hb_check C1 C2 (vs1++[v1]) (vs2++[v2]) (S n) t) 
            (Some (P1++(t,rest)::P2)) (upd_env (upd_env G t tmp1 v1) t tmp2 v2). 
 Proof.
@@ -701,13 +701,13 @@ Proof.
       rewrite events_hb_check_step, mops_hb_check_step.
      rewrite Hhb_check_spec, Hxx0,  hb_check_step.
      inversion Hfirst_gt.
-Qed.     
+Qed.
 
 Lemma hb_check_pass_spec: forall n C1 C2 t tmp1 tmp2 P G P1 P2 rest vs1
   vs2 (Hhb_check_spec: P= P1++(t,hb_check C1 C2 n tmp1 tmp2++rest)::P2) 
  (Htmp: tmp1 <> tmp2) (Hvs1: length vs1 = n) (Hvs2: length vs2 = n) 
- (Hfirst_gt: first_gt vs1 vs2 n = None),
- exec_star (Some P) G (events_hb_check C1 C2 vs1 vs2 n t)
+ (Hfirst_gt: first_gt vs1 vs2 = None),
+ exec_star (Some P) G (events_hb_check C1 C2 vs1 vs2 t)
            (mops_hb_check C1 C2 vs1 vs2 n t) (Some (P1++(t,rest)::P2))
    (upd_env (upd_env G t tmp1 (last vs1 (G t tmp1))) t tmp2 (last vs2 (G t tmp2))).
 Proof.
@@ -730,9 +730,9 @@ Definition load_handler t x C R (W : var) z tmp1 tmp2 :=
 Lemma load_handler_norace_spec_n: forall n x C R W t tmp1 tmp2 P G P1 P2 rest v1 v2 vs1 vs2
  (Hload_handler_spec: P= P1++(t,load_handler t x C R W (S n) tmp1 tmp2++rest)::P2) 
  (Htmp: tmp1 <> tmp2) (Hvs1: length vs1 = n) (Hvs2: length vs2 = n) 
- (Hfirst_gt: first_gt (vs1++[v1]) (vs2++[v2]) (S n)= None) v,
+ (Hfirst_gt: first_gt (vs1++[v1]) (vs2++[v2]) = None) v,
  exec_star (Some P) G 
-           (events_hb_check (W + x) (C + t) (vs1++[v1]) (vs2++[v2]) (S n) t ++ events_move (C+t) (R+x) t)
+           (events_hb_check (W + x) (C + t) (vs1++[v1]) (vs2++[v2]) t ++ events_move (C+t) (R+x) t)
            (mops_hb_check (W + x) (C + t) (vs1++[v1]) (vs2++[v2]) (S n) t ++ mops_move (C+t,t) (R+x, t) t v)
            (Some (P1++(t,rest)::P2)) (upd_env (upd_env G t tmp1 v) t tmp2 v2).
 Proof.
@@ -752,9 +752,9 @@ Qed.
 Corollary load_handler_norace_spec: forall n x C R W t tmp1 tmp2 P G P1 P2 rest
   vs1 vs2 (Hload_handler_spec: P = P1 ++ (t, load_handler t x C R W n tmp1 tmp2
   ++ rest) :: P2) (Htmp : tmp1 <> tmp2) (Hvs1 : length vs1 = n)
-  (Hvs2 : length vs2 = n) (Hfirst_gt : first_gt vs1 vs2 n = None) v,
+  (Hvs2 : length vs2 = n) (Hfirst_gt : first_gt vs1 vs2 = None) v,
   exists v2, exec_star (Some P) G
-    (events_hb_check (W + x) (C + t) vs1 vs2 n t ++ events_move (C + t) (R + x) t)
+    (events_hb_check (W + x) (C + t) vs1 vs2 t ++ events_move (C + t) (R + x) t)
     (mops_hb_check (W + x) (C + t) vs1 vs2 n t ++ mops_move (C + t, t) (R + x, t) t v)
     (Some (P1 ++ (t, rest) :: P2)) (upd_env (upd_env G t tmp1 v) t tmp2 v2).
 Proof.
@@ -772,8 +772,8 @@ Qed.
 Lemma load_handler_race_spec_n: forall n x C R W t tmp1 tmp2 P G P1 P2 rest v1 v2 vs1 vs2
  (Hload_handler_spec: P= P1++(t,load_handler t x C R W (S n) tmp1 tmp2++rest)::P2) 
  (Htmp: tmp1 <> tmp2) (Hvs1: length vs1 = S n) (Hvs2: length vs2 = S n) 
- (Hfirst_gt: first_gt vs1 vs2 (S n)= Some (v1,v2)),
- exec_star (Some P) G (events_hb_check (W + x) (C + t) vs1 vs2 (S n) t)
+ (Hfirst_gt: first_gt vs1 vs2 = Some (v1,v2)),
+ exec_star (Some P) G (events_hb_check (W + x) (C + t) vs1 vs2 t)
            (mops_hb_check (W + x) (C + t) vs1 vs2 (S n) t) 
            None (upd_env (upd_env G t tmp1 v1) t tmp2 v2).
 Proof.
@@ -786,8 +786,8 @@ Qed.
 Corollary load_handler_race_spec: forall n x C R W t tmp1 tmp2 P G P1 P2 rest
   vs1 vs2 (Hload_handler_spec: P = P1++(t,load_handler t x C R W n tmp1 tmp2++
   rest)::P2) (Htmp: tmp1 <> tmp2) (Hvs1: length vs1 = n) (Hvs2: length vs2 = n) 
-  v1 v2 (Hfirst_gt: first_gt vs1 vs2 n = Some (v1,v2)),
- exec_star (Some P) G (events_hb_check (W + x) (C + t) vs1 vs2 n t)
+  v1 v2 (Hfirst_gt: first_gt vs1 vs2 = Some (v1,v2)),
+ exec_star (Some P) G (events_hb_check (W + x) (C + t) vs1 vs2 t)
            (mops_hb_check (W + x) (C + t) vs1 vs2 n t) 
            None (upd_env (upd_env G t tmp1 v1) t tmp2 v2).
 Proof.
@@ -803,8 +803,8 @@ Definition store_handler t x C (R:var) W z tmp1 tmp2 :=
 Lemma store_handler_race_waw_spec_n: forall n x C R W t tmp1 tmp2 P G P1 P2 rest v1 v2 vs1 vs2
  (Hstore_handler_spec: P= P1++(t,store_handler t x C R W (S n) tmp1 tmp2++rest)::P2) 
  (Htmp: tmp1 <> tmp2) (Hvs1: length vs1 = S n) (Hvs2: length vs2 = S n) 
- (Hfirst_gt: first_gt vs1 vs2 (S n)= Some (v1,v2)),
- exec_star (Some P) G (events_hb_check (W + x) (C + t) vs1 vs2 (S n) t)
+ (Hfirst_gt: first_gt vs1 vs2 = Some (v1,v2)),
+ exec_star (Some P) G (events_hb_check (W + x) (C + t) vs1 vs2 t)
            (mops_hb_check (W + x) (C + t) vs1 vs2 (S n) t) 
            None (upd_env (upd_env G t tmp1 v1) t tmp2 v2). 
 Proof.
@@ -817,12 +817,12 @@ Qed.
 Lemma store_handler_race_war_spec_n: forall n x C R W t tmp1 tmp2 P G P1 P2 rest ve1 ve2 ve3 v2 v3 vs1 vs2 vs3
  (Hstore_handler_spec: P= P1++(t,store_handler t x C R W (S n) tmp1 tmp2++rest)::P2) 
  (Htmp: tmp1 <> tmp2) (Hvs1: length vs1 = n) (Hvs2: length vs2 = n) (Hvs3: length vs3 = n) 
- (Hfirst_gt12: first_gt (vs1++[ve1]) (vs2++[ve2]) (S n)= None)
- (Hfirst_gt32: first_gt (vs3++[ve3]) (vs2++[ve2]) (S n)= Some (v3,v2)),
+ (Hfirst_gt12: first_gt (vs1++[ve1]) (vs2++[ve2]) = None)
+ (Hfirst_gt32: first_gt (vs3++[ve3]) (vs2++[ve2]) = Some (v3,v2)),
 
  exec_star (Some P) G 
-           (events_hb_check (W + x) (C + t) (vs1++[ve1]) (vs2++[ve2]) (S n) t ++
-            events_hb_check (R + x) (C + t) (vs3++[ve3]) (vs2++[ve2]) (S n) t)
+           (events_hb_check (W + x) (C + t) (vs1++[ve1]) (vs2++[ve2]) t ++
+            events_hb_check (R + x) (C + t) (vs3++[ve3]) (vs2++[ve2]) t)
            (mops_hb_check (W + x) (C + t) (vs1++[ve1]) (vs2++[ve2]) (S n) t ++
             mops_hb_check (R + x) (C + t) (vs3++[ve3]) (vs2++[ve2]) (S n) t) 
            None (upd_env (upd_env G t tmp1 v3) t tmp2 v2). 
@@ -846,11 +846,11 @@ Lemma store_handler_norace_spec_n: forall n x C R W t tmp1 tmp2 P G P1 P2 rest v
  (Hstore_handler_spec: P= P1++(t,store_handler t x C R W (S n) tmp1 tmp2++rest)::P2) 
  (Htmp: tmp1 <> tmp2) 
  (Hvs1: length vs1 = n) (Hvs2: length vs2 = n) (Hvs3: length vs3 =n) 
- (Hfirst_gt12: first_gt (vs1++[v1]) (vs2++[v2]) (S n)= None)
- (Hfirst_gt32: first_gt (vs3++[v3]) (vs2++[v2]) (S n)= None) v,
+ (Hfirst_gt12: first_gt (vs1++[v1]) (vs2++[v2]) = None)
+ (Hfirst_gt32: first_gt (vs3++[v3]) (vs2++[v2]) = None) v,
  exec_star (Some P) G 
-           (events_hb_check (W + x) (C + t) (vs1++[v1]) (vs2++[v2]) (S n) t ++ 
-            events_hb_check (R + x) (C + t) (vs3++[v3]) (vs2++[v2]) (S n) t ++               
+           (events_hb_check (W + x) (C + t) (vs1++[v1]) (vs2++[v2]) t ++ 
+            events_hb_check (R + x) (C + t) (vs3++[v3]) (vs2++[v2]) t ++               
             events_move (C+t) (W+x) t)
            (mops_hb_check (W + x) (C + t) (vs1++[v1]) (vs2++[v2]) (S n) t ++ 
             mops_hb_check (R + x) (C + t) (vs3++[v3]) (vs2++[v2]) (S n) t ++
@@ -883,10 +883,10 @@ Qed.
 Corollary store_handler_norace_spec: forall n x C R W t tmp1 tmp2 P G P1 P2 rest
   vs1 vs2 vs3 (Hstore_handler_spec: P = P1 ++ (t, store_handler t x C R W n tmp1 tmp2
   ++ rest) :: P2) (Htmp : tmp1 <> tmp2) (Hvs1 : length vs1 = n)
-  (Hvs2 : length vs2 = n) (Hvs3: length vs3 =n) (Hfirst_gt12 : first_gt vs1 vs2 n = None) (Hfirst_gt32: first_gt vs3 vs2 n =None) v,
+  (Hvs2 : length vs2 = n) (Hvs3: length vs3 = n) (Hfirst_gt12 : first_gt vs1 vs2 = None) (Hfirst_gt32: first_gt vs3 vs2 = None) v,
   exists v2, exec_star (Some P) G
-    (events_hb_check (W + x) (C + t) vs1 vs2 n t ++ 
-     events_hb_check (R + x) (C + t) vs3 vs2 n t ++
+    (events_hb_check (W + x) (C + t) vs1 vs2 t ++ 
+     events_hb_check (R + x) (C + t) vs3 vs2 t ++
      events_move (C + t) (W + x) t)
     (mops_hb_check (W + x) (C + t) vs1 vs2 n t ++
      mops_hb_check (R + x) (C + t) vs3 vs2 n t ++
@@ -1016,11 +1016,9 @@ Variables (C L R W : var) (zt zl zv : nat) (tmp1 tmp2 : local)
 
 Definition vstate := @VectorClocks.state tid var lock.
 
-Definition clock_match m V x := forall t, t < zt -> can_read m (x, t) (V t) /\
-  can_write m (x, t).
-
-Check consistent.
-Print clock_of.
+Definition clock_match m V x := forall t,
+  if lt_dec t zt then can_read m (x, t) (V t) /\ can_write m (x, t)
+  else V t = 0.
 
 Definition clocks_sim (m : list conc_op) (s : vstate) :=
   (forall t, t < zt -> clock_match m (clock_of s t) (C + t)) /\
@@ -1132,14 +1130,12 @@ Proof.
 Qed.
 
 (* if two vector clocks V1 <= V2, then no value in V1 could be greater than its counterpart in V2 *)
-Lemma vc_le_first_gt : forall V1 V2 (Hle : vc_le(tid := tid) V1 V2) l n,
-  first_gt (map V1 l) (map V2 l) n = None.
+Lemma vc_le_first_gt : forall V1 V2 (Hle : vc_le(tid := tid) V1 V2) l,
+  first_gt (map V1 l) (map V2 l) = None.
 Proof.
   induction l; clarify.
-  destruct n; clarify.
   specialize (Hle a); rewrite <- leb_le in Hle; clarify.
-Qed.  
-
+Qed.
 
 (* updates to different locals don't interfere with each other*)
 Lemma upd_old : forall G t1 a1 v1 t2 a2 (Ha : a1 <> a2),
@@ -1246,12 +1242,12 @@ Proof.
   rewrite app_assoc, to_ilist_app, reads_noops.
   - unfold clocks_sim in Hs; clarify.
     specialize (Hs22 _ Hx); clarify.
-    specialize (Hs221 _ Ht); clarify.
+    specialize (Hs221 t); clarify.
     specialize (Hs2212 (clock_of s t t)).
     unfold consistent, SC in Hs2212; setoid_rewrite lower_app in Hs2212.
     rewrite to_ilist_app in Hs2212; auto.
   - unfold clocks_sim in Hs; clarify.
-    specialize (Hs1 _ Ht _ Ht).
+    specialize (Hs1 _ Ht t).
     unfold can_read, consistent, SC in Hs1.
     rewrite lower_app in Hs1; clarify.
   - clarify.
@@ -1268,12 +1264,12 @@ Proof.
   rewrite app_assoc, to_ilist_app, reads_noops.
   - unfold clocks_sim in Hs; clarify.
     specialize (Hs22 _ Hx); clarify.
-    specialize (Hs222 _ Ht); clarify.
+    specialize (Hs222 t); clarify.
     specialize (Hs2222 (clock_of s t t)).
     unfold consistent, SC in Hs2222; setoid_rewrite lower_app in Hs2222.
     rewrite to_ilist_app in Hs2222; auto.
   - unfold clocks_sim in Hs; clarify.
-    specialize (Hs1 _ Ht _ Ht).
+    specialize (Hs1 _ Ht t).
     unfold can_read, consistent, SC in Hs1.
     rewrite lower_app in Hs1; clarify.
   - clarify.
@@ -1468,24 +1464,200 @@ inversion Hfresh2 as [|? ? Hi']; clarify; inversion Hi'; clarify.
 
        unfold env_sim in HGsim.
          symmetry. apply HGsim.
-      rewrite in_app in H1; destruct H1; [eapply mops_hb_check_meta; eauto|].
-      destruct H; clarify; unfold meta_loc; simpl; omega.
+      (*rewrite in_app in H1; destruct H1; [eapply mops_hb_check_meta; eauto|].
+      destruct H; clarify; unfold meta_loc; simpl; omega.*)admit.
 Admitted.
 
+Definition bounded V z := forall t, ~t < z -> V t = 0.
+
+Lemma clock_match_bounded : forall m V x, clock_match m V x -> bounded V zt.
+Proof.
+  unfold clock_match, bounded; intros.
+  specialize (H t); clarify.
+Qed.
+
+Lemma bounded_le_dec : forall z V V', bounded V z -> vc_le V V' \/
+  exists t, t < z /\ V t > V' t /\ forall t', t < t' -> V t' <= V' t'.
+Proof.
+  induction z; intros.
+  - left; intro; rewrite H; omega.
+  - destruct (le_dec (V z) (V' z)).
+    specialize (IHz (upd V z 0) V'); use IHz.
+    destruct IHz as [IHz | IHz]; [left | right].
+    + intro t; unfold upd in IHz; specialize (IHz t); clarify.
+    + unfold upd in IHz; destruct IHz as (t & ? & IHz); exists t.
+      destruct (eq_dec z t); [exfalso; omega | clarify].
+      specialize (IHz2 t'); clarify.
+    + repeat intro; specialize (H t); unfold upd; clarify; omega.
+    + right; exists z; split; [omega | split; [omega | clarify]].
+      specialize (H t'); omega.
+Qed.
+
+Lemma first_gt_spec : forall vs1 vs2 v1 v2, first_gt vs1 vs2 = Some (v1, v2)
+  <-> v1 > v2 /\
+    exists i, nth_error vs1 i = Some v1 /\ nth_error vs2 i = Some v2 /\
+    forall j v1' v2', j < i -> nth_error vs1 j = Some v1' ->
+      nth_error vs2 j = Some v2' -> v1' <= v2'.
+Proof.
+  induction vs1; clarify.
+  { split; clarsimp. }
+  destruct vs2; clarify.
+  { split; clarsimp. }
+  destruct (a <=? n) eqn: Hle.
+  - rewrite leb_le in Hle.
+    rewrite IHvs1; split; clarify.
+    + exists (S x); clarify.
+      destruct j; clarify.
+      exploit lt_S_n; eauto.
+    + destruct x; clarify; try omega.
+      exists x; clarify.
+      specialize (H222 (S j)); clarify.
+  - assert (~a <= n) by (intro; rewrite <- leb_le in *; clarify).
+    split; clarify.
+    + split; [omega|].
+      exists 0; clarify; omega.
+    + destruct x; clarify.
+      specialize (H0222 0); clarify.
+      exploit H0222; auto; omega.
+Qed.
+
+(*(* Bigger-step semantics for instrumentation *)
+Inductive exec_instr P G :
+  list operation -> list conc_op -> option state -> env -> Prop :=
+| instr_assign P1 P2 t a e rest
+    (Hassign : P = P1 ++ (t, Assign a e :: rest) :: P2) :
+    exec P G [] [] (Some (P1 ++ (t, rest) :: P2)) (upd_env G t a (eval (G t) e))
+| instr_load P1 P2 t a x vs1 vs2 v rest
+    (Hload : P = P1 ++ (t, load_handler t x C R W z tmp1 tmp2 ++ Load a x ::
+       rest) :: P2) (Hvs1 : length vs1 = zt) (Hvs2 : length vs2 = zt)
+    (Hle : first_gt vs1 vs2 = None) :
+    exec P G (Some (rd t (fst x))) (Some (Read t x v))
+      (Some (P1 ++ (t, rest) :: P2)) (upd_env G t a v)
+| exec_store P1 P2 t x e rest
+    (Hstore : P = P1 ++ (t, Store x e :: rest) :: P2) :
+    exec P G (Some (wr t (fst x))) (Some (Write t x (eval (G t) e)))
+      (Some (P1 ++ (t, rest) :: P2)) G
+| exec_lock P1 P2 t m rest
+    (Hlock : P = P1 ++ (t, Lock m :: rest) :: P2) :
+    exec P G (Some (acq t m)) (Some (ARW t (m, 0) 0 (S t)))
+      (Some (P1 ++ (t, rest) :: P2)) G
+| exec_unlock P1 P2 t m rest
+    (Hlock : P = P1 ++ (t, Unlock m :: rest) :: P2) :
+    exec P G (Some (rel t m)) (Some (ARW t (m, 0) (S t) 0))
+      (Some (P1 ++ (t, rest) :: P2)) G
+| exec_spawn P1 P2 t u li rest
+    (Hspawn : P = P1 ++ (t, Spawn u li :: rest) :: P2) :
+    exec P G (Some (fork t u)) None
+         (Some (P1 ++ (t, rest) :: (u, li) :: P2)) G
+| exec_wait P1 P2 t u rest
+    (Hwait : P = P1 ++ (t, Wait u :: rest) :: P2) (Hdone : In (u, []) P) :
+    exec P G (Some (join t u)) None (Some (P1 ++ (t, rest) :: P2)) G
+| exec_assert_pass P1 P2 t e1 e2 rest
+    (Hassert : P = P1 ++ (t, Assert_le e1 e2 :: rest) :: P2)
+    (Hpass : eval (G t) e1 <= eval (G t) e2) :
+    exec P G None None (Some (P1 ++ (t, rest) :: P2)) G
+| exec_assert_fail P1 P2 t e1 e2 rest
+    (Hassert : P = P1 ++ (t, Assert_le e1 e2 :: rest) :: P2)
+    (Hfail : ~eval (G t) e1 <= eval (G t) e2) :
+    exec P G None None None G
+*)
+
 Lemma instrument_sim_race : forall P P1 P2 G1 G2 h
+  (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1)
+  (Ht : Forall (fun e => fst e < zt) P1)
   (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2)
   m (Hroot : exec_star (Some (init_state P)) init_env h m (Some P1) G1)
   o c P1' G1' (Hstep : exec P1 G1 o c (Some P1') G1')
-  (Hrace : forall s, ~step_star s0 (h ++ opt_to_list o) s),
+  (Hcon : consistent (m ++ opt_to_list c)) s (Hs : clocks_sim m s)
+  (Hrace : forall s', ~step_star s (opt_to_list o) s'),
   exists lo lc G2', exec_star (Some P2) G2 lo lc None G2'.
+Proof.
+  intros.
+  inversion Hstep; clarify; exploit Forall2_app_inv_l; eauto 2;
+    intros (P0' & P3' & HP0 & Hrest & ?);
+    inversion Hrest as [|? (?, ?) ? ? ? HP3]; clarify.
+  - specialize (Hrace s); contradiction Hrace; apply ss_refl.
+  - destruct x as (x, o).
+    destruct Hs as (HC & HL & HRW).
+    generalize (HRW x); intro HRWx.
+    setoid_rewrite Forall_app in Hlocs; clarify.
+    inversion Hlocs2 as [|?? Hi ?]; clarify.
+    inversion Hi; clarify.
+    generalize (clock_match_bounded HRWx2); intro Hbound.
+    destruct (bounded_le_dec (clock_of s t0) Hbound) as [? | (t & Hgt)].
+    { destruct s as (((?, ?), ?), ?); exploit Hrace; [|clarify].
+      econstructor; [constructor; auto | apply ss_refl]. }
+    exploit load_handler_race_spec.
+    { eauto. }
+    { eauto. }
+    { instantiate (2 := map (write_of s x) (rev (interval 0 zt))).
+      rewrite map_length, rev_length, interval_length.
+      rewrite <- minus_n_O; eauto. }
+    { instantiate (1 := map (clock_of s t0) (rev (interval 0 zt))).
+      rewrite map_length, rev_length, interval_length; omega. }
+    { rewrite first_gt_spec.
+      destruct Hgt as (Hgt1 & Hgt2 & Hclock); split; [apply Hgt2|].
+      repeat rewrite map_rev;
+        exists (length (map (write_of s x) (interval 0 zt)) - t - 1).
+      split.
+      { apply nth_error_rev; erewrite map_nth_error; eauto.
+        rewrite nth_error_interval; clarify; omega. }
+      split.
+      { assert (length (map (write_of s x) (interval 0 zt)) =
+          length (map (clock_of s t0) (interval 0 zt))) as Heq
+          by (repeat rewrite map_length; auto).
+        rewrite Heq; apply nth_error_rev; erewrite map_nth_error; eauto.
+        rewrite nth_error_interval; clarify; omega. }
+      intros ??? Hlt Hj1 Hj2.
+      generalize (nth_error_rev' _ _ Hj1), (nth_error_rev' _ _ Hj2);
+        intros Hj1' Hj2'.
+      rewrite map_length, interval_length in *.
+      generalize (nth_error_interval (zt - 0 - j - 1) 0 zt); intro Hnth.
+      rewrite <- minus_n_O in *; destruct (lt_dec (zt - j - 1) zt); [|omega].
+      rewrite (map_nth_error _ _ _ Hnth) in Hj1';
+        rewrite (map_nth_error _ _ _ Hnth) in Hj2'; clarify.
+      apply Hclock; omega. }
+    rewrite plus_0_r; intro Hload.
+    rewrite <- app_assoc; eauto.
 Admitted.
 
-(* This needs memory to be involved as well; possibly the above ones do too. *)
-Theorem instrument_correct : forall C L R W z tmp1 tmp2 P h m P' G'
+(* There's no escape from fine-grained interleaving. We can either:
+   - use a messy simulation relation with cases for intermediate states; or
+   - prove that for any interleaving, there's an equivalent reordering of the
+     steps in which instrumented sections execute in blocks. *)
+
+Lemma instrument_sim_safe2 : forall P P1 P2 G1 G2 h
+  (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1)
+  (Ht : Forall (fun e => fst e < zt) P1)
+  (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2)
+  m (Hroot : exec_star (Some (init_state P)) init_env h m (Some P1) G1)
+  o2 c2 P2' G2' (Hstep : exec P2 G2 o2 c2 (Some P2') G2')
+  (Hcon : consistent (m ++ opt_to_list c2)) s (Hs : clocks_sim m s),
+  
+  exists o c P1' G1', exec P1 G1 o c P1' G1' /\
+    state_sim P1' P2' /\ env_sim G1' G2' /\
+    mem_sim c (opt_to_list c2 ++ lc) /\
+        exists s', step_star s (opt_to_list o) s' /\
+                   clocks_sim (m ++ opt_to_list c2 ++ lc) s'
+    | None => forall s', ~step_star s (opt_to_list o) s'
+    end end.
+Proof.
+  intros.
+  exploit exec_exec_t; eauto; intros (t & Hstept); clear Hstep.
+  
+  
+  inversion Hstep; clarify; exploit Forall2_app_inv_r; eauto 2;
+    intros (P0' & P3' & HP0 & Hrest & ?);
+    inversion Hrest as [|? (?, ?) ? ? ? HP3]; clarify.
+  - do 5 eexists.
+
+(* This doesn't follow. We need to get the correctness statement straight. *)
+Theorem instrument_correct : forall P h m P' G'
   (HP : exec_star (Some (init_state P)) init_env h m (Some P') G'),
   (exists h2 m2 P2' G2', exec_star
-     (Some (init_state (instrument C L R W z tmp1 tmp2 P 0))) init_env h2 m2
+     (Some (init_state (instrument C L R W zt tmp1 tmp2 P 0))) init_env h2 m2
      (Some P2') G2') <-> exists s, step_star s0 h s.
-Admitted.
+Proof.
+Abort.
 
 End SC.

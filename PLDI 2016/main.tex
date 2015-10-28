@@ -1,0 +1,114 @@
+\documentclass[preprint, 10pt]{sigplanconf}
+
+\usepackage{uri}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{amssymb}
+\usepackage{semantic}
+\usepackage{graphicx}
+\usepackage{cases}
+
+\newcommand{\ignore}[1]{}
+\newcommand{\con}[1]{\ensuremath{\mathsf{consistent}(#1)}}
+\newcommand{\seqcon}[1]{\ensuremath{\mathsf{seq\_con}(#1)}}
+\newcommand{\mread}[2]{\ensuremath{\mathsf{read}(#1, #2)}}
+\newcommand{\mwrite}[2]{\ensuremath{\mathsf{write}(#1, #2)}}
+\newcommand{\malloc}[2]{\ensuremath{\mathsf{alloc}(#1, #2)}}
+\newcommand{\mfree}[1]{\ensuremath{\mathsf{free}(#1)}}
+\newcommand{\cccando}[2]{\ensuremath{\mathsf{can\_do_{CC}}(#1, #2)}}
+\newcommand{\hb}[0]{<_{\mathrm{hb}}}
+\newcommand{\po}[0]{<_{\mathrm{po}}}
+\newcommand{\sw}[0]{<_{\mathrm{sw}}}
+\newcommand{\word}[0]{<_{\mathrm{w}}}
+
+%from StackExchange, a better xrightarrow^*
+\newcommand{\tto}[1]{\mathrel{
+  \vphantom{\xrightarrow{#1}}
+  \smash{\xrightarrow{#1}}
+  \vphantom{\to}^{*}}
+}
+
+\hyphenation{Comp-Cert}
+
+\newtheorem{lemma}{Lemma}
+\newtheorem{theorem}{Theorem}
+\newtheorem{definition}{Definition}
+\newtheorem{principle}{Principle}
+
+\begin{document}
+
+\special{papersize=8.5in,11in}
+\setlength{\pdfpageheight}{\paperheight}
+\setlength{\pdfpagewidth}{\paperwidth}
+
+\conferenceinfo{PLDI '16}{June 13--17, 2016, Santa Barbara, California, United States} 
+\copyrightyear{2016}
+\copyrightdata{978-1-nnnn-nnnn-n/yy/mm} 
+%\doi{nnnnnnn.nnnnnnn}
+
+% Uncomment one of the following two, if you are not going for the 
+% traditional copyright transfer agreement.
+
+%\exclusivelicense                % ACM gets exclusive license to publish, 
+                                  % you retain copyright
+
+%\permissiontopublish             % ACM gets nonexclusive license to publish
+                                  % (paid open-access papers, 
+                                  % short abstracts)
+
+\titlebanner{banner above paper title}        % These are ignored unless
+\preprintfooter{short description of paper}   % 'preprint' option specified.
+
+\title{Verified Instrumentation for Race Detection (Draft)}
+\ignore{\authorinfo{William Mansky \and Yuanfeng Peng \and Steve Zdancewic \and Joe Devietti}
+           {University of Pennsylvania}
+           {wmansky@seas.upenn.edu, yuanfeng@cis.upenn.edu, stevez@cis.upenn.edu, devietti@cis.upenn.edu}}
+\authorinfo{}{}{}
+\maketitle
+
+\begin{abstract}
+Writing race-free concurrent code is notoriously difficult, and races can result in bugs that are difficult to isolate and reproduce. Dynamic race detection is often used to catch races that cannot (easily) be detected statically. One approach to dynamic race detection is to instrument the potentially racy code with operations that store and compare metadata, where the metadata implements some known race detection algorithm (e.g. vector clock race detection). In this paper, we lay out an instrumentation pass for race detection in a simple language, and present a mechanized formal proof of its correctness: all races in a program will be caught by the instrumentation, and all races detected by the instrumentation are possible in the original program.
+\end{abstract}
+
+\category{CR-number}{subcategory}{third-level}
+
+\keywords
+dynamic race detection, interactive theorem proving
+
+\section{Introduction}
+
+
+Our contributions are:
+\begin{itemize}
+\item Mechanized proofs of correctness of vector clock race detection and FastTrack
+\item An instrumentation pass that has been proved to implement vector clock race detection for a simple language
+\end{itemize}
+
+\section{Race Detection Algorithms}
+\subsection{Vector Clock Race Detection}
+
+\subsection{FastTrack}
+
+\section{Instrumenting a Simple Language}
+\subsection{The Language}
+
+\subsection{Necessary Synchronization}
+
+\section{Verification}
+
+\section{Related Work}
+FastTrack, etc.
+
+\section{Conclusions and Future Work}
+verified FastTrack instrumentation
+
+more faithful implementation
+
+relaxed memory
+
+\bibliographystyle{abbrvnat}
+\bibliography{sources}
+
+% !! The bibliography should be embedded for final submission.
+
+\end{document}

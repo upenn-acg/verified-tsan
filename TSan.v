@@ -1020,7 +1020,7 @@ Section TSan.
     - split; auto; intro; unfold upd; clarify; omega.
     - destruct H as [? Hle]; specialize (Hle t0); unfold upd in *; clarify.
   Qed.
-      
+  
   Lemma finite_le_dec : forall V V', finite V -> vc_le V V' \/ ~vc_le V V'.
   Proof.
     intros ??[??].
