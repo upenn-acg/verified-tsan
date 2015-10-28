@@ -1152,15 +1152,23 @@ Qed.
 
 (* all the memory operations only access meta locations*)
 Lemma mops_hb_check_meta : forall l1 l2 n x t c (Hx : x < zv) (Ht : t < zt)
-  (Hin : In c (mops_hb_check (W + x) (C + t) l1 l2 n t)), meta_loc (loc_of c).
+  (Hin : In c (mops_hb_check (W + x) (C + t) l1 l2 n t)\/ In c (mops_hb_check (R+x) (C+t) l1 l2 n t)) , meta_loc (loc_of c).
 Proof.
   induction l1; clarify.
   destruct n; clarify.
   destruct l2; clarify.
   destruct Hin as [? | [? | ?]].
+  destruct H; clarify.
   - unfold meta_loc; clarify; omega.
-  - unfold meta_loc; clarify; omega.
-  - clarify.
+  - destruct H; clarify.
+    +unfold meta_loc; clarify; omega.
+    +eapply IHl1; eauto.
+  
+- clarify.
+  unfold meta_loc; clarify; omega.
+- destruct H; clarify.
+  + unfold meta_loc; clarify; omega.
+  + 
     eapply IHl1; eauto.
 Qed.
 
@@ -1275,6 +1283,35 @@ Proof.
   - clarify.
 Qed.
 
+Lemma upd_tmps: forall v e G1 G2 t0 v1 v2 
+ (HGsim: env_sim G1 G2) (Htmp1: expr_fresh tmp1 e) (Htmp2: expr_fresh tmp2 e), 
+   ~ expr_fresh v e ->
+   upd_env (upd_env G2 t0 tmp1 v1) t0 tmp2 v2 t0 v = G1 t0 v.
+Proof.
+  intros.
+  repeat rewrite upd_old; eauto.
+  -symmetry. apply HGsim.
+   +destruct (eq_dec v tmp1); clarify; eauto.
+   +destruct (eq_dec v tmp2). clarify. eauto.
+  -destruct (eq_dec tmp1 v). clarify. eauto.
+  -destruct (eq_dec tmp2 v). clarify. eauto. 
+Qed.    
+ 
+Lemma eval_old: forall G1 G2 t0 v1 v2 e (HGsim: env_sim G1 G2) (Htmp1: expr_fresh tmp1 e) (Htmp2: expr_fresh tmp2 e), eval (upd_env (upd_env G2 t0 tmp1 v1) t0 tmp2 v2 t0) e = eval (G1 t0) e.
+Proof.
+  intros.
+  apply eval_sim. intros.
+  eapply upd_tmps; eauto.
+Qed.
+
+Lemma store_tmps_fresh : forall (P0 P3:state) rest t0 ptr e (Hfresh : fresh_tmps (P0 ++ (t0, Store ptr e :: rest) :: P3)), expr_fresh tmp1 e /\ expr_fresh tmp2 e.
+Proof.
+  intros.
+  setoid_rewrite Forall_app in Hfresh; clarify; inversion Hfresh2; clarify. 
+  inversion H1; clarify.
+Qed.
+
+
 Typeclasses eauto := 2.
 Lemma instrument_sim_safe : forall P P1 P2 G1 G2 h
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1)
@@ -1288,40 +1325,42 @@ Lemma instrument_sim_safe : forall P P1 P2 G1 G2 h
     consistent (m ++ lc) /\ state_sim P1' P2' /\ env_sim G1' G2' /\
     mem_sim c lc.
 Proof.
+  
   intros.
   inversion Hstep; clarify; exploit Forall2_app_inv_l; eauto 2;
     intros (P0' & P3' & HP0 & Hrest & ?);
     inversion Hrest as [|? (?, ?) ? ? ? HP3]; clarify.
-  - do 5 eexists; [|split; [|split; [|clarify; split]]].
+  - do 5 eexists; [|split; [|split; [|clarify; split]]]. (*assign*)
     + eapply exec_step; [|apply exec_refl].
-      apply exec_assign; eauto.
-    + auto.
-    + apply Forall2_app; auto.
-    + repeat intro; unfold upd_env, upd; clarify.
-      setoid_rewrite Forall_app in Hfresh; clarify.
-      inversion Hfresh2 as [|? ? Hi]; clarify; inversion Hi; clarify.
+      apply exec_assign; eauto. (*exec_star*)
+    + auto. (* consistent*)
+    + apply Forall2_app; auto. (*state_sim*)
+    + repeat intro; unfold upd_env, upd; clarify. (* env_sim*)
+      setoid_rewrite Forall_app in Hfresh. clarify.
+      inversion Hfresh2 as [|? ? Hi]; clarify; inversion Hi. clarify.
       apply eval_sim; intros; apply HGsim; intro; clarify.
-    + split; clarify.
-  -destruct x as (x, o).
+    + split; clarify. (*mem_sim*)
+  -destruct x as (x, o). (*load*)
     inversion Hsafe; clarify.
     inversion Hstep0; clarify.
-    exploit load_handler_norace_spec.
-    { eauto. }
-    { eauto. }
-    { instantiate (2 := map (W0 x) (rev (interval 0 zt))).
-      rewrite map_length, rev_length, interval_length.
-      rewrite <- minus_n_O; eauto. }
-    { instantiate (1 := map (C0 t0) (rev (interval 0 zt))).
-      rewrite map_length, rev_length, interval_length; omega. }
-    { apply vc_le_first_gt. auto. }
-    rewrite plus_0_r; intros [v2 Hload].
-    rewrite <- app_assoc; do 5 eexists; [|split; [|split; [|clarify; split]]].
-    + eapply exec_star_trans; [apply Hload|].
+    exploit load_handler_norace_spec. (* generating 6 subgoals*)
+    { eauto. } (*Progam*)
+    { eauto. }  (*tmp*)
+    
+    { instantiate (2 := map (W0 x) (rev (interval 0 zt))). (*length of W*)
+      rewrite map_length, rev_length, interval_length. 
+      rewrite <-  minus_n_O. eauto. }
+    { instantiate (1 := map (C0 t0) (rev (interval 0 zt))).  (*length of C*)
+      rewrite map_length, rev_length, interval_length. omega. }
+    { apply vc_le_first_gt. auto. }  (*first_gt*)
+    rewrite plus_0_r; intros [v2 Hload]. (*exec_star*)
+    rewrite <- app_assoc; do 5 eexists; [|split; [|split; [|clarify; split]]]. (* + 5 goals*)
+    + eapply exec_star_trans; [apply Hload|]. (*exec_star*)
       eapply exec_step; [|apply exec_refl].
       simpl; apply exec_load; eauto.
-    + rewrite app_nil_r; simpl.
-      instantiate (1 := v).
-      instantiate (1 := C0 t0 t0).
+    + rewrite app_nil_r; simpl. (*consistent*)
+      instantiate (1 := v). (*value to be moved*)
+      instantiate (1 := C0 t0 t0). (*value to be read: C0[t0][t0]*)
       setoid_rewrite Forall_app in Hlocs; clarify.
       inversion Hlocs2 as [|?? Hi ?]; clarify.
       inversion Hi; clarify.
@@ -1343,24 +1382,27 @@ Proof.
       * apply (mops_hb_check_con Hs); auto.
         eapply consistent_app; eauto.
       * apply mops_hb_check_read.
-    + apply Forall2_app; auto.
-    + unfold env_sim in *; clarify.
+    + apply Forall2_app; auto. (*state_sim*)
+    + unfold env_sim in *; clarify. (*env_sim*)
       destruct (eq_dec v0 a); [subst | repeat rewrite upd_old; auto].
       destruct (eq_dec t t0); [subst | repeat rewrite upd_old_t; auto].
       repeat rewrite upd_same; auto.
-    + setoid_rewrite Forall_app in Hlocs; clarify.
+    + setoid_rewrite Forall_app in Hlocs; clarify. (*mem_sim*)
       inversion Hlocs2 as [|?? Hi ?]; clarify.
       inversion Hi; clarify.
       unfold mem_sim in *; split; clarify; repeat rewrite in_app in *; clarify.
       contradiction H2.
       rewrite Forall_app in Ht; clarify.
       inversion Ht2; clarify.
-      rewrite in_app in H1; destruct H1; [eapply mops_hb_check_meta; eauto|].
+      rewrite in_app in H1. destruct H1. eapply mops_hb_check_meta. eauto.
+      eauto. eauto.
       destruct H; clarify; unfold meta_loc; simpl; omega.
-  -destruct x as (x,o). 
+  -destruct x as (x,o). (* store *)
    inversion Hsafe; clarify.
    inversion Hstep0; clarify.
-   
+   exploit store_tmps_fresh.
+   { eauto. }
+   intro Hfresh_tmps.
    exploit store_handler_norace_spec.
    { eauto. }
    { eauto. }
@@ -1373,17 +1415,15 @@ Proof.
       rewrite map_length, rev_length, interval_length.
       rewrite <- minus_n_O; eauto. }
     { apply vc_le_first_gt. auto. }
-     apply vc_le_first_gt. eauto.
+    { apply vc_le_first_gt. eauto. }
    rewrite plus_0_r; intros [v2 Hstore].
    rewrite <- app_assoc; do 5 eexists; [|split; [|split; [|clarify; split]]].
-   +eapply exec_star_trans; [apply Hstore|].
+   +eapply exec_star_trans; [apply Hstore|]. (*exec_star*)
     eapply exec_step; [|apply exec_refl].
       simpl; apply exec_store; eauto.
-   +rewrite app_nil_r; simpl.
-      
+   +rewrite app_nil_r; simpl.  (*consistent*)
     instantiate (1 := C0 t0 t0).
       setoid_rewrite Forall_app in Hlocs; clarify.
-      
       inversion Hlocs2 as [|?? Hi ?]; clarify.
       inversion Hi; clarify.
       rewrite Forall_app in Ht; clarify.
@@ -1391,7 +1431,6 @@ Proof.
       unfold consistent, SC in *.
       rewrite lower_app in Hcon; repeat rewrite lower_app;
         rewrite lower_single in Hcon; rewrite lower_single; simpl in *.
-      Print reads_noops.
       rewrite <- app_assoc, app_assoc, <- app_assoc, app_assoc, to_ilist_app. rewrite reads_noops.
       rewrite <- to_ilist_app. 
       rewrite <- app_assoc, app_assoc, to_ilist_app, reads_noops.
@@ -1399,75 +1438,62 @@ Proof.
       apply loc_valid_ops1; auto.
       * rewrite Forall_forall; intros ? Hin.
         rewrite in_map_iff in Hin; clarify.
-      
         destruct Hin2; clarify; intro; assert (meta_loc (x, o)); clarify;
           unfold meta_loc; simpl; omega.
       * eapply (mops_move_conW Hs); eauto.
         eapply consistent_app; eauto.
       *rewrite eval_sim with (G2:=G1' t0).
-       eauto. intros. 
-
-       rewrite upd_old.
-
-       rewrite upd_old.
-       unfold env_sim in HGsim.
-       symmetry. eapply HGsim.
-
-setoid_rewrite Forall_app in Hfresh; clarify;
-inversion Hfresh2 as [|? ? Hi']; clarify; inversion Hi'; clarify.
-      
-       destruct (eq_dec v tmp1). 
-       rewrite e0 in H. contradiction. eauto.
-setoid_rewrite Forall_app in Hfresh; clarify;
-inversion Hfresh2 as [|? ? Hi']; clarify; inversion Hi'; clarify.
-       destruct (eq_dec v tmp2).
-       rewrite e0 in H. contradiction. eauto.
-setoid_rewrite Forall_app in Hfresh; clarify;
-inversion Hfresh2 as [|? ? Hi']; clarify; inversion Hi'; clarify.
-       destruct (eq_dec v tmp2).
-       rewrite e0 in H. contradiction. eauto.
-       destruct (eq_dec v tmp1).
-       rewrite e0 in H. contradiction. eauto.      
-setoid_rewrite Forall_app in Hfresh; clarify;
-inversion Hfresh2 as [|? ? Hi']; clarify; inversion Hi'; clarify.
-       destruct (eq_dec v tmp2).
-       rewrite e0 in H. contradiction. eauto.
-
-       * 
-         apply (mops_hb_check_conR Hs); auto.
-        eapply consistent_app; eauto.
+       eauto. intros.
+       eapply upd_tmps; eauto. 
+      *apply (mops_hb_check_conR Hs); auto.
+       eapply consistent_app; eauto.
       * apply mops_hb_check_read.
       * apply (mops_hb_check_con Hs); auto.
         eapply consistent_app; eauto.
       * eapply mops_hb_check_read.
-      
-+ apply Forall2_app; auto.
-    + unfold env_sim in *; clarify.
+   +apply Forall2_app; auto. (*state_sim*)
+   +unfold env_sim in *; clarify. (*env_sim*)
       repeat rewrite upd_old.
       apply HGsim; eauto.
       eauto. eauto.
-    
-      (*destruct (eq_dec v0 a); [subst | repeat rewrite upd_old; auto].
-      destruct (eq_dec t t0); [subst | repeat rewrite upd_old_t; auto].
-      repeat rewrite upd_same; auto.*)
-    + setoid_rewrite Forall_app in Hlocs; clarify.
+   + setoid_rewrite Forall_app in Hlocs; clarify. (*mem_sim*)
       inversion Hlocs2 as [|?? Hi ?]; clarify.
       inversion Hi; clarify.
-      unfold mem_sim in *; split; clarify; repeat rewrite in_app in *; clarify.
-      
       rewrite Forall_app in Ht; clarify.
-      inversion Ht2; clarify. right. left. 
-      assert(Heval: eval (upd_env (upd_env G2 t0 tmp1 (C0 t0 t0)) t0 tmp2 v2 t0) e = eval (G1' t0) e).
-       apply eval_sim.
-       inversion Hfresh.
-       intros. repeat rewrite upd_old.
-
-       unfold env_sim in HGsim.
-         symmetry. apply HGsim.
-      (*rewrite in_app in H1; destruct H1; [eapply mops_hb_check_meta; eauto|].
-      destruct H; clarify; unfold meta_loc; simpl; omega.*)admit.
-Admitted.
-
+      inversion Ht2; clarify.
+      unfold mem_sim in *; split; clarify; repeat rewrite in_app in *; clarify.
+      *right. left. 
+       erewrite eval_old; eauto.
+      *left.
+       destruct H1.
+        (*1*) 
+             simpl. contradiction H5.
+             rewrite in_app in H. 
+             destruct H.
+              (*a*)
+                eapply mops_hb_check_meta; eauto.
+              (*b*)
+                rewrite in_app in H. 
+                destruct H.
+                  (*i*)
+                   eapply mops_hb_check_meta; eauto. 
+                  (*ii*)
+                   clarify. unfold meta_loc. inversion H; clarify; omega. 
+        (*2*)
+             symmetry. clarify.
+             erewrite eval_old; eauto.
+ -(*lock*)            
+    admit.
+ -(*unlock*)
+    admit.
+ -(*spawn*)
+    admit.
+ -(*wait*)
+    admit.
+ -(*assert_le*)
+    admit.
+Qed.
+     
 Definition bounded V z := forall t, ~t < z -> V t = 0.
 
 Lemma clock_match_bounded : forall m V x, clock_match m V x -> bounded V zt.
@@ -1520,47 +1546,6 @@ Proof.
       specialize (H0222 0); clarify.
       exploit H0222; auto; omega.
 Qed.
-
-(*(* Bigger-step semantics for instrumentation *)
-Inductive exec_instr P G :
-  list operation -> list conc_op -> option state -> env -> Prop :=
-| instr_assign P1 P2 t a e rest
-    (Hassign : P = P1 ++ (t, Assign a e :: rest) :: P2) :
-    exec P G [] [] (Some (P1 ++ (t, rest) :: P2)) (upd_env G t a (eval (G t) e))
-| instr_load P1 P2 t a x vs1 vs2 v rest
-    (Hload : P = P1 ++ (t, load_handler t x C R W z tmp1 tmp2 ++ Load a x ::
-       rest) :: P2) (Hvs1 : length vs1 = zt) (Hvs2 : length vs2 = zt)
-    (Hle : first_gt vs1 vs2 = None) :
-    exec P G (Some (rd t (fst x))) (Some (Read t x v))
-      (Some (P1 ++ (t, rest) :: P2)) (upd_env G t a v)
-| exec_store P1 P2 t x e rest
-    (Hstore : P = P1 ++ (t, Store x e :: rest) :: P2) :
-    exec P G (Some (wr t (fst x))) (Some (Write t x (eval (G t) e)))
-      (Some (P1 ++ (t, rest) :: P2)) G
-| exec_lock P1 P2 t m rest
-    (Hlock : P = P1 ++ (t, Lock m :: rest) :: P2) :
-    exec P G (Some (acq t m)) (Some (ARW t (m, 0) 0 (S t)))
-      (Some (P1 ++ (t, rest) :: P2)) G
-| exec_unlock P1 P2 t m rest
-    (Hlock : P = P1 ++ (t, Unlock m :: rest) :: P2) :
-    exec P G (Some (rel t m)) (Some (ARW t (m, 0) (S t) 0))
-      (Some (P1 ++ (t, rest) :: P2)) G
-| exec_spawn P1 P2 t u li rest
-    (Hspawn : P = P1 ++ (t, Spawn u li :: rest) :: P2) :
-    exec P G (Some (fork t u)) None
-         (Some (P1 ++ (t, rest) :: (u, li) :: P2)) G
-| exec_wait P1 P2 t u rest
-    (Hwait : P = P1 ++ (t, Wait u :: rest) :: P2) (Hdone : In (u, []) P) :
-    exec P G (Some (join t u)) None (Some (P1 ++ (t, rest) :: P2)) G
-| exec_assert_pass P1 P2 t e1 e2 rest
-    (Hassert : P = P1 ++ (t, Assert_le e1 e2 :: rest) :: P2)
-    (Hpass : eval (G t) e1 <= eval (G t) e2) :
-    exec P G None None (Some (P1 ++ (t, rest) :: P2)) G
-| exec_assert_fail P1 P2 t e1 e2 rest
-    (Hassert : P = P1 ++ (t, Assert_le e1 e2 :: rest) :: P2)
-    (Hfail : ~eval (G t) e1 <= eval (G t) e2) :
-    exec P G None None None G
-*)
 
 Lemma instrument_sim_race : forall P P1 P2 G1 G2 h
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1)
