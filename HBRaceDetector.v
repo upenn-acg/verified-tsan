@@ -919,6 +919,33 @@ Proof.
   apply max_vc_spec_n; eauto.
 Qed.
 
+Lemma lock_handler_spec : forall n t l C L tmp1 tmp2 P G P1 P2 rest vs1 vs2
+
+(Hmax_vc: P=P1++(t, lock_handler t l C L n tmp1 tmp2 ++ rest)::P2) (Htmp: tmp1 <> tmp2) (Hvs1: length vs1=n) (Hvs2: length vs2=n) (Ht: t<n),
+ exec_star (Some P) G
+          (events_max_vc (L+l) (C+t) t n) (mops_max_vc (L+l) (C+t) (vs1) (vs2) t  n) (Some (P1++(t,rest)::P2)) (upd_env (upd_env G t tmp1 (last vs1 0)) t tmp2 (Peano.max (last vs1 0) (last vs2 0))).  
+Proof.
+  
+  intros; destruct n.
+  - inversion Ht.
+  -assert(vs1 <>[]) as Hnnil1 by (destruct vs1; clarify).
+   assert(vs2 <>[]) as Hnnil2 by (destruct vs2; clarify).
+  
+   rewrite (app_removelast_last 0 Hnnil1) in *.
+   rewrite (app_removelast_last 0 Hnnil2) in *.
+   rewrite app_length in Hvs1, Hvs2.
+   assert(Hlastv2 :(last (removelast vs2 ++ [last vs2 0]) 0)=last vs2 0).
+     admit.
+   assert(Hlastv1 :(last (removelast vs1 ++ [last vs1 0]) 0)=last vs1 0).
+     admit.
+   rewrite Hlastv2, Hlastv1.
+   apply lock_handler_spec_n with (vss1:=removelast vs1) (vss2:=removelast vs2) (v1:=last vs1 0) (v2:= last vs2 0).
+   eauto.
+   eauto.
+   clarify. omega.
+   clarify. omega.
+Qed.
+
 Definition unlock_handler t l (C : var (* start of thread VCs *))
   (L : var (* start of lock VCs *)) z tmp1 tmp2 :=
   max_vc (C + t) (L+l) z tmp1 tmp2 ++ inc_vc t (C + t) tmp1.
@@ -1482,7 +1509,39 @@ Proof.
         (*2*)
              symmetry. clarify.
              erewrite eval_old; eauto.
- -(*lock*)            
+ -(*lock*)
+    inversion Hsafe; clarify.
+   inversion Hstep0; clarify.
+   exploit max_vc_spec.
+
+           { eauto. }
+           { eauto. }
+     
+           { instantiate(2:= map (L0 t0) (rev (interval 0 zt))). 
+               rewrite map_length, rev_length, interval_length. 
+      rewrite <-  minus_n_O. eauto. 
+           }
+           {instantiate(1:= map (C0 t0) (rev (interval 0 zt))).
+            rewrite map_length, rev_length, interval_length.
+            omega.  }
+           intros [v1]
+           
+   do 5 eexists; [|split; [|split; [|clarify; split]]].
+  + unfold lock_handler in *.
+      eapply exec_star_trans; [ | eapply H ].
+     eapply exec_step. eapply exec_lock. eauto.
+    
+  
+    eauto.
+    unfold lock_handler.
+    
+      (*0*)
+      (*Sn*)
+      
+      
+    
+   
+   
     admit.
  -(*unlock*)
     admit.
