@@ -878,6 +878,7 @@ Proof.
 
    rewrite Hupd. 
    apply move_spec. eauto.
+Check move_spec.
 Qed.
 
 Corollary store_handler_norace_spec: forall n x C R W t tmp1 tmp2 P G P1 P2 rest
@@ -1357,6 +1358,8 @@ Proof.
   inversion Hstep; clarify; exploit Forall2_app_inv_l; eauto 2;
     intros (P0' & P3' & HP0 & Hrest & ?);
     inversion Hrest as [|? (?, ?) ? ? ? HP3]; clarify.
+    rewrite Forall_app in Ht; clarify.
+    inversion Ht2; clarify.
   - do 5 eexists; [|split; [|split; [|clarify; split]]]. (*assign*)
     + eapply exec_step; [|apply exec_refl].
       apply exec_assign; eauto. (*exec_star*)
@@ -1465,6 +1468,7 @@ Proof.
       apply loc_valid_ops1; auto.
       * rewrite Forall_forall; intros ? Hin.
         rewrite in_map_iff in Hin; clarify.
+ 
         destruct Hin2; clarify; intro; assert (meta_loc (x, o)); clarify;
           unfold meta_loc; simpl; omega.
       * eapply (mops_move_conW Hs); eauto.
@@ -1512,25 +1516,82 @@ Proof.
  -(*lock*)
     inversion Hsafe; clarify.
    inversion Hstep0; clarify.
-   exploit max_vc_spec.
+   exploit lock_handler_spec.
 
            { eauto. }
            { eauto. }
      
            { instantiate(2:= map (L0 t0) (rev (interval 0 zt))). 
                rewrite map_length, rev_length, interval_length. 
-      rewrite <-  minus_n_O. eauto. 
-           }
+      rewrite <-  minus_n_O. eauto. }
            {instantiate(1:= map (C0 t0) (rev (interval 0 zt))).
             rewrite map_length, rev_length, interval_length.
             omega.  }
-           intros [v1]
-           
+           {  instantiate(1:=t0). rewrite <-  plus_n_O. eauto. 
+              rewrite Forall_app in Ht. clarify. inversion Ht2; clarify. }
+         intros Hlock.
+         rewrite <- plus_n_O in Hlock.  
    do 5 eexists; [|split; [|split; [|clarify; split]]].
-  + unfold lock_handler in *.
-      eapply exec_star_trans; [ | eapply H ].
-     eapply exec_step. eapply exec_lock. eauto.
-    
+
+  +(*exec_star*) eapply exec_star_trans with (P':=P0'++(t0,lock_handler t0 m0 C L zt tmp1 tmp2 ++ instrument C L R W zt tmp1 tmp2 rest t0) ::l') .
+    *eapply exec_step; [ eapply exec_lock | eapply exec_refl]. eauto.
+    *eapply Hlock.
+  +(*consistent*)
+    rewrite app_nil_r; simpl. (*consistent*)
+      setoid_rewrite Forall_app in Hlocs; clarify.
+      inversion Hlocs2 as [|?? Hi ?]; clarify.
+      inversion Hi; clarify.
+      rewrite Forall_app in Ht; clarify.
+      inversion Ht2; clarify.
+      unfold consistent, SC in *.
+      Check lower_single.
+      rewrite lower_app in Hcon.
+        repeat rewrite lower_single in Hcon. rewrite lower_app; simpl in *.
+        rewrite lower_cons.
+      Check consistent_app.
+      Check loc_valid_ops1.
+      (*rewrite to_ilist_app. Check reads_noops. rewrite reads_noops.
+      rewrite <- to_ilist_app.*)
+      apply loc_valid_ops; auto.
+      * rewrite Forall_forall; intros ? Hin.
+       Print mops_max_vc.
+        rewrite Forall_forall. intros ? Hin2.
+        
+        rewrite in_map_iff in Hin; clarify;
+        rewrite in_map_iff in Hin2; clarify;
+        admit.
+      *
+        destruct x.
+
+        destruct Hin0; clarify.
+          assert(meta_loc p).
+            unfold meta_loc. destruct p as (p,q). clarify. Check loc_valid_ops1.
+            omega.
+        
+        
+        Print loc_of. 
+        destruct Hin0. unfold independent.  rewrite <- H. simpl.
+  
+        destruct (block_model.loc_of x) eqn:Hpx. 
+          assert(meta_loc p).
+            unfold meta_loc. destruct p as (p,o). clari
+        
+        
+        destruct Hin2; clarify;
+          rewrite Forall_forall; intros. 
+          rewrite in_map_iff in H. clarify.
+          destruct (block_model.loc_of x0).
+          assert(meta_loc p).
+            clarify. unfold meta_loc. clarify.
+          
+ assert (meta_loc x0); clarify;
+          unfold meta_loc; simpl; omega.
+      * eapply (mops_move_con Hs); eauto.
+        eapply consistent_app; eauto.
+      * apply (mops_hb_check_con Hs); auto.
+        eapply consistent_app; eauto.
+      * apply mops_hb_check_read.
+    eauto.
   
     eauto.
     unfold lock_handler.
