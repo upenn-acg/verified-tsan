@@ -114,50 +114,52 @@ Section Semantics.
   Definition upd_env G (t : tid) (a : local) (v : nat) :=
     upd G t (upd (G t) a v).
 
-  Inductive exec P G :
+  Inductive exec P G t :
     option operation -> option conc_op -> option state -> env -> Prop :=
-  | exec_assign P1 P2 t a e rest
+  | exec_assign P1 P2 a e rest
       (Hassign : P = P1 ++ (t, Assign a e :: rest) :: P2) :
-      exec P G None None
+      exec P G t None None
         (Some (P1 ++ (t, rest) :: P2)) (upd_env G t a (eval (G t) e))
 
-  | exec_load P1 P2 t a x v rest
+  | exec_load P1 P2 a x v rest
       (Hload : P = P1 ++ (t, Load a x :: rest) :: P2) :
-      exec P G (Some (rd t (fst x))) (Some (Read t x v))
+      exec P G t (Some (rd t (fst x))) (Some (Read t x v))
         (Some (P1 ++ (t, rest) :: P2)) (upd_env G t a v)
 
-  | exec_store P1 P2 t x e rest
+  | exec_store P1 P2 x e rest
       (Hstore : P = P1 ++ (t, Store x e :: rest) :: P2) :
-      exec P G (Some (wr t (fst x))) (Some (Write t x (eval (G t) e)))
+      exec P G t (Some (wr t (fst x))) (Some (Write t x (eval (G t) e)))
         (Some (P1 ++ (t, rest) :: P2)) G
 
-  | exec_lock P1 P2 t m rest
+  | exec_lock P1 P2 m rest
       (Hlock : P = P1 ++ (t, Lock m :: rest) :: P2) :
-      exec P G (Some (acq t m)) (Some (ARW t (m, 0) 0 (S t)))
-        (Some (P1 ++ (t, rest) :: P2)) G
-  | exec_unlock P1 P2 t m rest
-      (Hlock : P = P1 ++ (t, Unlock m :: rest) :: P2) :
-      exec P G (Some (rel t m)) (Some (ARW t (m, 0) (S t) 0))
+      exec P G t (Some (acq t m)) (Some (ARW t (m, 0) 0 (S t)))
         (Some (P1 ++ (t, rest) :: P2)) G
 
-  | exec_spawn P1 P2 t u li rest
-      (Hspawn : P = P1 ++ (t, Spawn u li :: rest) :: P2) :
-      exec P G (Some (fork t u)) None
+  | exec_unlock P1 P2 m rest
+      (Hlock : P = P1 ++ (t, Unlock m :: rest) :: P2) :
+      exec P G t (Some (rel t m)) (Some (ARW t (m, 0) (S t) 0))
+        (Some (P1 ++ (t, rest) :: P2)) G
+
+  | exec_spawn P1 P2 u li rest
+      (Hspawn : P = P1 ++ (t, Spawn u li :: rest) :: P2)
+      (Hnew : ~In u (map fst P)) :
+      exec P G t (Some (fork t u)) None
            (Some (P1 ++ (t, rest) :: (u, li) :: P2)) G
 
-  | exec_wait P1 P2 t u rest
+  | exec_wait P1 P2 u rest
       (Hwait : P = P1 ++ (t, Wait u :: rest) :: P2) (Hdone : In (u, []) P) :
-      exec P G (Some (join t u)) None (Some (P1 ++ (t, rest) :: P2)) G
+      exec P G t (Some (join t u)) None (Some (P1 ++ (t, rest) :: P2)) G
 
-  | exec_assert_pass P1 P2 t e1 e2 rest
+  | exec_assert_pass P1 P2 e1 e2 rest
       (Hassert : P = P1 ++ (t, Assert_le e1 e2 :: rest) :: P2)
       (Hpass : eval (G t) e1 <= eval (G t) e2) :
-      exec P G None None (Some (P1 ++ (t, rest) :: P2)) G
+      exec P G t None None (Some (P1 ++ (t, rest) :: P2)) G
 
-  | exec_assert_fail P1 P2 t e1 e2 rest
+  | exec_assert_fail P1 P2 e1 e2 rest
       (Hassert : P = P1 ++ (t, Assert_le e1 e2 :: rest) :: P2)
       (Hfail : ~eval (G t) e1 <= eval (G t) e2) :
-      exec P G None None None G
+      exec P G t None None None G
   (*| exec_nop P1 P2 t rest
       (Hnop : P=P1++(t,Nop::rest)::P2):
       exec P G None None (Some (P1++(t,rest)::P2)) G*).
@@ -171,11 +173,77 @@ Section Semantics.
   Inductive exec_star : option state -> env ->
     list operation -> list conc_op -> option state -> env -> Prop :=
   | exec_refl P G : exec_star P G [] [] P G
-  | exec_step P G o c P' G' (Hexec : exec P G o c P' G') lo lc P'' G''
+  | exec_step P G t o c P' G' (Hexec : exec P G t o c P' G') lo lc P'' G''
       (Hexec' : exec_star P' G' lo lc P'' G'') :
       exec_star (Some P) G (opt_to_list o ++ lo) (opt_to_list c ++ lc) P'' G''.
 
-  Context (ML : Memory_Layout nat var_eq) (MM : @Memory_Model _ _ _ ML _ conc_op Base).
+  Lemma exec_step' : forall P G t o c P' G' rd mops
+    (Hexec : exec P G t o c P' G') lo lc P'' G''
+    (Hexec' : exec_star P' G' lo lc P'' G'')
+    (Hrd : rd = opt_to_list o ++ lo)
+    (Hmops : mops = opt_to_list c ++ lc),
+    exec_star (Some P) G rd mops P'' G''.
+  Proof.
+    clarify; eapply exec_step; eauto.
+  Qed.
+
+  Definition distinct (P : state) := NoDup (map fst P).
+
+  Lemma distinct_init : forall P, distinct (init_state P).
+  Proof.
+    unfold init_state; clarify.
+    constructor; clarify.
+  Qed.
+
+  (* up *)
+  Lemma NoDup_app : forall A (l1 l2 : list A), NoDup (l1 ++ l2) <->
+    NoDup l1 /\ NoDup l2 /\ forall x, In x l1 -> ~In x l2.
+  Proof.
+    induction l1; split; clarify.
+    - inversion H; clarify.
+      rewrite IHl1 in *; split; rewrite in_app in *; clarify.
+      constructor; auto.
+    - inversion H1; clarify.
+      constructor.
+      + rewrite in_app; intro; clarify.
+        exploit H22; eauto.
+      + rewrite IHl1; clarify.
+  Qed.
+
+  Lemma distinct_step : forall P (Hdistinct : distinct P) G t lo lc P' G'
+    (Hstep : exec P G t lo lc (Some P') G'), distinct P'.
+  Proof.
+    unfold distinct; intros; inversion Hstep; clarify; rewrite map_app in *;
+      clarify.
+    rewrite NoDup_app in *; clarify.
+    inversion Hdistinct21; clarify.
+    rewrite in_app in Hnew; split.
+    - constructor; clarify.
+      + intro; clarify.
+      + constructor; auto.
+    - intros ? Hin; specialize (Hdistinct22 _ Hin); intro; clarify.
+  Qed.
+
+  Corollary distinct_steps : forall P G lo lc P' G'
+    (Hdistinct : distinct P) (Hsteps : exec_star (Some P) G lo lc (Some P') G'),
+    distinct P'.
+  Proof.
+    intros.
+    remember (Some P) as S; remember (Some P') as S';
+      generalize dependent P'; generalize dependent P; induction Hsteps;
+      clarify.
+    destruct P'.
+    - exploit distinct_step; eauto.
+    - inversion Hsteps; clarify.
+  Qed.
+
+  Definition final_state (P : option state) := match P with
+    | Some ll => Forall (fun li => snd li = []) ll
+    | None => True
+    end.
+
+  Context (ML : Memory_Layout nat var_eq)
+          (MM : @Memory_Model _ _ _ ML _ conc_op Base).
 
   Definition result P lo lc := exists P' G',
     exec_star (Some (init_state P)) init_env lo lc P' G' /\

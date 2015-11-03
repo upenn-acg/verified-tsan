@@ -7,3 +7,8 @@ Makefile~
 *.v~
 #VectorClocks.v#
 *.v#
+*.aux
+PLDI 2016/main.bbl
+*.fdb_latexmk
+PLDI 2016/main.fls
+PLDI 2016/main.synctex.gz

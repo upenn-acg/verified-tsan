@@ -91,20 +91,30 @@ Our contributions are:
 
 \section{Instrumenting a Simple Language}
 \subsection{The Language}
+We define a simple multithreaded language that is just complicated enough to have races and implement race detection instrumentation.
+
+\subsection{Instrumentation}
 
 \subsection{Necessary Synchronization}
+Completely unsynchronized instrumentation cannot be sound and complete. (example) At the same time, adding too much synchronization could significantly hurt performance.
 
 \section{Verification}
+We verify the correctness of the instrumentation in two steps. First, we show that a simple abstract algorithm for vector clock race detection is sound and complete. Second, we show that instrumentation records the same information and performs the same checks as the algorithm would perform on any program.
+
+\subsection{Verifying VC Race Detection}
+Maybe we should keep this short, since it's pretty simple.
+
+\subsection{Verifying the Instrumentation}
 
 \section{Related Work}
-FastTrack, etc.
+FastTrack, etc.; verified instrumentation like SoftBound
 
 \section{Conclusions and Future Work}
 verified FastTrack instrumentation
 
-more faithful implementation
+more faithful/detailed implementation
 
-relaxed memory
+relaxed memory, if it matters
 
 \bibliographystyle{abbrvnat}
 \bibliography{sources}

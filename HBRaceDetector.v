@@ -8,16 +8,6 @@ Set Implicit Arguments.
 
 Definition move src tgt tmp := [Load tmp src; Store tgt (V tmp)].
 
-Lemma exec_step' : forall P G o c P' G' rd mops
-  (Hexec : exec P G o c P' G') lo lc P'' G''
-  (Hexec' : exec_star P' G' lo lc P'' G'')
-  (Hrd : rd = opt_to_list o ++ lo)
-  (Hmops : mops = opt_to_list c ++ lc),
-  exec_star (Some P) G rd mops P'' G''.
-Proof.
-  clarify; eapply exec_step; eauto.
-Qed.
-
 Lemma upd_same : forall G t a v,
   (upd_env G t a v) t a = v.
 Proof.
@@ -723,9 +713,11 @@ Proof.
 Qed.    
    
 (* Since everything is a nat, we can use C + t as the t component of C. *)
-Definition load_handler t x C R (W : var) z tmp1 tmp2 := 
+Definition load_handler t x C (*Cl*) R (*Rl*) (W : var) (*Wl*) z tmp1 tmp2 := 
+  (*[Lock (Cl + x); Lock (Wl + x); Lock (Rl + x)] ++*)
   hb_check (W + x) (C + t) z tmp1 tmp2 ++
-  move (C + t, t) (R + x, t) tmp1.
+  move (C + t, t) (R + x, t) tmp1 (*++
+  [Unlock (Cl + x); Unlock (Wl + x); Unlock (Rl + x)]*).
 
 Lemma load_handler_norace_spec_n: forall n x C R W t tmp1 tmp2 P G P1 P2 rest v1 v2 vs1 vs2
  (Hload_handler_spec: P= P1++(t,load_handler t x C R W (S n) tmp1 tmp2++rest)::P2) 
@@ -1102,8 +1094,8 @@ Definition mem_sim (m1 : option conc_op) (m2 : list conc_op) :=
 Instance ptr_eq : EqDec_eq ptr.
 Proof. eq_dec_inst. Qed.
 
-Lemma fresh_tmps_step : forall P G o c P' G' (Hfresh : fresh_tmps P)
-  (Hstep : exec P G o c P' G'),
+Lemma fresh_tmps_step : forall P G t o c P' G' (Hfresh : fresh_tmps P)
+  (Hstep : exec P G t o c P' G'),
   match P' with Some P' => fresh_tmps P' | None => True end.
 Proof.
   unfold fresh_tmps; intros; induction Hstep; clarify; rewrite Forall_app in *;
@@ -1135,8 +1127,8 @@ Fixpoint safe_instr (i : instr) :=
 Definition safe_locs (P : state) :=
   Forall (fun e => Forall safe_instr (snd e)) P.
 
-Lemma safe_locs_step : forall P G o c P' G' (Hlocs : safe_locs P)
-  (Hstep : exec P G o c P' G'),
+Lemma safe_locs_step : forall P G t o c P' G' (Hlocs : safe_locs P)
+  (Hstep : exec P G t o c P' G'),
   match P' with Some P' => safe_locs P' | None => True end.
 Proof.
   unfold safe_locs; intros; induction Hstep; clarify; rewrite Forall_app in *;
@@ -1394,14 +1386,13 @@ Proof.
   inversion H1; clarify.
 Qed.
 
-
 Typeclasses eauto := 2.
-Lemma instrument_sim_safe : forall P P1 P2 G1 G2 h
+Lemma instrument_sim_safe : forall P P1 P2 G1 G2 t h
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1)
   (Ht : Forall (fun e => fst e < zt) P1)
   (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2)
   m (Hroot : exec_star (Some (init_state P)) init_env h m (Some P1) G1)
-  o c P1' G1' (Hstep : exec P1 G1 o c (Some P1') G1')
+  o c P1' G1' (Hstep : exec P1 G1 t o c (Some P1') G1')
   (Hcon : consistent (m ++ opt_to_list c))
   s (Hs : clocks_sim m s) s' (Hsafe : step_star s (opt_to_list o) s'),
   exists lo lc P2' G2', exec_star (Some P2) G2 lo lc (Some P2') G2' /\
@@ -1760,12 +1751,12 @@ Proof.
       exploit H0222; auto; omega.
 Qed.
 
-Lemma instrument_sim_race : forall P P1 P2 G1 G2 h
+Lemma instrument_sim_race : forall P P1 P2 G1 G2 t h
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1)
   (Ht : Forall (fun e => fst e < zt) P1)
   (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2)
   m (Hroot : exec_star (Some (init_state P)) init_env h m (Some P1) G1)
-  o c P1' G1' (Hstep : exec P1 G1 o c (Some P1') G1')
+  o c P1' G1' (Hstep : exec P1 G1 t o c (Some P1') G1')
   (Hcon : consistent (m ++ opt_to_list c)) s (Hs : clocks_sim m s)
   (Hrace : forall s', ~step_star s (opt_to_list o) s'),
   exists lo lc G2', exec_star (Some P2) G2 lo lc None G2'.
@@ -1822,7 +1813,99 @@ Admitted.
 (* There's no escape from fine-grained interleaving. We can either:
    - use a messy simulation relation with cases for intermediate states; or
    - prove that for any interleaving, there's an equivalent reordering of the
-     steps in which instrumented sections execute in blocks. *)
+     steps in which instrumented sections execute in blocks (true only with
+     sufficient synchronization). *)
+
+Lemma op_indep : forall c1 c2 (Hindep : loc_of c1 <> loc_of c2),
+   Forall (fun l => Forall (independent l) (map block_model.loc_of (to_seq c2)))
+     (map block_model.loc_of (to_seq c1)).
+Proof.
+  destruct c1, c2; clarify.
+Qed.
+
+Lemma loc_comm_SC : forall m1 c1 c2 m2 (Hindep : loc_of c1 <> loc_of c2)
+  (Hcon : consistent (m1 ++ c1 :: c2 :: m2)), consistent (m1 ++ c2 :: c1 :: m2).
+Proof.
+  unfold consistent, SC; clarify.
+  rewrite lower_app, lower_cons, lower_cons;
+    rewrite lower_app, lower_cons, lower_cons in Hcon.
+  repeat rewrite to_ilist_app in *; rewrite loc_comm_ops; auto.
+  apply op_indep; auto.
+Qed.
+  
+Lemma loc_comm_ops1_SC : forall c lc m1 m2
+  (Hindep : Forall (fun c' => loc_of c' <> loc_of c) lc),
+  consistent (m1 ++ c :: lc ++ m2) <-> consistent (m1 ++ lc ++ c :: m2).
+Proof.
+  induction lc; clarify; [reflexivity|].
+  inversion Hindep; clarify.
+  specialize (IHlc (m1 ++ [a]) m2); clarsimp.
+  etransitivity; eauto; split; apply loc_comm_SC; auto.
+Qed.
+
+Lemma loc_comm_ops_SC : forall lc1 lc2 m1 m2
+  (Hindep : Forall (fun c => Forall (fun c' => loc_of c' <> loc_of c) lc2) lc1),
+  consistent (m1 ++ lc1 ++ lc2 ++ m2) <-> consistent (m1 ++ lc2 ++ lc1 ++ m2).
+Proof.
+  induction lc1; clarify; [reflexivity|].
+  specialize (IHlc1 lc2 (m1 ++ [a]) m2); inversion Hindep; clarsimp.
+  etransitivity; eauto; apply loc_comm_ops1_SC; auto.
+Qed.
+
+Definition add_lock li l := Lock l :: li ++ [Unlock l].
+
+Lemma distinct_thread : forall P1 P2 t li P1' P2' li'
+  (Hdistinct : distinct (P1 ++ (t, li) :: P2))
+  (Heq : P1 ++ (t, li) :: P2 = P1' ++ (t, li') :: P2'),
+  P1' = P1 /\ P2' = P2 /\ li' = li.
+Proof.
+  intros.
+  generalize (NoDup_inj(x := t) (length (map fst P1)) (length (map fst P1'))
+    Hdistinct); intro Heq'; use Heq'; [use Heq'|].
+  - repeat rewrite map_length in Heq'.
+    exploit app_eq_inv; eauto; clarify.
+  - rewrite Heq, map_app; simpl.
+    apply nth_error_split.
+  - rewrite map_app; simpl.
+    apply nth_error_split.
+Qed.
+
+Lemma lock_stuck : forall P P1 P2 t l rest
+  (HP : P = P1 ++ (t, Lock l :: rest) :: P2) (Hdistinct : distinct P)
+  m (Hlocked : ~can_read m (l, 0) 0) G lo lc P' G'
+  (Hexec : exec P G t lo lc P' G'), ~consistent (m ++ opt_to_list lc).
+Proof.
+  intros; inversion Hexec; clarify; exploit distinct_thread; eauto; clarify.
+  unfold can_read, consistent, SC in *; intro Hcon.
+  rewrite lower_app, lower_cons in Hlocked, Hcon; clarify.
+  contradiction Hlocked.
+  unfold lower in *; clarify.
+  rewrite split_app in Hcon; eapply consistent_app; eauto.
+Qed.  
+
+Theorem critical_section : forall P G lo lc P' G'
+  (Hexec : exec_star P G lo lc P' G') (Hfinal : final_state P')
+  m l t1 t2 li1 li2 (HP : P = Some [(t1, add_lock li1 l); (t2, add_lock li2 l)])
+  (Hcon : consistent (m ++ lc)),
+  exists P1 G1 lo1 lo2 lc1 lc2, final_state P1 /\ lo = lo1 ++ lo2 /\
+    lc = lc1 ++ lc2 /\
+    (exec_star (Some [(t1, add_lock li1 l)]) G lo1 lc1 P1 G1 /\
+     exec_star (Some [(t2, add_lock li2 l)]) G1 lo2 lc2 P' G' \/
+     exec_star (Some [(t2, add_lock li2 l)]) G lo1 lc1 P1 G1 /\
+     exec_star (Some [(t1, add_lock li1 l)]) G1 lo2 lc2 P' G').
+Proof.
+  intros.
+  inversion Hexec; clear Hexec; clarify.
+  { inversion Hfinal; clarify. }
+  inversion Hexec0; clear Hexec0; clarify; destruct P1 as [|?[|??]]; clarify;
+    try solve [exploit app_eq_nil; eauto; clarify].
+  - inversion Hexec'; clear Hexec'; clarify.
+    { inversion Hfinal; clarify.
+      exploit app_eq_nil; eauto; clarify. }
+    inversion Hexec; clear Hexec; clarify; destruct P1 as [|?[|??]]; clarify;
+      try solve [exploit app_eq_nil; eauto; clarify].
+    
+  
 
 Lemma instrument_sim_safe2 : forall P P1 P2 G1 G2 h
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1)
@@ -1831,14 +1914,11 @@ Lemma instrument_sim_safe2 : forall P P1 P2 G1 G2 h
   m (Hroot : exec_star (Some (init_state P)) init_env h m (Some P1) G1)
   o2 c2 P2' G2' (Hstep : exec P2 G2 o2 c2 (Some P2') G2')
   (Hcon : consistent (m ++ opt_to_list c2)) s (Hs : clocks_sim m s),
-  
-  exists o c P1' G1', exec P1 G1 o c P1' G1' /\
+  exists o c P1' G1', exec P1 G1 o c (Some P1') G1' /\
     state_sim P1' P2' /\ env_sim G1' G2' /\
-    mem_sim c (opt_to_list c2 ++ lc) /\
+    mem_sim c (opt_to_list c2) /\
         exists s', step_star s (opt_to_list o) s' /\
-                   clocks_sim (m ++ opt_to_list c2 ++ lc) s'
-    | None => forall s', ~step_star s (opt_to_list o) s'
-    end end.
+                   clocks_sim (m ++ opt_to_list c2) s'.
 Proof.
   intros.
   exploit exec_exec_t; eauto; intros (t & Hstept); clear Hstep.
