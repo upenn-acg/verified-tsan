@@ -967,6 +967,9 @@ Proof.
    eauto.
 Qed.
 
+
+
+
 Definition spawn_handler t u C z tmp :=
   set_vc (C + t) (C + u) z tmp ++ inc_vc t (C + t) tmp.
 
@@ -1587,7 +1590,7 @@ Proof.
 
   +(*exec_star*) eapply exec_star_trans with (P':=P0'++(t0,lock_handler t0 m0 C L zt tmp1 tmp2 ++ instrument C L R W zt tmp1 tmp2 rest t0) ::l') .
     *eapply exec_step; [ eapply exec_lock | eapply exec_refl]. eauto.
-    *eapply Hlock.
+    * eapply Hlock.
   +(*consistent*)
     rewrite app_nil_r; simpl. (*consistent*)
       setoid_rewrite Forall_app in Hlocs; clarify.
@@ -1627,6 +1630,74 @@ Proof.
       inversion Ht2; clarify.
       eapply mops_max_vc_meta; eauto.
  -(*unlock*)
+ inversion Hsafe; clarify.
+   inversion Hstep0; clarify.
+   unfold unlock_handler in *.
+   intros.
+   exploit max_vc_spec.
+   {eauto. }
+   {eauto. }
+   { 
+     instantiate(2:=map (C0 t0) (rev (interval 0 zt))).
+     instantiate(1:=zt).
+     rewrite map_length, rev_length, interval_length.
+     omega.
+   }
+   { instantiate(1:=map (L0 m0) (rev (interval 0 zt))).
+     rewrite map_length, rev_length, interval_length.
+     omega.
+   }
+   intros Hmax_vc.
+   do 5 eexists; [|split; [|split; [|clarify; split]]].
+   
+  +(*exec_star*) eapply exec_star_trans with (P':=P0'++(t0,inc_vc t0 (C +t0) tmp1++[Unlock m0] ++ instrument C L R W zt tmp1 tmp2 rest t0) ::l') .
+    *inversion Hmax_vc; inversion H. repeat rewrite <-app_assoc.
+     instantiate(1:=  (upd_env (upd_env G2 t0 tmp1 x) t0 tmp2 x0)).
+     
+    
+     eapply H0.
+     (*should've worked...eapply H0.*)
+     
+    *eapply exec_step; [ eapply exec_lock | eapply exec_refl]. eauto.
+    *eapply Hlock.
+  +(*consistent*)
+    rewrite app_nil_r; simpl. (*consistent*)
+      setoid_rewrite Forall_app in Hlocs; clarify.
+      inversion Hlocs2 as [|?? Hi ?]; clarify.
+      inversion Hi; clarify.
+      rewrite Forall_app in Ht; clarify.
+      inversion Ht2; clarify.
+      unfold consistent, SC in *.
+      Check lower_single.
+      rewrite lower_app in Hcon.
+        repeat rewrite lower_single in Hcon. rewrite lower_app; simpl in *.
+        rewrite lower_cons.
+      Check consistent_app.
+      Check loc_valid_ops1.
+      (*rewrite to_ilist_app. Check reads_noops. rewrite reads_noops.
+      rewrite <- to_ilist_app.*)
+      apply loc_valid_ops; auto.
+      * rewrite Forall_forall; intros ? Hin.
+        rewrite Forall_forall. intros ? Hin2.
+        rewrite in_map_iff in Hin; clarify;
+        rewrite in_map_iff in Hin2; clarify;
+        admit. 
+      * eapply (mops_max_vc_con_lc Hs); eauto.
+        eapply consistent_app; eauto.
+  +(*state sim*)apply Forall2_app; auto.
+  +(*env_sim*)
+    unfold env_sim in *; clarify.
+    repeat rewrite upd_old; eauto.
+  +(*mem_sim*)
+    simpl. 
+    setoid_rewrite Forall_app in Hlocs; clarify.
+      inversion Hlocs2 as [|?? Hi ?]; clarify.
+      inversion Hi; clarify.
+      unfold mem_sim in *; split; clarify; repeat rewrite in_app in *; clarify.
+      contradiction H2.
+      rewrite Forall_app in Ht; clarify.
+      inversion Ht2; clarify.
+      eapply mops_max_vc_meta; eauto.
     admit.
  -(*spawn*)
     admit.
