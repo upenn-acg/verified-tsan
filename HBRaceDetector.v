@@ -1760,14 +1760,11 @@ Lemma instrument_sim_safe2 : forall P P1 P2 G1 G2 h
   m (Hroot : exec_star (Some (init_state P)) init_env h m (Some P1) G1)
   o2 c2 P2' G2' (Hstep : exec P2 G2 o2 c2 (Some P2') G2')
   (Hcon : consistent (m ++ opt_to_list c2)) s (Hs : clocks_sim m s),
-  
-  exists o c P1' G1', exec P1 G1 o c P1' G1' /\
+  exists o c P1' G1', exec P1 G1 o c (Some P1') G1' /\
     state_sim P1' P2' /\ env_sim G1' G2' /\
-    mem_sim c (opt_to_list c2 ++ lc) /\
+    mem_sim c (opt_to_list c2) /\
         exists s', step_star s (opt_to_list o) s' /\
-                   clocks_sim (m ++ opt_to_list c2 ++ lc) s'
-    | None => forall s', ~step_star s (opt_to_list o) s'
-    end end.
+                   clocks_sim (m ++ opt_to_list c2) s'.
 Proof.
   intros.
   exploit exec_exec_t; eauto; intros (t & Hstept); clear Hstep.
