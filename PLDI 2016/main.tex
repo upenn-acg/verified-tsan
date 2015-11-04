@@ -77,17 +77,31 @@ dynamic race detection, interactive theorem proving
 
 \section{Introduction}
 
+Our approach involves two levels: verifying the high-level algorithm, and proving that an instrumentation pass implements the algorithm.
 
 Our contributions are:
 \begin{itemize}
-\item Mechanized proofs of correctness of vector clock race detection and FastTrack
+\item First mechanized proofs of correctness of vector clock race detection and FastTrack
+\item Discovered an issue/asymmetry in the paper proof of correctness for FastTrack
 \item An instrumentation pass that has been proved to implement vector clock race detection for a simple language
+\item A method for verifying race detection instrumentation (the deep spec approach)
 \end{itemize}
+
+\section{Proof Strategy}
+Our approach involves two levels: verifying the high-level algorithm, and proving that an instrumentation pass implements the algorithm.
 
 \section{Race Detection Algorithms}
 \subsection{Vector Clock Race Detection}
+definition
+
+verification
 
 \subsection{FastTrack}
+definition
+
+verification
+
+And we found a bug.
 
 \section{Instrumenting a Simple Language}
 \subsection{The Language}
@@ -98,13 +112,12 @@ We define a simple multithreaded language that is just complicated enough to hav
 \subsection{Necessary Synchronization}
 Completely unsynchronized instrumentation cannot be sound and complete. (example) At the same time, adding too much synchronization could significantly hurt performance.
 
-\section{Verification}
-We verify the correctness of the instrumentation in two steps. First, we show that a simple abstract algorithm for vector clock race detection is sound and complete. Second, we show that instrumentation records the same information and performs the same checks as the algorithm would perform on any program.
+\section{Verifying Instrumentation}
+We verify the correctness of the instrumentation by showing that instrumentation records the same information and performs the same checks as the algorithm would perform on any program.
 
-\subsection{Verifying VC Race Detection}
-Maybe we should keep this short, since it's pretty simple.
+lemmas relating each instrumentation segment to vector clock operations
 
-\subsection{Verifying the Instrumentation}
+simulation relation and clear statements of two directions
 
 \section{Related Work}
 FastTrack, etc.; verified instrumentation like SoftBound
@@ -115,6 +128,8 @@ verified FastTrack instrumentation
 more faithful/detailed implementation
 
 relaxed memory, if it matters
+
+other kinds of instrumentation, e.g. atomicity violation monitoring
 
 \bibliographystyle{abbrvnat}
 \bibliography{sources}

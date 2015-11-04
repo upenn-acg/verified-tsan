@@ -137,7 +137,7 @@ Section Semantics.
         (Some (P1 ++ (t, rest) :: P2)) G
 
   | exec_unlock P1 P2 m rest
-      (Hlock : P = P1 ++ (t, Unlock m :: rest) :: P2) :
+      (Hunlock : P = P1 ++ (t, Unlock m :: rest) :: P2) :
       exec P G t (Some (rel t m)) (Some (ARW t (m, 0) (S t) 0))
         (Some (P1 ++ (t, rest) :: P2)) G
 
