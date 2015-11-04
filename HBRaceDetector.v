@@ -1058,6 +1058,94 @@ Definition clocks_sim (m : list conc_op) (s : vstate) :=
   (forall v, v < zv -> clock_match m (read_of s v) (R + v) /\
      clock_match m (write_of s v) (W + v)).
 
+Lemma op_indep : forall c1 c2 (Hindep : loc_of c1 <> loc_of c2),
+   Forall (fun l => Forall (independent l) (map block_model.loc_of (to_seq c2)))
+     (map block_model.loc_of (to_seq c1)).
+Proof.
+  destruct c1, c2; clarify.
+Qed.
+
+Lemma loc_comm_SC : forall m1 c1 c2 m2 (Hindep : loc_of c1 <> loc_of c2)
+  (Hcon : consistent (m1 ++ c1 :: c2 :: m2)), consistent (m1 ++ c2 :: c1 :: m2).
+Proof.
+  unfold consistent, SC; clarify.
+  rewrite lower_app, lower_cons, lower_cons;
+    rewrite lower_app, lower_cons, lower_cons in Hcon.
+  repeat rewrite to_ilist_app in *; rewrite loc_comm_ops; auto.
+  apply op_indep; auto.
+Qed.
+  
+Lemma loc_comm_ops1_SC : forall c lc m1 m2
+  (Hindep : Forall (fun c' => loc_of c' <> loc_of c) lc),
+  consistent (m1 ++ c :: lc ++ m2) <-> consistent (m1 ++ lc ++ c :: m2).
+Proof.
+  induction lc; clarify; [reflexivity|].
+  inversion Hindep; clarify.
+  specialize (IHlc (m1 ++ [a]) m2); clarsimp.
+  etransitivity; eauto; split; apply loc_comm_SC; auto.
+Qed.
+
+Lemma loc_comm_ops_SC : forall lc1 lc2 m1 m2
+  (Hindep : Forall (fun c => Forall (fun c' => loc_of c' <> loc_of c) lc2) lc1),
+  consistent (m1 ++ lc1 ++ lc2 ++ m2) <-> consistent (m1 ++ lc2 ++ lc1 ++ m2).
+Proof.
+  induction lc1; clarify; [reflexivity|].
+  specialize (IHlc1 lc2 (m1 ++ [a]) m2); inversion Hindep; clarsimp.
+  etransitivity; eauto; apply loc_comm_ops1_SC; auto.
+Qed.
+
+Lemma consistent_app_SC : forall m1 m2 (Hcon : consistent (m1 ++ m2)),
+  consistent m1.
+Proof.
+  unfold consistent, SC; intros.
+  rewrite lower_app in Hcon; eapply consistent_app; eauto.
+Qed.
+
+Lemma loc_valid_SC : forall m c1 c2 (Hindep : loc_of c1 <> loc_of c2),
+  consistent (m ++ [c1; c2]) <->
+  (consistent (m ++ [c1]) /\ consistent (m ++ [c2])).
+Proof.
+  split; intros.
+  - split.
+    + rewrite split_app in H; exploit consistent_app_SC; eauto; clarify.
+    + exploit loc_comm_SC; eauto; intro H'.
+      rewrite split_app in H'; exploit consistent_app_SC; eauto; clarify.
+  - unfold consistent, SC in *; clarify.
+    repeat rewrite lower_app; rewrite lower_cons; repeat rewrite lower_single.
+    rewrite lower_app, lower_single in H1, H2.
+    apply loc_valid_ops; auto.
+    apply op_indep; auto.
+Qed.
+
+Lemma read_noop_SC : forall m t x v m2 (Hcon : consistent (m ++ [Read t x v])),
+  consistent (m ++ Read t x v :: m2) <-> consistent (m ++ m2).
+Proof.
+  unfold consistent, SC; clarify.
+  repeat rewrite lower_app; rewrite lower_app in Hcon.
+  rewrite lower_single in Hcon; rewrite lower_cons; clarify.
+  rewrite split_app; do 2 rewrite to_ilist_app; apply read_noop; auto.
+Qed.
+
+Lemma can_write_SC : forall p ops m (Hcan : can_write m p)
+  (Hcon : consistent (m ++ ops)), can_write (m ++ ops) p.
+Proof.
+  induction ops; clarsimp.
+  specialize (IHops (m ++ [a])); clarsimp.
+  apply IHops; auto; clear IHops.
+  rewrite split_app in Hcon; exploit consistent_app_SC; eauto; intro Hcon'.
+  clear Hcon; unfold can_write, consistent, SC in *; clarsimp.
+  specialize (Hcan v); rewrite lower_app, lower_single in Hcan, Hcon';
+    rewrite lower_app, lower_cons, lower_single.
+  destruct a; clarify.
+  - rewrite read_noop_single; auto.
+  - rewrite write_not_read_single; clarify.
+  - rewrite split_app, write_not_read_single; clarsimp.
+    rewrite read_noop_single; auto.
+    rewrite split_app in Hcon'; eapply consistent_app; eauto.
+Qed.
+
+
+
 (* returns true if v is not used in e*)
 Fixpoint expr_fresh (v : local) (e : expr) :=
   match e with
@@ -1853,77 +1941,6 @@ Admitted.
    - prove that for any interleaving, there's an equivalent reordering of the
      steps in which instrumented sections execute in blocks (true only with
      sufficient synchronization). *)
-
-(* up! *)
-Lemma op_indep : forall c1 c2 (Hindep : loc_of c1 <> loc_of c2),
-   Forall (fun l => Forall (independent l) (map block_model.loc_of (to_seq c2)))
-     (map block_model.loc_of (to_seq c1)).
-Proof.
-  destruct c1, c2; clarify.
-Qed.
-
-Lemma loc_comm_SC : forall m1 c1 c2 m2 (Hindep : loc_of c1 <> loc_of c2)
-  (Hcon : consistent (m1 ++ c1 :: c2 :: m2)), consistent (m1 ++ c2 :: c1 :: m2).
-Proof.
-  unfold consistent, SC; clarify.
-  rewrite lower_app, lower_cons, lower_cons;
-    rewrite lower_app, lower_cons, lower_cons in Hcon.
-  repeat rewrite to_ilist_app in *; rewrite loc_comm_ops; auto.
-  apply op_indep; auto.
-Qed.
-  
-Lemma loc_comm_ops1_SC : forall c lc m1 m2
-  (Hindep : Forall (fun c' => loc_of c' <> loc_of c) lc),
-  consistent (m1 ++ c :: lc ++ m2) <-> consistent (m1 ++ lc ++ c :: m2).
-Proof.
-  induction lc; clarify; [reflexivity|].
-  inversion Hindep; clarify.
-  specialize (IHlc (m1 ++ [a]) m2); clarsimp.
-  etransitivity; eauto; split; apply loc_comm_SC; auto.
-Qed.
-
-Lemma loc_comm_ops_SC : forall lc1 lc2 m1 m2
-  (Hindep : Forall (fun c => Forall (fun c' => loc_of c' <> loc_of c) lc2) lc1),
-  consistent (m1 ++ lc1 ++ lc2 ++ m2) <-> consistent (m1 ++ lc2 ++ lc1 ++ m2).
-Proof.
-  induction lc1; clarify; [reflexivity|].
-  specialize (IHlc1 lc2 (m1 ++ [a]) m2); inversion Hindep; clarsimp.
-  etransitivity; eauto; apply loc_comm_ops1_SC; auto.
-Qed.
-
-Lemma consistent_app_SC : forall m1 m2 (Hcon : consistent (m1 ++ m2)),
-  consistent m1.
-Proof.
-  unfold consistent, SC; intros.
-  rewrite lower_app in Hcon; eapply consistent_app; eauto.
-Qed.
-
-Lemma loc_valid_SC : forall m c1 c2 (Hindep : loc_of c1 <> loc_of c2),
-  consistent (m ++ [c1; c2]) <->
-  (consistent (m ++ [c1]) /\ consistent (m ++ [c2])).
-Proof.
-  split; intros.
-  - split.
-    + rewrite split_app in H; exploit consistent_app_SC; eauto; clarify.
-    + exploit loc_comm_SC; eauto; intro H'.
-      rewrite split_app in H'; exploit consistent_app_SC; eauto; clarify.
-  - unfold consistent, SC in *; clarify.
-    repeat rewrite lower_app; rewrite lower_cons; repeat rewrite lower_single.
-    rewrite lower_app, lower_single in H1, H2.
-    apply loc_valid_ops; auto.
-    apply op_indep; auto.
-Qed.
-
-Lemma read_noop_SC : forall m t x v m2 (Hcon : consistent (m ++ [Read t x v])),
-  consistent (m ++ Read t x v :: m2) <-> consistent (m ++ m2).
-Proof.
-  unfold consistent, SC; clarify.
-  repeat rewrite lower_app; rewrite lower_app in Hcon.
-  rewrite lower_single in Hcon; rewrite lower_cons; clarify.
-  rewrite split_app; do 2 rewrite to_ilist_app; apply read_noop; auto.
-Qed.
-
-(* end up *)
 
 Definition add_lock li l := Lock l :: li ++ [Unlock l].
 
