@@ -1039,9 +1039,9 @@ Context (ML : Memory_Layout nat var_eq).
 
 Definition consistent (m : list conc_op) := @SC _ _ _ ML _ _ Base m.
 
-Definition can_read (m : list conc_op) p v := consistent (m ++ [Read 0 p v]).
-Definition can_write (m : list conc_op) p :=
-  forall v, consistent (m ++ [Write 0 p v]).
+Definition can_read (m : list conc_op) t p v := consistent (m ++ [Read t p v]).
+Definition can_write (m : list conc_op) t p :=
+  forall v, consistent (m ++ [Write t p v]).
 
 Variables (C L R W : var) (zt zl zv : nat) (tmp1 tmp2 : local)
   (Htmp : tmp1 <> tmp2).
@@ -1049,7 +1049,7 @@ Variables (C L R W : var) (zt zl zv : nat) (tmp1 tmp2 : local)
 Definition vstate := @VectorClocks.state tid var lock.
 
 Definition clock_match m V x := forall t,
-  if lt_dec t zt then can_read m (x, t) (V t) /\ can_write m (x, t)
+  if lt_dec t zt then can_read m t (x, t) (V t) /\ can_write m t (x, t)
   else V t = 0.
 
 Definition clocks_sim (m : list conc_op) (s : vstate) :=
@@ -1126,8 +1126,8 @@ Proof.
   rewrite split_app; do 2 rewrite to_ilist_app; apply read_noop; auto.
 Qed.
 
-Lemma can_write_SC : forall p ops m (Hcan : can_write m p)
-  (Hcon : consistent (m ++ ops)), can_write (m ++ ops) p.
+Lemma can_write_SC : forall p ops m t (Hcan : can_write m t p)
+  (Hcon : consistent (m ++ ops)), can_write (m ++ ops) t p.
 Proof.
   induction ops; clarsimp.
   specialize (IHops (m ++ [a])); clarsimp.
@@ -1752,6 +1752,8 @@ Proof.
  inversion Hsafe; clarify.
    inversion Hstep0; clarify.
    intros.
+   pose proof can_write_SC as Hcan_write_SC. unfold can_write in Hcan_write_SC.
+   
    exploit max_vc_spec.
    {eauto. }
    {eauto. }
@@ -1769,7 +1771,8 @@ Proof.
    inversion Hmax_vc; inversion H.
    exploit inc_vc_spec.
    { eauto. }
-   intros Hinc_vc. 
+   intros Hinc_vc.
+
    unfold unlock_handler in *. 
    do 5 eexists; [|split; [|split; [|clarify; split]]].
    
@@ -1793,7 +1796,24 @@ Proof.
       inversion Hi; clarify.
       rewrite Forall_app in Ht; clarify.
       inversion Ht2; clarify.
+      assert(Htrivial: forall (X:Type) (a b c:X), [a;b;c]=[a]++[b;c]).
+        intros. auto.
+      instantiate(1:=C0 t0 t0).
+      rewrite Htrivial.
+      rewrite app_assoc. rewrite app_assoc.
+      rewrite loc_valid_SC.
+      *split.  
+       eapply Hcan_write_SC. 
+       {
+         intros. eapply Hcan_write_SC; intros; eauto.
+          unfold consistent, SC.
+          rewrite lower_app. clarify. rewrite lower_single. clarify.
+       }
+       
+       eapply can_write_SC. Print can_write.   
+      Check loc_valid_SC.
       unfold consistent, SC in *.
+
       rewrite lower_app in Hcon.
         repeat rewrite lower_single in Hcon. repeat rewrite lower_app; simpl in *.
         Check reads_noops.
@@ -1815,6 +1835,8 @@ Proof.
        rewrite <- app_assoc.
        rewrite Hwtf.
        rewrite not_mod_write.
+      d apply can_write_SC.
+       Check can_write_SC.
       
  -(*spawn*)
     admit.
