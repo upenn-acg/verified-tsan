@@ -1809,13 +1809,20 @@ Proof.
         assert(HCt0: meta_loc(C+t0,t0)).
           unfold meta_loc. clarify. omega.
         clarify.
-      *clarify. 
+      *clarify.
        assert(Hwtf: forall (X:Type) (a b:X) l, l++[a]++[b]=l++[a;b]).
          intros. auto.
        rewrite <- app_assoc.
        rewrite Hwtf.
        rewrite not_mod_write.
-      
+       instantiate (1 := 0).
+       admit.
+       admit.
+       admit.
+*admit.
++admit.
++admit.
++admit.
  -(*spawn*)
     admit.
  -(*wait*)
@@ -2025,13 +2032,15 @@ Inductive iexec P G t :
                   (mops_hb_check (W + x) (C + t) vs1 vs2 zt t ++
                    mops_move (C + t, t) (R + x, t) t v ++ [Read t (x, 0) v])
         (P1 ++ (t, rest) :: P2)
-        (upd_env (upd_env G t a v) t tmp2 (last vs2 (G t tmp2)))
+        (upd_env (upd_env (upd_env G t tmp1 v) t tmp2 (last vs2 (G t tmp2)))
+           t a v)
   | iexec_store P1 P2 x e rest vs1 vs2 vs3 v
       (Hstore : P = P1 ++ (t, store_handler t x C R W zt tmp1 tmp2 ++
                               Store (x, 0) e :: rest) :: P2)
       (Hlen1 : length vs1 = zt) (Hlen2 : length vs2 = zt)
       (Hlen3 : length vs3 = zt) (Hle1 : first_gt vs1 vs2 = None)
-      (Hle2 : first_gt vs3 vs2 = None) :
+      (Hle2 : first_gt vs3 vs2 = None)
+      (Hfresh1 : expr_fresh tmp1 e) (Hfresh2 : expr_fresh tmp2 e) :
       iexec P G t (events_hb_check (W + x) (C + t) vs1 vs2 t ++
                    events_hb_check (R + x) (C + t) vs3 vs2 t ++
                    events_move (C + t) (W + x) t ++ [wr t x])
@@ -2072,14 +2081,122 @@ Inductive iexec P G t :
       (Hwait : P = P1 ++ (t, Wait u :: wait_handler t u C zt tmp1 tmp2 ++ rest) 
                    :: P2) (Hdone : In (u, []) P)
       (Hlen1 : length vs1 = zt) (Hlen2 : length vs2 = zt) :
-      iexec P G t (events_max_vc (C + u) (C + t) t zt ++ [join t u])
+      iexec P G t (join t u :: events_max_vc (C + u) (C + t) t zt)
                  (mops_max_vc (C + u) (C + t) vs1 vs2 t zt)
         (P1 ++ (t, rest) :: P2) (upd_env (upd_env G t tmp1 (last vs1 0))
                                  t tmp2 (Peano.max (last vs1 0) (last vs2 0)))
-  | exec_assert P1 P2 e1 e2 rest
+  | iexec_assert P1 P2 e1 e2 rest
       (Hassert : P = P1 ++ (t, Assert_le e1 e2 :: rest) :: P2)
       (Hpass : eval (G t) e1 <= eval (G t) e2) :
       iexec P G t [] [] (P1 ++ (t, rest) :: P2) G.
+
+Lemma env_sim_refl : forall G, env_sim G G.
+Proof. repeat intro; auto. Qed.
+
+Corollary eval_old' : forall G t v1 v2 e
+  (Hfresh1 : expr_fresh tmp1 e) (Hfresh2 : expr_fresh tmp2 e),
+  eval (upd_env (upd_env G t tmp1 v1) t tmp2 v2 t) e = eval (G t) e.
+Proof.
+  intros; apply eval_old; auto.
+  apply env_sim_refl.
+Qed.
+
+Lemma exec_step_inv : forall P G t lo lc P' G' rd mops
+  (Hexec : exec_star (Some P) G lo lc (Some P') G') o c P'' G''
+  (Hexec' : exec P' G' t o c P'' G'')
+  (Hrd : rd = lo ++ opt_to_list o)
+  (Hmops : mops = lc ++ opt_to_list c),
+  exec_star (Some P) G rd mops P'' G''.
+Proof.
+  clarify; eapply exec_star_trans; eauto.
+  eapply exec_step'; eauto.
+  - apply exec_refl.
+  - rewrite app_nil_r; auto.
+  - rewrite app_nil_r; auto.
+Qed.
+
+Hypothesis zt_non_zero : zt <> 0.
+
+Lemma iexec_exec : forall P G t lo lc P' G' (Hiexec : iexec P G t lo lc P' G'),
+  exec_star (Some P) G lo lc (Some P') G'.
+Proof.
+  intros; induction Hiexec; clarify.
+  - eapply exec_step'.
+    + apply exec_assign; eauto.
+    + apply exec_refl.
+    + auto.
+    + auto.
+  - eapply exec_step_inv.
+    + apply load_handler_norace_spec; try (apply Hle); eauto.
+    + apply exec_load; eauto.
+    + clarsimp.
+    + clarsimp.
+  - eapply exec_step_inv.
+    + apply store_handler_norace_spec.
+      { eauto. }
+      { apply Htmp. }
+      { apply eq_refl. }
+      { apply Hlen2. }
+      { apply Hlen3. }
+      { auto. }
+      { auto. }
+    + apply exec_store; eauto.
+    + clarsimp.
+    + clarsimp.
+      rewrite eval_old'; auto.
+  - eapply exec_step'.
+    + eapply exec_lock; eauto.
+    + apply lock_handler_spec; eauto.
+    + auto.
+    + auto.
+  - destruct (length vs1) eqn: Hlen1; [clarify|].
+    destruct (nil_dec vs1); [clarify|].
+    destruct (nil_dec vs2); [clarify|].
+    eapply exec_step_inv.
+    + eapply unlock_handler_spec_n.
+      { eauto. }
+      { rewrite (app_removelast_last 0 n0), app_length, Nat.add_1_r in Hlen1;
+          inversion Hlen1; eauto. }
+      { rewrite (app_removelast_last 0 n1), app_length, Nat.add_1_r in Hlen2;
+          inversion Hlen2; eauto. }
+      { auto. }
+    + apply exec_unlock; eauto.
+    + clarsimp.
+    + repeat rewrite <- app_removelast_last; clarsimp.
+  - destruct (length vs) eqn: Hlen1; [clarify|].
+    destruct (nil_dec vs); [clarify|].
+    eapply exec_step_inv.
+    + eapply spawn_handler_spec_n with (v := last vs 0).
+      { eauto. }
+      { rewrite (app_removelast_last 0 n0), app_length, Nat.add_1_r in Hlen1;
+          inversion Hlen1; eauto. }
+    + apply exec_spawn; eauto.
+      intro; contradiction Hnew.
+      rewrite in_map_iff in *; clarify.
+      exists x; clarify.
+      rewrite map_app, in_app in *; clarify.
+      destruct x; clarify.
+      contradiction Hnew; rewrite in_app; clarify.
+    + clarsimp.
+    + rewrite <- app_removelast_last; clarsimp.
+  - destruct (length vs1) eqn: Hlen1; [clarify|].
+    destruct (nil_dec vs1); [clarify|].
+    destruct (nil_dec vs2); [clarify|].
+    eapply exec_step'.
+    + apply exec_wait; auto.
+    + apply wait_handler_spec_n; eauto.
+      { rewrite (app_removelast_last 0 n0), app_length, Nat.add_1_r in Hlen1;
+          inversion Hlen1; eauto. }
+      { rewrite (app_removelast_last 0 n1), app_length, Nat.add_1_r in Hlen2;
+          inversion Hlen2; eauto. }
+    + clarsimp.
+    + repeat rewrite <- app_removelast_last; clarsimp.
+  - eapply exec_step'.
+    + eapply exec_assert_pass; eauto.
+    + apply exec_refl.
+    + auto.
+    + auto.
+Qed.
 
 Definition mutual_exclusion : forall P l (Hl : wf_lock P l)
   (Hlocked : can_read
