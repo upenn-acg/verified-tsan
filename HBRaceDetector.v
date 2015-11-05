@@ -1039,9 +1039,9 @@ Context (ML : Memory_Layout nat var_eq).
 
 Definition consistent (m : list conc_op) := @SC _ _ _ ML _ _ Base m.
 
-Definition can_read (m : list conc_op) p v := consistent (m ++ [Read 0 p v]).
-Definition can_write (m : list conc_op) p :=
-  forall v, consistent (m ++ [Write 0 p v]).
+Definition can_read (m : list conc_op) t p v := consistent (m ++ [Read t p v]).
+Definition can_write (m : list conc_op) t p :=
+  forall v, consistent (m ++ [Write t p v]).
 
 Variables (C L R W : var) (zt zl zv : nat) (tmp1 tmp2 : local)
   (Htmp : tmp1 <> tmp2).
@@ -1049,7 +1049,7 @@ Variables (C L R W : var) (zt zl zv : nat) (tmp1 tmp2 : local)
 Definition vstate := @VectorClocks.state tid var lock.
 
 Definition clock_match m V x := forall t,
-  if lt_dec t zt then can_read m (x, t) (V t) /\ can_write m (x, t)
+  if lt_dec t zt then can_read m t (x, t) (V t) /\ can_write m t (x, t)
   else V t = 0.
 
 Definition clocks_sim (m : list conc_op) (s : vstate) :=
@@ -1126,8 +1126,8 @@ Proof.
   rewrite split_app; do 2 rewrite to_ilist_app; apply read_noop; auto.
 Qed.
 
-Lemma can_write_SC : forall p ops m (Hcan : can_write m p)
-  (Hcon : consistent (m ++ ops)), can_write (m ++ ops) p.
+Lemma can_write_SC : forall p ops m t (Hcan : can_write m t p)
+  (Hcon : consistent (m ++ ops)), can_write (m ++ ops) t p.
 Proof.
   induction ops; clarsimp.
   specialize (IHops (m ++ [a])); clarsimp.
@@ -1752,6 +1752,8 @@ Proof.
  inversion Hsafe; clarify.
    inversion Hstep0; clarify.
    intros.
+   pose proof can_write_SC as Hcan_write_SC. unfold can_write in Hcan_write_SC.
+   
    exploit max_vc_spec.
    {eauto. }
    {eauto. }
@@ -1769,7 +1771,8 @@ Proof.
    inversion Hmax_vc; inversion H.
    exploit inc_vc_spec.
    { eauto. }
-   intros Hinc_vc. 
+   intros Hinc_vc.
+
    unfold unlock_handler in *. 
    do 5 eexists; [|split; [|split; [|clarify; split]]].
    
@@ -1793,33 +1796,29 @@ Proof.
       inversion Hi; clarify.
       rewrite Forall_app in Ht; clarify.
       inversion Ht2; clarify.
-      unfold consistent, SC in *.
-      rewrite lower_app in Hcon.
-        repeat rewrite lower_single in Hcon. repeat rewrite lower_app; simpl in *.
-        Check reads_noops.
- (*rewrite to_ilist_app. Check reads_noops. rewrite reads_noops.
-      rewrite <- to_ilist_app.*)
-        rewrite lower_cons.  rewrite lower_cons.
-        rewrite app_assoc. rewrite app_assoc.
-      apply loc_valid_ops; auto.
-       
-      * rewrite Forall_forall; intros ? Hin;
-        rewrite Forall_forall; intros ? Hin2.
-        rewrite in_map_iff in Hin; clarify. intro.
-        assert(HCt0: meta_loc(C+t0,t0)).
+      assert(Htrivial: forall (X:Type) (a b c:X), [a;b;c]=[a]++[b;c]).
+        intros. auto.
+      instantiate(1:=C0 t0 t0).
+      rewrite Htrivial.
+      rewrite app_assoc. rewrite app_assoc.
+      assert ((C + t0, t0) <> (m0, 0)).
+      { assert(HCt0: meta_loc(C+t0,t0)).
           unfold meta_loc. clarify. omega.
-        clarify.
-      *clarify.
-       assert(Hwtf: forall (X:Type) (a b:X) l, l++[a]++[b]=l++[a;b]).
-         intros. auto.
-       rewrite <- app_assoc.
-       rewrite Hwtf.
-       rewrite not_mod_write.
-       instantiate (1 := 0).
-       admit.
-       admit.
-       admit.
-*admit.
+        intro; clarify. }
+      rewrite loc_valid_SC; auto.
+      assert (consistent ((m ++
+        mops_max_vc (C + t0) (L + m0) (map (C0 t0) (rev (interval 0 zt)))
+        (map (L0 m0) (rev (interval 0 zt))) t0 zt) ++
+        [Read t0 (C + t0, t0) (C0 t0 t0)])) as Hcon0.
+      { admit. }
+      split.
+      * apply Hcan_write_SC; auto.
+        intros. apply Hcan_write_SC; intros.
+        { unfold clocks_sim in Hs; clarify.
+          specialize (Hs1 t0); clarify.
+          specialize (Hs1 t0); clarify. }
+        { eapply consistent_app_SC; eauto. }
+      * admit.
 +admit.
 +admit.
 +admit.
