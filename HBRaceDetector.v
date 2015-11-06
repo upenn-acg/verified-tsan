@@ -1829,7 +1829,8 @@ Lemma iexec_inv : forall i P P1 t rest P2 G lo lc P' G'
       lo = events_set_vc (C + t) (C + u) zt t ++
            events_inc_vc (C + t) t ++ [fork t u] /\
       lc = mops_set_vc (C + t) (C + u) zt t vs ++ mops_inc_vc (C + t) v t /\
-      P' = P1 ++ (t, rest) :: (u, li) :: P2 /\ G' = upd_env G t tmp1 (v + 1)
+      P' = P1 ++ (t, rest) :: (u, instrument C L R W zt tmp1 tmp2 li u)
+           :: P2 /\ G' = upd_env G t tmp1 (v + 1)
   | Wait u => exists vs1 vs2, In (u, []) P /\ length vs1 = zt /\
       length vs2 = zt /\
       lo = join t u :: events_max_vc (C + u) (C + t) t zt /\
@@ -1844,16 +1845,49 @@ Proof.
   intros.
   inversion Hiexec; clarify; exploit distinct_thread; eauto; clarify.
   - destruct i; clarify; try (destruct x); destruct zt; clarify.
+  - admit.  
   - admit.
   - admit.
   - admit.
-  - admit.
-  - admit.
+  - destruct i; clarify; try solve [try destruct x; destruct vs; clarify].
+    admit.
   - admit.
   - admit.
 Qed.
 
 Lemma state_sim_step : forall P1 P2 G1 G2 t o lo c lc P1' P2' G1' G2'
+  (Hdistinct : distinct P2)
+  (Hexec : exec P1 G1 t o c (Some P1') G1')
+  (HPsim : state_sim P1 P2)
+  (Hiexec : iexec P2 G2 t lo lc P2' G2'),
+  state_sim P1' P2'.
+Proof.
+  intros.
+  inversion Hexec; clarify; exploit Forall2_app_inv_l; eauto 2;
+    intros (P0' & P3' & HP0 & Hrest & ?);
+    inversion Hrest as [|? (?, ?) ? ? ? HP3]; clarify.
+  - exploit (iexec_inv (Assign a e)); simpl; eauto; clarify.
+    apply Forall2_app; auto.
+  - destruct x as (x, o).
+    exploit (iexec_inv (Load a (x, o))); eauto; unfold state_sim; clarify.
+    apply Forall2_app; auto.
+  - destruct x as (x, o).
+    exploit (iexec_inv (Store (x, o) e)); eauto; unfold state_sim; clarify.
+    apply Forall2_app; auto.
+  - exploit (iexec_inv (Lock m)); simpl; eauto; unfold state_sim; clarify.
+    apply Forall2_app; auto.
+  - exploit (iexec_inv (Unlock m)); simpl; eauto; unfold state_sim; clarify.
+    apply Forall2_app; auto.
+  - exploit (iexec_inv (Spawn u li)); simpl; eauto; unfold state_sim; clarify.
+    apply Forall2_app; auto.
+  - exploit (iexec_inv (Wait u)); simpl; eauto; unfold state_sim; clarify.
+    apply Forall2_app; auto.
+  - exploit (iexec_inv (Assert_le e1 e2)); simpl; eauto; unfold state_sim;
+      clarify.
+    apply Forall2_app; auto.
+Qed.
+
+Lemma sim_step : forall P1 P2 G1 G2 t o lo c lc P1' P2' G1' G2'
   (Hfresh : fresh_tmps P1) (Hdistinct : distinct P2)
   (Hexec : exec P1 G1 t o c (Some P1') G1')
   (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2)
@@ -1862,11 +1896,11 @@ Lemma state_sim_step : forall P1 P2 G1 G2 t o lo c lc P1' P2' G1' G2'
 Proof.
   Print fresh_tmps.
   intros.
+  exploit state_sim_step; eauto; intro HPsim'; clarify.
   inversion Hexec; clarify; exploit Forall2_app_inv_l; eauto 2;
     intros (P0' & P3' & HP0 & Hrest & ?);
     inversion Hrest as [|? (?, ?) ? ? ? HP3]; clarify.
   - exploit (iexec_inv (Assign a e)); simpl; eauto; clarify.
-    split; [apply Forall2_app; auto|].
     unfold env_sim in *; unfold upd_env, upd; clarify.
     setoid_rewrite Forall_app in Hfresh; clarify.
     inversion Hfresh2 as [|? ? Hi]; clarify; inversion Hi. clarify.
@@ -1874,8 +1908,7 @@ Proof.
   - destruct x as (x, o).
     exploit (iexec_inv (Load a (x, o))); eauto.
     intros (vs1 & vs2 & v0 & vt & Hlen1 & Hlen2 & ?).
-    unfold state_sim; clarify; clear Hlen1.
-    split; [apply Forall2_app; auto|].
+    clarify; clear Hlen1.
     unfold env_sim in *; clarify. (*env_sim*)
     destruct (eq_dec v1 a); [subst | repeat rewrite upd_old; auto].
     destruct (eq_dec t t0); [subst | repeat rewrite upd_old_t; auto].
@@ -1886,15 +1919,10 @@ Proof.
   - destruct x as (x, o).
     exploit (iexec_inv (Store (x, o) e)); eauto.
     intros (vs1 & vs2 & vs3 & v & Hlen1 & Hlen2 & Hlen3 & ?).
-    unfold state_sim; clarify.
-    split; [apply Forall2_app; auto|].
     unfold env_sim in *; clarify. (*env_sim*)
-    repeat rewrite upd_old.
-    apply HGsim; eauto.
-    eauto. eauto.
+    repeat rewrite upd_old; eauto.
   - exploit (iexec_inv (Lock m)); simpl; eauto.
     unfold state_sim; clarify.
-    split; [apply Forall2_app; auto|].
     unfold env_sim in *; clarify.
     repeat rewrite upd_old; eauto.
   - admit.
@@ -2213,7 +2241,7 @@ Proof.
  -(*assert_le*)
     admit.
  - clarify; do 5 eexists; [eapply iexec_exec; eauto|].
-   exploit state_sim_step; eauto; clarify.
+   exploit sim_step; eauto; clarify.
 Qed.
 
 Definition bounded V z := forall t, ~t < z -> V t = 0.
@@ -2331,21 +2359,19 @@ Admitted.
 (* There's no escape from fine-grained interleaving. We can either:
    - use a messy simulation relation with cases for intermediate states; or
    - prove that for any interleaving, there's an equivalent reordering of the
-     steps in which instrumented sections execute in blocks (true only with
-     sufficient synchronization). *)
+     steps via iexec (true only with sufficient synchronization). *)
 
 Definition add_lock li l := Lock l :: li ++ [Unlock l].
 
 Lemma lock_stuck : forall P P1 P2 t l rest
   (HP : P = P1 ++ (t, Lock l :: rest) :: P2) (Hdistinct : distinct P)
-  m (Hlocked : ~can_read m t (l, 0) 0) G lo lc P' G'
+  m (Hlocked : ~can_read m (l, 0) 0) G lo lc P' G'
   (Hexec : exec P G t lo lc P' G'), ~consistent (m ++ opt_to_list lc).
 Proof.
   intros; inversion Hexec; clarify; exploit distinct_thread; eauto; clarify.
   unfold can_read, consistent, SC in *; intro Hcon.
   rewrite lower_app, lower_cons in Hlocked, Hcon; clarify.
   contradiction Hlocked.
-  unfold lower in *; clarify.
   rewrite split_app in Hcon; eapply consistent_app; eauto.
 Qed.
 
@@ -2361,7 +2387,7 @@ Lemma can_read_step : forall P P1 P2 t i rest x v (Hdistinct : distinct P)
   (HP : P = P1 ++ (t, i :: rest) :: P2) (Hnot_mods : ~mods_loc i x) m
   G o c P' G' (Hstep : exec P G t o c P' G')
   (Hcon : consistent (m ++ opt_to_list c)),
-  can_read (m ++ opt_to_list c) t x v <-> can_read m t x v.
+  can_read (m ++ opt_to_list c) x v <-> can_read m x v.
 Proof.
   intros.
   inversion Hstep; clarify; exploit distinct_thread; eauto; clarify;
@@ -2436,7 +2462,12 @@ Proof.
   unfold state_sim in HP; inversion Hexec0; clarify; exploit Forall2_app_inv_r;
     try apply HP; intros (P0' & P3' & HP0 & Hrest & ?);
     inversion Hrest as [|? (?, ?) ? ? ? HP3]; clarify.
-  unfold state_sim in HP; inversion H
+  - destruct x as (t, [|i li]); clarify.
+    destruct i; clarify; try solve [try destruct x; destruct zt; clarify].
+    exploit iexec_assign; eauto; intro Hassign.
+    exploit state_sim_step; eauto.
+    eapply (iexec_step (iexec_assign _ _ _ _ _ _ _ _)), H; eauto.
+    
 
 
 Definition mutual_exclusion : forall P l (Hl : wf_lock P l)
