@@ -1941,6 +1941,32 @@ Proof.
   repeat rewrite lower_single; simpl; apply write_any_value.
 Qed.  
 
+Lemma in_mops_max_vc: forall n c vc1 vc2 vs1 vs2 t
+   (Hin: In c (mops_max_vc vc1 vc2 vs1 vs2 t n) ) (Hdis: vc1<>vc2) ,
+  match c with 
+  | Write tc p _ => fst p <> vc1
+  | ARW _ _ _ _ => False
+  | Read tc p _  => fst p = vc1 \/ fst p= vc2
+  end.
+Proof.
+  intro n.
+  induction n; intros;
+  destruct c; clarify.
+  -destruct vs1, vs2; clarify.
+  -destruct vs1, vs2; clarify.
+  -destruct vs1, vs2; clarify.
+  -destruct vs1, vs2, x; clarify. 
+   inversion Hin; inversion H; clarify.
+   +inversion H0; clarify.
+   + specialize(IHn _ _ _ _ _ _ H0); clarify.
+  -destruct vs1,vs2, x; clarify.
+   inversion Hin; clarify.
+   +inversion H; clarify.
+   +specialize(IHn _ _ _ _ _ _ H); clarify.
+  -destruct vs1,vs2, x; clarify.
+   specialize(IHn _ _ _ _ _ _ Hin); clarify.
+Qed.
+
 Lemma instrument_sim_safe : forall P P1 P2 G1 G2 t h
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1) (Hdistinct : distinct P2)
   (Ht : Forall (fun e => fst e < zt) P1)
@@ -2128,16 +2154,86 @@ Proof.
         mops_max_vc (C + t0) (L + m0) (map (C0 t0) (rev (interval 0 zt)))
         (map (L0 m0) (rev (interval 0 zt))) t0 zt) ++
         [Read t0 (C + t0, t0) (C0 t0 t0)])) as Hcon0.
-      { admit. }
-      split.
-      * rewrite <- (app_assoc m) in *.
-        unfold clocks_sim in Hs; clarify.
-        specialize (Hs1 t0); clarify.
-        specialize (Hs1 t0); clarify.
-        generalize (can_write_SC _ Hs12 Hcon0); intro.
-        apply can_write_thread; auto.
-      * admit.
-+ admit.
+      { 
+        apply can_read_thread.
+        apply can_read_SC. 
+        +inversion Hs; clarify. 
+         specialize(H1 t0 H2); clarify. unfold clock_match in H1; clarify.
+         specialize(H1 t0); clarify.
+        +eapply (mops_max_vc_con_cl Hs); eauto.
+         eapply consistent_app_SC. eauto.
+        +rewrite Forall_forall; clarify.
+         destruct x; clarify.
+         apply in_mops_max_vc in H1.
+          *intro Heq. clarify.
+          *admit. (* C and L don't overlap*)
+          *admit. (* C and L don't overlap*)
+      }
+      split; clarify.
+      *apply can_write_thread.
+       
+       eapply can_write_SC.
+       {
+
+         unfold can_write; clarify.
+         apply can_write_SC.
+         -unfold can_write; clarify.
+          inversion Hs; clarify.
+          specialize(H1 _ H2); unfold clock_match in H1; clarify.
+          specialize(H1 t0); clarify.
+         -eapply consistent_app_SC. eauto.
+       }
+       {auto. }
+     *Check loc_valid_ops_SC.  rewrite <- app_assoc. rewrite <- app_assoc. 
+      
+      assert(Hsilly:   (m ++
+      mops_max_vc (C + t0) (L + m0) (map (C0 t0) (rev (interval 0 zt)))
+        (map (L0 m0) (rev (interval 0 zt))) t0 zt ++
+      [Read t0 (C + t0, t0) (C0 t0 t0)] ++ [ARW t0 (m0, 0) (S t0) 0]) =  (m ++
+      (mops_max_vc (C + t0) (L + m0) (map (C0 t0) (rev (interval 0 zt)))
+        (map (L0 m0) (rev (interval 0 zt))) t0 zt ++
+      [Read t0 (C + t0, t0) (C0 t0 t0)]) ++ [ARW t0 (m0, 0) (S t0) 0])).
+        rewrite <- app_assoc. clarify. 
+      setoid_rewrite Hsilly.
+      
+      setoid_rewrite loc_valid_ops_SC.
+      split; clarify.
+      rewrite app_assoc. clarify.
+      rewrite Forall_forall.  intros. rewrite Forall_forall. clarify.
+      rewrite in_app in H1. inversion H1; clarify. 
+      Check mops_max_vc_meta.
+      intro Heq. contradiction H21. rewrite Heq.  eapply mops_max_vc_meta; eauto.
+    +(*mem_sim*)
+     Print mem_sim.
+     setoid_rewrite Forall_app in Hlocs; clarify.
+     inversion Hlocs2; clarify.
+     inversion H1. clarify. rewrite Forall_forall in H1.
+     rewrite Forall_app in Ht; clarify. 
+     inversion Ht2; clarify.
+     unfold mem_sim in *; clarify. split; clarify; repeat rewrite in_app in *; clarify.
+     left.
+     destruct c; clarify; inversion H0; clarify.
+     *Check in_mops_max_vc. Check mops_max_vc_meta.
+      assert(Hmeta: meta_loc (loc_of(Read t x v))).
+        eapply mops_max_vc_meta; eauto.
+      clarify.
+     *inversion H; clarify.
+      assert(Hmeta: meta_loc x).
+        unfold meta_loc in *; clarify.
+         destruct x as (x,o); clarify. 
+         inversion H7; clarify.
+         admit. (*omega times out here*)
+     clarify.
+    *assert(Hmeta: meta_loc (loc_of (Write t x v))).
+       eapply mops_max_vc_meta; eauto.
+     clarify.
+    *assert(Hmeta: meta_loc (loc_of (Write t x v))).
+       unfold meta_loc in *; clarify.
+       admit.  (*omega times out here*)
+     clarify.
+    *assert(Hmeta: meta_loc (loc_of (ARW t x v v'))).
+       eapply mops_max_vc_meta; eauto.
+     clarify.
  -(*spawn*)
     admit.
  -(*wait*)
