@@ -1176,6 +1176,7 @@ Proof.
   rewrite split_app in Hcon; eapply consistent_app_SC; eauto.
 Qed.
 
+Print can_write.
 Lemma can_write_SC : forall p ops m (Hcan : can_write m p)
   (Hcon : consistent (m ++ ops)), can_write (m ++ ops) p.
 Proof.
@@ -1186,13 +1187,48 @@ Proof.
   clear Hcon; unfold can_write, consistent, SC in *; clarsimp.
   specialize (Hcan v); rewrite lower_app, lower_single in Hcan, Hcon';
     rewrite lower_app, lower_cons, lower_single.
-  destruct a; clarify.
-  - rewrite read_noop_single; auto.
-  - rewrite write_not_read_single; clarify.
-  - rewrite split_app, write_not_read_single; clarsimp.
+  destruct a eqn:Ha. 
+  - clarify. rewrite read_noop_single; auto.
+  - clarify. rewrite write_not_read_single; clarify.
+  - clarify. rewrite split_app, write_not_read_single; clarsimp.
     rewrite read_noop_single; auto.
     rewrite split_app in Hcon'; eapply consistent_app; eauto.
 Qed.
+Print ARW.
+Lemma can_read_SC: forall p ops m v (Hcan: can_read m p v)
+  (Hcon: consistent ( m ++ ops)) (Hnmods: Forall (fun c => match c with 
+                                                             | Write _ x _ => p <> x
+                                                             | ARW _ x _ _=> p <> x
+                                                             | _ => True
+                                                           end) ops),
+  can_read (m++ops) p v.
+Proof.
+  induction ops; clarsimp.
+  specialize(IHops (m++[a])); clarsimp.
+  apply IHops; auto.
+  rewrite split_app in Hcon; exploit consistent_app_SC; eauto; intro Hcon'.
+  unfold can_read, consistent, SC in *; clarsimp.
+ rewrite lower_app, lower_single in Hcon'.
+  rewrite lower_app, lower_single in Hcan.
+  rewrite lower_app, lower_cons, lower_single.
+  
+  destruct a; clarify.
+  -rewrite read_noop_single; clarify; auto.
+  -rewrite write_not_read_single; auto.
+   intros.
+   apply Forall_inv in Hnmods. clarsimp.
+   intro Heq. inversion Heq; clarify.
+  -rewrite split_app. rewrite write_not_read_single; clarsimp. 
+   +rewrite read_noop_single; auto.
+    rewrite split_app in Hcon'; eapply consistent_app; eauto.
+   +apply Forall_inv in Hnmods. clarsimp.
+    intro Heq. inversion Heq; clarify.
+  -assert( a::ops =[a]++ops) as Haops.
+     clarify.
+   rewrite Haops in Hnmods. 
+   apply Forall_app in Hnmods. inversion Hnmods. auto.
+Qed.
+    
 
 (* returns true if v is not used in e*)
 Fixpoint expr_fresh (v : local) (e : expr) :=
@@ -1395,6 +1431,7 @@ Proof.
     apply can_read_thread; auto.
 Qed.
 
+(* all mops in max_vc only never go out of bound*)
 Lemma mops_max_vc_off : forall src tgt f g t n,
   Forall (fun c' => match loc_of c' with (x, o) => o < n end)
      (mops_max_vc src tgt (map f (rev (interval 0 n)))
@@ -1423,10 +1460,12 @@ Proof.
   - rewrite loc_valid_ops2_SC; [split|].
     + apply IHn; auto; omega.
     + specialize (Hs1 _ Ht n); clarify.
+      Check can_write_thread.
+      Print clocks_sim. Print clock_match. Print can_read.
       apply can_write_thread; auto.
     + simpl.
       eapply Forall_impl; [|apply mops_max_vc_off]; clarify.
-      destruct (loc_of a); intro; clarify; omega.
+      destruct (loc_of a). intro; clarify. omega.
   - specialize (Hs1 _ Ht n); clarify.
     apply can_read_thread; auto.
   - clarsimp.
@@ -1733,6 +1772,7 @@ Lemma distinct_thread : forall P1 P2 t li P1' P2' li'
   (Heq : P1 ++ (t, li) :: P2 = P1' ++ (t, li') :: P2'),
   P1' = P1 /\ P2' = P2 /\ li' = li.
 Proof.
+  Print distinct.
   intros.
   generalize (NoDup_inj(x := t) (length (map fst P1)) (length (map fst P1'))
     Hdistinct); intro Heq'; use Heq'; [use Heq'|].
@@ -1820,6 +1860,7 @@ Lemma state_sim_step : forall P1 P2 G1 G2 t o lo c lc P1' P2' G1' G2'
   (Hiexec : iexec P2 G2 t lo lc P2' G2') (Hmem : mem_sim c lc),
   state_sim P1' P2' /\ env_sim G1' G2'.
 Proof.
+  Print fresh_tmps.
   intros.
   inversion Hexec; clarify; exploit Forall2_app_inv_l; eauto 2;
     intros (P0' & P3' & HP0 & Hrest & ?);
@@ -1890,42 +1931,43 @@ Proof.
   inversion Hstep; clarify; exploit Forall2_app_inv_l; eauto 2;
     intros (P0' & P3' & HP0 & Hrest & ?);
     inversion Hrest as [|? (?, ?) ? ? ? HP3]; clarify.
-  - do 5 eexists; [|split].
+  - do 5 eexists; [|split]. (*Assign*)
     + apply iexec_assign; eauto.
     + auto.
     + unfold mem_sim; repeat split; clarify.
-  - destruct x as (x, o).
+  - destruct x as (x, o). (*Load*)
     inversion Hsafe; clarify.
     inversion Hstep0; clarify.
     rewrite <- app_assoc; simpl; do 5 eexists; [|split].
-    + apply iexec_load; eauto.
+    + apply iexec_load; eauto. (*iexec*)
       * instantiate (1 := map (W0 x) (rev (interval 0 zt))).
         rewrite map_length, rev_length, interval_length; omega.
       * instantiate (1 := map (C0 t0) (rev (interval 0 zt))).
         rewrite map_length, rev_length, interval_length; omega.
       * apply vc_le_first_gt; auto.
-    + instantiate (1 := v).
+    + instantiate (1 := v). (*consistent*)
       instantiate (1 := C0 t0 t0).
       setoid_rewrite Forall_app in Hlocs; clarify.
       inversion Hlocs2 as [|?? Hi ?]; clarify.
       inversion Hi as [|?? Hx ?]; clarify.
+      Print safe_instr.
       rewrite Forall_app in Ht; clarify.
       inversion Ht2; clarify.
       rewrite reads_noops_SC.
-      do 2 rewrite split_app.
+      do 2 rewrite split_app. Check split_app.
       rewrite <- (app_assoc m).
       rewrite <- app_assoc.
       rewrite loc_valid_ops1_SC; clarify.
       * eapply (mops_move_con Hs); eauto.
         eapply consistent_app_SC; eauto.
-      * assert (meta_loc (C + t0, t0)).
+      * assert (meta_loc (C + t0, t0)). (*independent locs*)
         { unfold meta_loc; simpl; omega. }
-        assert (meta_loc (R + x, t0)).
+        assert (meta_loc (R + x, t0)).  (*independent locs*)
         { unfold meta_loc; simpl; omega. }
         constructor; [|constructor]; auto; intro; contradiction Hx1; clarify.
       * apply (mops_hb_check_con Hs); auto.
         eapply consistent_app_SC; eauto.
-      * apply mops_hb_check_read.
+      * apply mops_hb_check_read. Check mops_hb_check_read.
     + setoid_rewrite Forall_app in Hlocs; clarify. (*mem_sim*)
       inversion Hlocs2 as [|?? Hi ?]; clarify.
       inversion Hi; clarify.
@@ -1944,7 +1986,7 @@ Proof.
    { eauto. }
    intro Hfresh_tmps.
    rewrite <- app_assoc; clarify; do 5 eexists; [|split].
-   + apply iexec_store; eauto.
+   + apply iexec_store; eauto.  (*iexec*)
     { instantiate (1 := map (W0 x) (rev (interval 0 zt))).
       rewrite map_length, rev_length, interval_length; omega. }
     { instantiate (1 := map (C0 t0) (rev (interval 0 zt))).
@@ -1953,7 +1995,7 @@ Proof.
       rewrite map_length, rev_length, interval_length; omega. }
     { apply vc_le_first_gt; auto. }
     { apply vc_le_first_gt; auto. }
-   +instantiate (1 := C0 t0 t0).
+   +instantiate (1 := C0 t0 t0). (*consistent*)
       setoid_rewrite Forall_app in Hlocs; clarify.
       inversion Hlocs2 as [|?? Hi ?]; clarify.
       inversion Hi as [|?? Hx ?]; clarify.
@@ -1996,7 +2038,7 @@ Proof.
    inversion Hsafe; clarify.
    inversion Hstep0; clarify.
    do 5 eexists; [|split].
-   + apply iexec_lock; eauto.
+   + apply iexec_lock; eauto. (*iexec*)
      { instantiate(1 := map (L0 m0) (rev (interval 0 zt))). 
        rewrite map_length, rev_length, interval_length; omega. }
      { instantiate(1:= map (C0 t0) (rev (interval 0 zt))).
@@ -2014,7 +2056,7 @@ Proof.
         eapply consistent_app_SC; eauto.
       * rewrite Forall_forall; intros ?? Heq.
         contradiction Hm1.
-        setoid_rewrite <- Heq; eapply mops_max_vc_meta; eauto.
+        setoid_rewrite <- Heq; eapply mops_max_vc_meta; eauto. Check mops_max_vc_meta.
   +(*mem_sim*)
     simpl. 
     setoid_rewrite Forall_app in Hlocs; clarify.
@@ -2029,7 +2071,7 @@ Proof.
    inversion Hsafe; clarify.
    inversion Hstep0; clarify.
    rewrite <- app_assoc; simpl; do 5 eexists; [|split].
-   + apply iexec_unlock; eauto.
+   + apply iexec_unlock; eauto. (*iexec*)
      { instantiate(1:=map (C0 t0) (rev (interval 0 zt))).
        rewrite map_length, rev_length, interval_length.
        omega.
@@ -2058,7 +2100,36 @@ Proof.
         mops_max_vc (C + t0) (L + m0) (map (C0 t0) (rev (interval 0 zt)))
         (map (L0 m0) (rev (interval 0 zt))) t0 zt) ++
         [Read t0 (C + t0, t0) (C0 t0 t0)])) as Hcon0.
-      { admit. }
+      { 
+        apply can_read_thread.
+        apply can_read_SC. 
+        +inversion Hs; clarify. 
+         specialize(H1 t0 H2); clarify. unfold clock_match in H1; clarify.
+         specialize(H1 t0); clarify.
+        +eapply (mops_max_vc_con_cl Hs); eauto.
+         eapply consistent_app_SC. eauto.
+        +rewrite Forall_forall; clarify.
+         destruct x; clarify.
+         intro Heq. Check mops_max_vc_meta.
+         
+        
+        inversion Hs; clarify. 
+        specialize(H1 t0 H2); clarify. unfold clock_match in H1. specialize(H1 t0); clarify.
+        Print can_read.
+        Check can_read_thread.
+        rewrite <- app_nil_r. rewrite <-app_assoc.
+        Check reads_noops_SC.
+        apply (reads_noops_SC).
+        Check app_nil_r.
+        rewrite <- app_assoc.
+        Check reads_noops_SC.
+        apply (reads_noops_SC m _ []); eauto.
+        *eapply (mops_max_vc_con_cl Hs); eauto.
+         eapply consistent_app_SC. eauto.
+        *Check mops_max_vc_meta. clarify. rewrite Forall_forall. intros.
+         Check mops_max_vc_off. 
+        
+      }
       split.
       * rewrite <- (app_assoc m) in *.
         unfold clocks_sim in Hs; clarify.
