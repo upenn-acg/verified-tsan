@@ -81,8 +81,6 @@ Section Semantics.
   Definition synchronizes_with c1 c2 := loc_of c1 = loc_of c2 /\
     exists t x v v', c1 = ARW t x v v' \/ c2 = ARW t x v v'.
 
-  Instance var_eq : EqDec_eq var. eq_dec_inst. Qed.
- 
   Fixpoint drop_b_reads b l :=
     match l with
     | [] => []
@@ -96,7 +94,7 @@ Section Semantics.
 
   Hint Rewrite nth_error_single : util.
 
-  Instance Base : @MM_base _ _ var_eq _ _ := { thread_of := thread_of;
+  Instance Base : @MM_base var _ _ _ _ := { thread_of := thread_of;
     to_seq := to_seq; synchronizes_with := synchronizes_with;
     drop_b_reads := drop_b_reads }.
   Proof.
@@ -242,9 +240,10 @@ Section Semantics.
     | None => True
     end.
 
-  Context (ML : Memory_Layout nat var_eq)
+  Context (ML : @Memory_Layout var nat _)
           (MM : @Memory_Model _ _ _ ML _ conc_op Base).
 
+  Typeclasses eauto := 2.
   Definition result P lo lc := exists P' G',
     exec_star (Some (init_state P)) init_env lo lc P' G' /\
       (match P' with Some ll => Forall (fun li => snd li = []) ll
