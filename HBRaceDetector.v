@@ -2404,8 +2404,8 @@ Proof.
         apply can_read_thread.
         apply can_read_SC. 
         +inversion Hs; clarify. 
-         specialize(H1 t0 H2); clarify. unfold clock_match in H1; clarify.
-         specialize(H1 t0); clarify.
+         specialize(Hs_c t0 H2); clarify. unfold clock_match in Hs_c; clarify.
+         specialize(Hs_c t0); clarify.
         +eapply (mops_max_vc_con_cl Hs); eauto.
          eapply consistent_app_SC. eauto.
         +rewrite Forall_forall; clarify.
@@ -2425,8 +2425,8 @@ Proof.
          apply can_write_SC.
          -unfold can_write; clarify.
           inversion Hs; clarify.
-          specialize(H1 _ H2); unfold clock_match in H1; clarify.
-          specialize(H1 t0); clarify.
+          specialize(Hs_c _ H2); unfold clock_match in Hs_c; clarify.
+          specialize(Hs_c t0); clarify.
          -eapply consistent_app_SC. eauto.
        }
        {auto. }
@@ -2485,9 +2485,27 @@ Proof.
  -(*wait*)
     admit.
  -(*assert_le*)
-    admit.
+   clarify. do 5 eexists.
+   +eapply iexec_assert; eauto.
+    Check eval_sim.
+    unfold fresh_tmps in Hfresh. rewrite Forall_app in Hfresh.
+    inversion Hfresh; clarify. rewrite Forall_forall in Hfresh2.
+    specialize(Hfresh2 (t0, Assert_le e1 e2 :: rest)). clarify.
+    inversion Hfresh2. clarify.
+    assert( eval (G2 t0) e1= eval (G1' t0) e1) as Heval_e1.
+      symmetry. apply eval_sim. intros. eapply HGsim; eauto; intro Heq;
+      clarify.
+    assert( eval (G2 t0) e2= eval (G1' t0) e2) as Heval_e2.
+      symmetry. apply eval_sim. intros. eapply HGsim; eauto; intro Heq;
+      clarify.
+    rewrite Heval_e1, Heval_e2. auto.
+   +(*consistent & mem_sim*)
+    clarify.
+    unfold mem_sim. intros. clarify. split; intros; clarify.
+ 
  - clarify; do 5 eexists; [eapply iexec_exec; eauto|].
    exploit sim_step; eauto; clarify.
+  
 Qed.
 
 Definition bounded V z := forall t, ~t < z -> V t = 0.
