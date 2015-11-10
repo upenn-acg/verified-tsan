@@ -2073,6 +2073,46 @@ Proof.
 admit.
 Qed.
 
+Lemma mops_max_vc_con_cc : forall m s (Hs : clocks_sim m s) u t0 n
+  (Hn : n <= zt) (Hu : u < zt) (Ht : t0 < zt) (Hcon : consistent m),
+  consistent (m ++ 
+    (mops_max_vc (C + u) (C + t0) (map (clock_of s u) (rev (interval 0 n)))
+       (map (clock_of s t0) (rev (interval 0 n))) t0 n)).
+
+Proof.
+  induction n; clarify.
+  { rewrite app_nil_r; auto. }
+  rewrite rev_app_distr; clarify.
+  unfold clocks_sim in Hs; clarify.
+  do 2 rewrite read_noop_SC.
+  - rewrite loc_valid_ops2_SC; [split|].
+    + apply IHn; auto; omega.
+    + specialize (Hs1 _ Ht n); clarify.
+      apply can_write_thread; auto.
+    + simpl.
+      eapply Forall_impl; [|apply mops_max_vc_off]; clarify.
+      destruct (loc_of a); intro; clarify; omega.
+  - specialize (Hs1 _ Ht n); clarify.
+    apply can_read_thread; auto.
+  - clarsimp.
+  -
+    specialize (Hs1 _ Hu); clarify.
+    specialize (Hs1 n); clarify.
+    apply can_read_thread; auto.
+Qed.
+
+Lemma mops_max_vc_meta_cc: forall l1 l2 n u t c (Hx : u < zt) (Ht : t < zt)
+  (Hin : In c (mops_max_vc (C + u) (C + t) l1 l2 t n)\/ In c (mops_max_vc (C+t) (C + u) l1 l2 t n)) , meta_loc (loc_of c).
+Proof.
+  induction l1; clarify.
+  destruct n; clarify.
+  destruct l2; clarify.
+  destruct Hin;
+  destruct n; clarify; destruct l2; clarify;
+  repeat (destruct H; clarify;  [unfold meta_loc; clarify; omega |]);
+  eauto.
+Qed.
+
 Lemma instrument_sim_safe : forall P P1 P2 G1 G2 t h
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1) (Hdistinct : distinct P2)
   (Ht : Forall (fun e => fst e < zt) P1)
@@ -2483,7 +2523,48 @@ Proof.
  -(*spawn*)
     admit.
  -(*wait*)
-    admit.
+   inversion Hsafe; clarify.
+   inversion Hstep0; clarify.
+   apply in_split in Hdone. inversion Hdone; clarify.
+
+   assert( u < zt ) as Hu.
+     rewrite H in Ht. rewrite Forall_app in Ht; clarify.
+     inversion Ht2; clarify.
+   do 5 eexists; [|split].
+   +(*iexec*)
+    apply iexec_wait; eauto.
+    { 
+      unfold state_sim in HPsim.
+      rewrite H in HPsim. Check Forall2_app_inv_l.
+      apply Forall2_app_inv_l in HPsim.
+      inversion HPsim; clarify.
+      inversion HPsim21; clarify.
+      rewrite HPsim22.
+      rewrite HPsim22 in Hdistinct.
+      rewrite in_app.
+      right.
+      destruct y; clarify.
+    }
+    { instantiate(1 := map (C0 u) (rev (interval 0 zt))). 
+       rewrite map_length, rev_length, interval_length; omega. }
+    { instantiate(1:= map (C0 t0) (rev (interval 0 zt))).
+       rewrite map_length, rev_length, interval_length.
+       omega.  }
+   +(*consistent*)
+    setoid_rewrite Forall_app in Hlocs; clarify.
+    inversion Hlocs2 as [|?? Hi ?]; clarify.
+    inversion Hi ; clarify.
+  
+
+    rewrite Forall_app in Ht; clarify.
+    inversion Ht2; clarify.
+
+    eapply (mops_max_vc_con_cc Hs); eauto.
+    rewrite <- app_nil_end in Hcon. auto.
+   +(*mem_sim*) 
+     simpl.
+     unfold mem_sim. intros. clarify. split; intros; clarify.
+     contradiction H02. eapply mops_max_vc_meta; eauto.
  -(*assert_le*)
    clarify. do 5 eexists.
    +eapply iexec_assert; eauto.
