@@ -21,6 +21,15 @@
 \newcommand{\sw}[0]{<_{\mathrm{sw}}}
 \newcommand{\word}[0]{<_{\mathrm{w}}}
 
+\newcommand{\assign}[2]{#1\ \texttt{:=}\ #2}
+\newcommand{\load}[2]{#1\ \texttt{:= load}\ #2}
+\newcommand{\store}[2]{\texttt{store}\ #2\ #1}
+\newcommand{\lock}[1]{\texttt{lock}\ #1}
+\newcommand{\unlock}[1]{\texttt{unlock}\ #1}
+\newcommand{\spawn}[2]{\texttt{spawn}\ #1\ #2}
+\newcommand{\wait}[1]{\texttt{wait}\ #1}
+\newcommand{\assert}[2]{\texttt{assert(}#1\ \texttt{<=}\ #2\texttt{)}}
+
 %from StackExchange, a better xrightarrow^*
 \newcommand{\tto}[1]{\mathrel{
   \vphantom{\xrightarrow{#1}}
@@ -105,7 +114,18 @@ And we found a bug.
 
 \section{Instrumenting a Simple Language}
 \subsection{The Language}
-We define a simple multithreaded language that is just complicated enough to have races and implement race detection instrumentation.
+We define a simple multithreaded language that is just complicated enough to have races and implement race detection instrumentation. The instructions of the language are defined as follows, where $n$ is a natural number, $a$ is a local variable, $e, e1, e2$ are expressions, $p$ is a pointer, $l$ is a lock, $t$ is a thread id, and $i_j$ are instructions:
+\begin{align*}\mathit{expr} ::= n~|~a~|~e_1 + e_2~|~\mathtt{max}(e_1, e_2)\end{align*}
+\begin{align*}\mathit{instr} ::=\ &\assign{a}{e}~|~\load{a}{p}~|~\store{p}{e}~|~\lock{l}~\\|~&\unlock{l}~|~\spawn{t}{i_1, ..., i_n}~|~\wait{t}~\\|~&\assert{e_1}{e_2}\end{align*}
+A \emph{program} is simply a list of instructions. The dynamic state of a program contains a collection of threads, where a thread is a pair $(t, \mathit{li})$ of a tid and a list of instructions, and a family of local environments $G_t$, one for each thread, assigning values to local variables. We give semantics to the language via a transition system of the form $(P, G) \xrightarrow{o, c} (P', G')$, where $P, P'$ are collections of threads, $G, G'$ are environments, $o$ is a race detection operation (if one is produced by the step), and $c$ is a concurrent memory operation (likewise). We define a function $\mathsf{eval}$ that takes a local environment and an expression and yields the value of the expression. The semantics of the language are shown in Figure~\ref{semantics}.
+
+\begin{figure}[htb]
+$$\inference[assign]{}{(e_1\ ...\ (t, \assign{a}{e}\ \mathit{li})\ ...\ e_k, G) \rightarrow (e_1\ ...\ (t, \mathit{li})\ ...\ e_2, G[G_t[a \mapsto \mathsf{eval}(G_t, e)]])}$$
+
+\caption{Semantics of the simple language}
+\label{semantics}
+\end{figure}
+
 
 \subsection{Instrumentation}
 

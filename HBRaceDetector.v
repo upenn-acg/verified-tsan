@@ -3802,7 +3802,56 @@ Lemma instrument_indep : forall P G t o c P1 G1 i li
     (opt_to_list c ++ filter (fun c => beq (thread_of c) t) lc ++
      opt_to_list c')) (filter (fun x => negb (beq (thread_of x) t)) lc).
 Proof.
+  
 Abort.
+
+Lemma exec_t_maintain : forall P G lo lc P' G' t li (Hdistinct : distinct P)
+  (Hin : In (t, li) P) (Hsteps : exec_star_t t (Some P) G lo lc (Some P') G')
+  (Hin' : In (t, li) P'), P' = P /\ G' = G /\ lo = [] /\ lc = [].
+Proof.
+  intros; inversion Hsteps; clarify.
+  destruct P'0; [|inversion Hexec'; clarify].
+  exploit step_thread; eauto; clarify.
+  exploit distinct_step; eauto; intro.
+  exploit exec_mono; eauto.
+  { eapply exec_t_exec; eauto. }
+  clarify.
+  exploit skip_cons_neq; eauto; clarify.
+Qed.
+
+Lemma cons_app_neq : forall A (x : A) l1 l2, x :: l1 ++ l2 <> l2.
+Proof.
+  repeat intro.
+  assert (length (x :: l1 ++ l2) = length l2) by (rewrite H; auto).
+  simpl in *; rewrite app_length in *; omega.
+Qed.
+
+Lemma exec_t_iexec : forall t P G lo lc P' G' i li (Hdistinct : distinct P)
+  (Hin : In (t, instrument_instr i t ++ li) P)
+  (Ht : exec_star_t t (Some P) G lo lc (Some P') G') (Hin' : In (t, li) P'),
+  iexec P G t lo lc P' G'.
+Proof.
+  intros.
+  destruct i; clarify.
+  - inversion Ht; clarify.
+    { generalize (NoDup_id_inj _ _ _ Hdistinct Hin Hin'); clarify.
+      exploit cons_neq; eauto; clarify. }
+    generalize (in_split _ _ Hin); intros (P1 & P2 & ?); clarify.
+    inversion Hexec; clarify; exploit distinct_thread; eauto; clarify.
+    exploit distinct_step; eauto; intro.
+    exploit exec_t_maintain; eauto.
+    { rewrite in_app; clarify. }
+    clarify; apply iexec_assign; auto.
+  - destruct x.
+    inversion Ht; clarify.
+    { generalize (NoDup_id_inj _ _ _ Hdistinct Hin Hin'); clarify.
+      exploit cons_app_neq; eauto; clarify. }
+    generalize (in_split _ _ Hin); intros (P1 & P2 & ?); clarify.
+    inversion Hexec; clarify; exploit distinct_thread; eauto; clarify.
+    (* ... *)
+    (* We need the reverse specs, that tell us that if we step a handler,
+       then it produces the expected shape. *)
+Admitted.
 
 Lemma exec_iexec : forall P P' (Hfinal : final_state (Some P')) G' G lo lc
   (Hexec : exec_star (Some P) G lo lc (Some P') G') (Hdistinct : distinct P)
@@ -3898,9 +3947,7 @@ Proof.
     rewrite <- app_assoc.
     admit. }
   intros (lot & P1 & G1 & lor & Hi & HP1 & Hrest' & Hcon').
-  assert (iexec (Pa ++ (t, instrument_instr i t ++ instrument li t) :: Pb) G t 
-    lot (filter (fun c => beq (thread_of c) t)
-    ((opt_to_list c ++ lc1) ++ opt_to_list c')) P1 G1) by admit.
+  exploit exec_t_iexec; try apply Hi; eauto; intro.
   exploit distinct_steps; try eapply exec_t_exec, Hi; auto; intro.
   specialize (H (size P1)); use H.
   specialize (H _ eq_refl).
@@ -3914,7 +3961,14 @@ Proof.
   destruct H as (lo' & lc' & ? & ?).
   repeat eexists; [eapply iexec_step; eauto|].
   repeat rewrite <- app_assoc in *; auto.
-  - admit.
+  - repeat rewrite filter_app.
+    generalize (exec_ops Hexec0), (exec_ops Hlast); intros Hallt Hallt'.
+    rewrite (filter_all _ Hallt), (filter_negb_none _ Hallt),
+      (filter_all _ Hallt'), (filter_negb_none _ Hallt'), app_nil_r; simpl.
+    repeat rewrite <- app_assoc; rewrite app_assoc.
+    eapply loc_split; try (rewrite partition_filter; eauto).
+    rewrite <- app_assoc; auto.
+    (* As above. *) admit.
   - eapply component_decr; eauto.
     { eapply exec_t_exec; eauto. }
     rewrite app_length, Hinstr; simpl; omega.
