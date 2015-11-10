@@ -2116,7 +2116,7 @@ Qed.
 Lemma mops_set_vc_con_cc : forall m s (Hs : clocks_sim m s) u t0 n
   (Hn : n <= zt) (Hu : u < zt) (Ht : t0 < zt) (Hcon : consistent m),
   consistent (m ++ 
-    (mops_set_vc (C + t0) (C + u) n u (map (clock_of s t0) (rev (interval 0 n))))).
+    (mops_set_vc (C + t0) (C + u) n t0 (map (clock_of s t0) (rev (interval 0 n))))).
 
 Proof.
   induction n; clarify.
@@ -2184,8 +2184,8 @@ Proof.
       * apply vc_le_first_gt; auto.
     + instantiate (1 := v).
       instantiate (1 := C0 t0 t0).
-      admit.
-(*      setoid_rewrite Forall_app in Hlocs; clarify.
+      
+      setoid_rewrite Forall_app in Hlocs; clarify.
       inversion Hlocs2 as [|?? Hi ?]; clarify.
       inversion Hi as [|?? Hx ?]; clarify.
       rewrite Forall_app in Ht; clarify.
@@ -2223,14 +2223,11 @@ Proof.
       rewrite loc_valid_ops1_SC; clarify.
       * split; clarify.
         { admit. }
-        { admit. (*eapply (mops_move_con Hs); eauto.
-        eapply consistent_app_SC; eauto.*)}
-      * (*assert (meta_loc (C + t0, t0)).
-        { unfold meta_loc; simpl; omega. }
-        assert (meta_loc (R + x, t0)).
-        { unfold meta_loc; simpl; omega. }
+        { admit. }
+      * 
+        
         constructor; [|constructor]; auto; intro; contradiction Hx1; clarify.
-        auto.*) admit.
+        unfold meta_loc; clarify. repeat right. omega.
       *apply can_read_thread.
        apply can_read_SC.
        
@@ -2478,7 +2475,7 @@ Proof.
         [Read t0 (C + t0, t0) (C0 t0 t0)])) as Hcon0.
       { 
         apply can_read_thread.
-        admit. (*
+       
         apply can_read_SC. 
         +inversion Hs; clarify. 
          specialize(Hs_c t0 H2); clarify. unfold clock_match in Hs_c; clarify.
@@ -2490,7 +2487,7 @@ Proof.
          apply in_mops_max_vc in H1.
           *intro Heq. clarify.
           *admit. (* C and L don't overlap*)
-          *admit. (* C and L don't overlap*)*)
+          *admit. (* C and L don't overlap*)
       }
       split; clarify.
       *apply can_write_thread.
@@ -2508,23 +2505,18 @@ Proof.
        }
        {auto. }
      *rewrite <- app_assoc. rewrite <- app_assoc. 
-      
-      assert(Hsilly:   (m ++
-      mops_max_vc (C + t0) (L + m0) (map (C0 t0) (rev (interval 0 zt)))
-        (map (L0 m0) (rev (interval 0 zt))) t0 zt ++
-      [Read t0 (C + t0, t0) (C0 t0 t0)] ++ [ARW t0 (m0, 0) (S t0) 0]) =  (m ++
-      (mops_max_vc (C + t0) (L + m0) (map (C0 t0) (rev (interval 0 zt)))
-        (map (L0 m0) (rev (interval 0 zt))) t0 zt ++
-      [Read t0 (C + t0, t0) (C0 t0 t0)]) ++ [ARW t0 (m0, 0) (S t0) 0])).
-        rewrite <- app_assoc. clarify. 
-      setoid_rewrite Hsilly.
+      assert (Hlist_silly : forall (X:Type) (l1 l2 l3 l4: list X), 
+               l1++l2++l3++l4=l1++(l2++l3)++l4).
+        intros. rewrite <-app_assoc. clarify.
+     
+      setoid_rewrite Hlist_silly.
       
       setoid_rewrite loc_valid_ops_SC.
       split; clarify.
       rewrite app_assoc. clarify.
       rewrite Forall_forall.  intros. rewrite Forall_forall. clarify.
       rewrite in_app in H1. inversion H1; clarify. 
-      intro Heq. contradiction H21. rewrite Heq.  eapply mops_max_vc_meta; eauto.
+      intro Heq. contradiction H21. setoid_rewrite Heq.  eapply mops_max_vc_meta; eauto.
     +(*mem_sim*)
      setoid_rewrite Forall_app in Hlocs; clarify.
      inversion Hlocs2; clarify.
@@ -2602,7 +2594,21 @@ Proof.
 
     rewrite Forall_app in Ht; clarify.
     inversion Ht2; clarify.
-    
+    instantiate (1:=(C0 t0 t0)).
+    unfold mops_inc_vc. clarify.
+    rewrite split_app. rewrite app_assoc.
+    apply can_write_thread.
+    apply can_write_SC.
+    *specialize(Hs_c t0 H4). unfold clock_match in Hs_c. 
+     specialize(Hs_c t0). clarify. 
+    *rewrite app_assoc. apply can_read_thread. 
+     apply can_read_SC.
+     {specialize(Hs_c t0 H4). unfold clock_match in Hs_c.
+      specialize(Hs_c t0). clarify.
+     }
+     {apply (mops_set_vc_con_cc Hs). }
+     { }
+     
    +(*mem_sim*)
     admit.
  -(*wait*)
