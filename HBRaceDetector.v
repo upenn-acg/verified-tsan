@@ -2101,6 +2101,41 @@ Proof.
     apply can_read_thread; auto.
 Qed.
 
+
+Lemma mops_set_vc_off : forall src tgt f t n,
+  Forall (fun c' => match loc_of c' with (x, o) => o < n end)
+     (mops_set_vc src tgt n t (map f (rev (interval 0 n)))).
+Proof.
+  induction n; clarify.
+  rewrite rev_app_distr; clarify.
+  repeat (constructor; clarify).
+  eapply Forall_impl; eauto; clarify.
+  destruct (loc_of a); omega.
+Qed.
+
+Lemma mops_set_vc_con_cc : forall m s (Hs : clocks_sim m s) u t0 n
+  (Hn : n <= zt) (Hu : u < zt) (Ht : t0 < zt) (Hcon : consistent m),
+  consistent (m ++ 
+    (mops_set_vc (C + t0) (C + u) n u (map (clock_of s t0) (rev (interval 0 n))))).
+
+Proof.
+  induction n; clarify.
+  { rewrite app_nil_r; auto. }
+  rewrite rev_app_distr; clarify.
+  unfold clocks_sim in Hs; clarify.
+  
+  rewrite read_noop_SC.
+  - rewrite loc_valid_ops2_SC; [split|].
+    + apply IHn; auto; omega.
+    + specialize (Hs1 _ Hu n); clarify.
+      apply can_write_thread; auto.
+    + simpl.
+      eapply Forall_impl; [|apply mops_set_vc_off]; clarify.
+      destruct (loc_of a); intro; clarify; omega.
+  - specialize (Hs1 _ Ht n); clarify.
+    apply can_read_thread; auto.
+Qed.
+
 Lemma mops_max_vc_meta_cc: forall l1 l2 n u t c (Hx : u < zt) (Ht : t < zt)
   (Hin : In c (mops_max_vc (C + u) (C + t) l1 l2 t n)\/ In c (mops_max_vc (C+t) (C + u) l1 l2 t n)) , meta_loc (loc_of c).
 Proof.
@@ -2521,6 +2556,55 @@ Proof.
        eapply mops_max_vc_meta; eauto.
      clarify.
  -(*spawn*)
+   inversion Hsafe; clarify.
+   inversion Hstep0; clarify.
+   do 5 eexists; [|split].
+   +(*iexec*)
+    apply iexec_spawn; eauto. Check iexec_spawn.
+    { rewrite <- split_app. eauto. }
+    { inversion Hstep.  
+      intro Hin. 
+      unfold state_sim in HPsim. clarify.
+      contradiction Hnew. 
+      assert(forall (X Y: Type) l1 l2, Forall2 (fun (x y: X*Y) => fst x =fst y) l1 l2 -> map fst l1 = map fst l2) as Hmap_fst.
+      {
+       intros A B l1.
+       induction l1; clarify.
+       -inversion H0; clarify.
+       -destruct l2; clarify.
+        +inversion H0; clarify.
+        +inversion H0; clarify.
+         specialize(IHl1 l2 H6). clarify.
+         rewrite IHl1, H4.
+         auto.
+      }
+      assert (forall a b, (fun t1 t2 : tid * prog =>
+           fst t1 = fst t2 /\ snd t2 = instrument (snd t1) (fst t1)) a b -> (fun t1 t2: tid * prog => fst t1 = fst t2) a b) as Htrivial.
+      {
+        intros. inversion H0; clarify.
+      }  
+      apply Forall2_impl with (Q:= (fun t1 t2: tid * prog => fst t1 = fst t2)) in HPsim.
+      specialize(Hmap_fst _ _ _ _ HPsim).
+      clarify.
+      setoid_rewrite Hmap_fst. auto.
+      intros. inversion H0; clarify.
+    }
+    {
+      instantiate(1:= map (C0 t0) (rev (interval 0 zt))). 
+       rewrite map_length, rev_length, interval_length; omega. 
+      
+    }
+      
+   +(*consistent*)
+    setoid_rewrite Forall_app in Hlocs; clarify.
+    inversion Hlocs2 as [|?? Hi ?]; clarify.
+    inversion Hi ; clarify.
+  
+
+    rewrite Forall_app in Ht; clarify.
+    inversion Ht2; clarify.
+    
+   +(*mem_sim*)
     admit.
  -(*wait*)
    inversion Hsafe; clarify.
