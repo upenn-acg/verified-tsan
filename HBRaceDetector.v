@@ -725,12 +725,7 @@ Variables (C L R W X : var) (zt zl zv : nat) (tmp1 tmp2 : local)
 
 Definition load_handler t x z := 
   Lock (X + x) :: hb_check (W + x) (C + t) z tmp1 tmp2 ++
-  move (C + t, t) (R + x, t) tmp1 ++ [Unlock (X + x)].
-
-(* up *)
-
-Notation Acq t x := (ARW t%nat (x, 0) 0 (S t)).
-Notation Rel t x := (ARW t%nat (x, 0) (S t) 0).
+  move (C + t, t) (R + x, t) tmp1.
 
 Lemma split_app' : forall A (x : A) l, x :: l = [x] ++ l.
 Proof. auto. Qed.
@@ -757,20 +752,17 @@ Lemma load_handler_norace_spec_n: forall n x t P G P1 P2 rest v1 v2 vs1 vs2
  (Hvs1: length vs1 = n) (Hvs2: length vs2 = n) 
  (Hfirst_gt: first_gt (vs1++[v1]) (vs2++[v2]) = None) v,
  exec_star (Some P) G 
-           (acq t (X + x) :: events_hb_check (W + x) (C + t) (vs1++[v1]) (vs2++[v2]) t ++ events_move (C+t) (R+x) t ++ [rel t (X + x)])
-           (Acq t (X + x) :: mops_hb_check (W + x) (C + t) (vs1++[v1]) (vs2++[v2]) (S n) t ++ mops_move (C+t,t) (R+x, t) t v ++ [Rel t (X + x)])
+           (acq t (X + x) :: events_hb_check (W + x) (C + t) (vs1++[v1]) (vs2++[v2]) t ++ events_move (C+t) (R+x) t)
+           (Acq t (X + x) :: mops_hb_check (W + x) (C + t) (vs1++[v1]) (vs2++[v2]) (S n) t ++ mops_move (C+t,t) (R+x, t) t v)
            (Some (P1++(t,rest)::P2)) (upd_env (upd_env G t tmp1 v) t tmp2 v2).
 Proof.
   clarify.
   eapply (exec_step' (exec_lock _ _ _ _ _ _ eq_refl)); clarify.
   eapply exec_star_trans.
   rewrite <- app_assoc; apply hb_check_pass_spec_n; auto.
-  rewrite <- app_assoc; eapply exec_step_inv.
-  - apply move_spec; eauto.
-  - rewrite upd_assoc, upd_overwrite; auto.
-    apply exec_unlock; simpl; eauto.
-  - auto.
-  - auto.
+  rewrite upd_assoc; auto.
+  setoid_rewrite upd_assoc at 2; auto.
+  setoid_rewrite <- (upd_overwrite _ _ _ v1) at 3; apply move_spec; auto.
 Qed.
 
 (* updates to different locals don't interfere with each other*)
@@ -786,8 +778,8 @@ Corollary load_handler_norace_spec: forall n x t P G P1 P2 rest
   vs1 vs2 (Hload_handler_spec: P = P1 ++ (t, load_handler t x n ++ rest) :: P2)   (Hvs1 : length vs1 = n)
   (Hvs2 : length vs2 = n) (Hfirst_gt : first_gt vs1 vs2 = None) v,
   exec_star (Some P) G
-    (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t ++ events_move (C + t) (R + x) t ++ [rel t (X + x)])
-    (Acq t (X + x) :: mops_hb_check (W + x) (C + t) vs1 vs2 n t ++ mops_move (C + t, t) (R + x, t) t v ++ [Rel t (X + x)])
+    (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t ++ events_move (C + t) (R + x) t)
+    (Acq t (X + x) :: mops_hb_check (W + x) (C + t) vs1 vs2 n t ++ mops_move (C + t, t) (R + x, t) t v)
     (Some (P1 ++ (t, rest) :: P2)) (upd_env (upd_env G t tmp1 v) t tmp2 (last vs2 (G t tmp2))).
 Proof.
   intros; destruct n; clarify.
@@ -796,12 +788,7 @@ Proof.
       by (apply upd_old; auto).
     rewrite <- Heq, upd_triv.
     eapply (exec_step' (exec_lock _ _ _ _ _ _ eq_refl)); clarify.
-    rewrite <- app_assoc.
-    eapply exec_step_inv.
-    + apply move_spec; eauto.
-    + apply exec_unlock; simpl; eauto.
-    + auto.
-    + auto.
+    apply move_spec; auto.
   - assert (vs1 <> []) as Hnnil1 by (destruct vs1; clarify).
     assert (vs2 <> []) as Hnnil2 by (destruct vs2; clarify).
     rewrite (app_removelast_last 0 Hnnil1) in *.
@@ -843,7 +830,7 @@ Qed.
 Definition store_handler t x z :=
   Lock (X + x) :: hb_check (W + x) (C + t) z tmp1 tmp2 ++
   hb_check (R + x) (C + t) z tmp1 tmp2 ++
-  move (C + t, t) (W + x, t) tmp1 ++ [Unlock (X + x)].
+  move (C + t, t) (W + x, t) tmp1.
 Lemma store_handler_race_waw_spec_n: forall n x t P G P1 P2 rest v1 v2 vs1 vs2
  (Hstore_handler_spec: P= P1++(t,store_handler t x (S n)++rest)::P2) 
  (Hvs1: length vs1 = S n) (Hvs2: length vs2 = S n) 
@@ -895,10 +882,10 @@ Lemma store_handler_norace_spec_n: forall n x t P G P1 P2 rest v1 v2 v3 vs1 vs2 
  exec_star (Some P) G 
            (acq t (X + x) :: events_hb_check (W + x) (C + t) (vs1++[v1]) (vs2++[v2]) t ++ 
             events_hb_check (R + x) (C + t) (vs3++[v3]) (vs2++[v2]) t ++               
-            events_move (C+t) (W+x) t ++ [rel t (X + x)])
+            events_move (C+t) (W+x) t)
            (Acq t (X + x) :: mops_hb_check (W + x) (C + t) (vs1++[v1]) (vs2++[v2]) (S n) t ++ 
             mops_hb_check (R + x) (C + t) (vs3++[v3]) (vs2++[v2]) (S n) t ++
-            mops_move (C+t,t) (W+x, t) t v ++ [Rel t (X + x)]) 
+            mops_move (C+t,t) (W+x, t) t v) 
            (Some (P1++(t,rest)::P2)) (upd_env (upd_env G t tmp1 v) t tmp2 v2).
 Proof.
   intros.
@@ -907,14 +894,12 @@ Proof.
   rewrite <- app_assoc; eapply exec_star_trans.
   - apply hb_check_pass_spec_n; try (apply Hfirst_gt12); eauto.
   - repeat rewrite <- app_assoc.
-    eapply exec_step_inv.
-    + eapply exec_star_trans.
-      * apply hb_check_pass_spec_n; try (apply Hfirst_gt32); eauto.
-      * apply move_spec; eauto.
-    + do 3 (rewrite upd_assoc, upd_overwrite; auto).
-      apply exec_unlock; simpl; eauto.
-    + clarsimp.
-    + clarsimp.
+    eapply exec_star_trans.
+    + apply hb_check_pass_spec_n; try (apply Hfirst_gt32); eauto.
+    + do 2 (rewrite upd_assoc, upd_overwrite; auto).
+      rewrite upd_assoc; auto.
+      setoid_rewrite upd_assoc at 2; auto.
+      setoid_rewrite <- (upd_overwrite _ _ _ v3) at 3; apply move_spec; auto.
 Qed.
 
 Transparent hb_check.
@@ -926,10 +911,10 @@ Corollary store_handler_norace_spec: forall n x t P G P1 P2 rest
   exec_star (Some P) G
     (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t ++ 
      events_hb_check (R + x) (C + t) vs3 vs2 t ++
-     events_move (C + t) (W + x) t ++ [rel t (X + x)])
+     events_move (C + t) (W + x) t)
     (Acq t (X + x) :: mops_hb_check (W + x) (C + t) vs1 vs2 n t ++
      mops_hb_check (R + x) (C + t) vs3 vs2 n t ++
-     mops_move (C + t, t) (W + x, t) t v ++ [Rel t (X + x)])
+     mops_move (C + t, t) (W + x, t) t v )
     (Some (P1 ++ (t, rest) :: P2)) (upd_env (upd_env G t tmp1 v) t tmp2 (last vs2 (G t tmp2))).
 Proof.
   intros; destruct n; clarify.
@@ -938,11 +923,7 @@ Proof.
       by (apply upd_old; auto).
     rewrite <- Heq, upd_triv.
     eapply (exec_step' (exec_lock _ _ _ _ _ _ eq_refl)); clarify.
-    eapply exec_step_inv.
-    + rewrite <- app_assoc; apply move_spec; eauto.
-    + apply exec_unlock; simpl; eauto.
-    + auto.
-    + auto.
+    apply move_spec; auto.
   - assert (vs1 <> []) as Hnnil1 by (destruct vs1; clarify).
     assert (vs2 <> []) as Hnnil2 by (destruct vs2; clarify).
     assert (vs3 <> []) as Hnnil3 by (destruct vs3; clarify).
@@ -1057,8 +1038,8 @@ let instrument := fix f p t :=
   | ins::inss => (instrument_instr ins t)++(f inss t)
   end in
 (match ins with
- | Load a (x, _)   => load_handler t x zt ++ [ins]
- | Store (x, _) e  => store_handler t x zt ++ [ins]
+ | Load a (x, _)   => load_handler t x zt ++ [ins; Unlock (X + x)]
+ | Store (x, _) e  => store_handler t x zt ++ [ins; Unlock (X + x)]
  | Lock l          => [ins] ++ lock_handler t l zt
  | Unlock l   => unlock_handler t l zt ++ [ins]
  | Spawn u li =>  spawn_handler t u zt tmp1 ++ [Spawn u (instrument li u)] 
@@ -1492,8 +1473,6 @@ Proof.
     apply can_read_thread; auto.
 Qed.
 
-Check Forall. Check mops_hb_check_read.
-
 Definition not_clocks p := 
  forall t l x (Ht:t<zt) (Hl:l< zl) (Hx: x<zv),
   p <> C+t /\ p <> R+x /\ p<> W+x /\ p<> L+l. 
@@ -1666,33 +1645,33 @@ Inductive iexec P G t :
         (P1 ++ (t, rest) :: P2) (upd_env G t a (eval (G t) e))
   | iexec_load P1 P2 a x o vt v rest vs1 vs2
       (Hload : P = P1 ++ (t, load_handler t x zt ++
-                             Load a (x, o) :: rest) :: P2)
+                             Load a (x, o) :: Unlock (X + x) :: rest) :: P2)
       (Hlen1 : length vs1 = zt) (Hlen2 : length vs2 = zt)
       (Hle : first_gt vs1 vs2 = None)  :
       iexec P G t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t ++
-                   events_move (C + t) (R + x) t ++ [rel t (X + x); rd t x])
+                   events_move (C + t) (R + x) t ++ [rd t x; rel t (X + x)])
                   (Acq t (X + x) ::
                    mops_hb_check (W + x) (C + t) vs1 vs2 zt t ++
                    mops_move (C + t, t) (R + x, t) t vt ++
-                   [Rel t (X + x); Read t (x, o) v])
+                   [Read t (x, o) v; Rel t (X + x)])
         (P1 ++ (t, rest) :: P2)
         (upd_env (upd_env (upd_env G t tmp1 vt) t tmp2 (last vs2 (G t tmp2)))
            t a v)
   | iexec_store P1 P2 x o e rest vs1 vs2 vs3 v
       (Hstore : P = P1 ++ (t, store_handler t x zt ++
-                              Store (x, o) e :: rest) :: P2)
+                              Store (x, o) e :: Unlock (X + x) :: rest) :: P2)
       (Hlen1 : length vs1 = zt) (Hlen2 : length vs2 = zt)
       (Hlen3 : length vs3 = zt) (Hle1 : first_gt vs1 vs2 = None)
       (Hle2 : first_gt vs3 vs2 = None)
       (Hfresh1 : expr_fresh tmp1 e) (Hfresh2 : expr_fresh tmp2 e) :
       iexec P G t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t ++
                    events_hb_check (R + x) (C + t) vs3 vs2 t ++
-                   events_move (C + t) (W + x) t ++ [rel t (X + x); wr t x])
+                   events_move (C + t) (W + x) t ++ [wr t x; rel t (X + x)])
                   (Acq t (X + x) ::
                    mops_hb_check (W + x) (C + t) vs1 vs2 zt t ++
                    mops_hb_check (R + x) (C + t) vs3 vs2 zt t ++
                    mops_move (C + t, t) (W + x, t) t v ++
-                   [Rel t (X + x); Write t (x, o) (eval (G t) e)])
+                   [Write t (x, o) (eval (G t) e); Rel t (X + x)])
         (P1 ++ (t, rest) :: P2)
         (upd_env (upd_env G t tmp1 v) t tmp2 (last vs2 (G t tmp2)))
   | iexec_lock P1 P2 m rest vs1 vs2
@@ -1758,26 +1737,32 @@ Proof.
     + auto.
     + auto.
   - eapply exec_step_inv.
+    eapply exec_step_inv.
     + apply load_handler_norace_spec; try (apply Hle); eauto.
       * unfold load_handler.
         simpl; do 2 rewrite <- (app_assoc (hb_check _ _ _ _ _)).
-        do 2 rewrite <- (app_assoc (move _ _ _)).
         rewrite (plus_0_r (length vs1)); eauto.
       * omega.
     + apply exec_load; eauto.
+    + eauto.
+    + eauto.
+    + apply exec_unlock; eauto.
     + clarsimp.
     + clarsimp.
   - eapply exec_step_inv.
+    eapply exec_step_inv.
     + apply store_handler_norace_spec.
       * unfold store_handler.
-        simpl; do 2 rewrite <- (app_assoc (hb_check _ _ _ _ _)).
-        do 2 rewrite <- (app_assoc (hb_check _ _ (length vs1) _ _)); eauto.
+        simpl; eauto.
       * apply eq_refl.
       * apply Hlen2.
       * apply Hlen3.
       * auto.
       * auto.
     + apply exec_store; eauto.
+    + eauto.
+    + eauto.
+    + apply exec_unlock; eauto.
     + clarsimp.
     + clarsimp.
       rewrite eval_old'; auto.
@@ -1862,10 +1847,10 @@ Lemma iexec_inv : forall i P P1 t rest P2 G lo lc P' G'
   | Load a (x, o) => exists vs1 vs2 v vt, length vs1 = zt /\ length vs2 = zt /\
       first_gt vs1 vs2 = None /\
       lo = acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t ++
-           events_move (C + t) (R + x) t ++ [rel t (X + x); rd t x] /\
+           events_move (C + t) (R + x) t ++ [rd t x; rel t (X + x)] /\
       lc = Acq t (X + x) :: mops_hb_check (W + x) (C + t) vs1 vs2 zt t ++
            mops_move (C + t, t) (R + x, t) t vt ++
-           [Rel t (X + x); Read t (x, o) v] /\
+           [Read t (x, o) v; Rel t (X + x)] /\
       P' = P1 ++ (t, rest) :: P2 /\
       G' = upd_env (upd_env (upd_env G t tmp1 vt) t tmp2 (last vs2 (G t tmp2))) 
                    t a v
@@ -1874,11 +1859,11 @@ Lemma iexec_inv : forall i P P1 t rest P2 G lo lc P' G'
       first_gt vs3 vs2 = None /\ expr_fresh tmp1 e /\ expr_fresh tmp2 e /\
       lo = acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t ++
            events_hb_check (R + x) (C + t) vs3 vs2 t ++
-           events_move (C + t) (W + x) t ++ [rel t (X + x); wr t x] /\
+           events_move (C + t) (W + x) t ++ [wr t x; rel t (X + x)] /\
       lc = Acq t (X + x) :: mops_hb_check (W + x) (C + t) vs1 vs2 zt t ++
            mops_hb_check (R + x) (C + t) vs3 vs2 zt t ++
            mops_move (C + t, t) (W + x, t) t v ++
-           [Rel t (X + x); Write t (x, o) (eval (G t) e)] /\
+           [Write t (x, o) (eval (G t) e); Rel t (X + x)] /\
       P' = P1 ++ (t, rest) :: P2 /\
       G' = upd_env (upd_env G t tmp1 v) t tmp2 (last vs2 (G t tmp2))
   | Lock m => exists vs1 vs2, length vs1 = zt /\ length vs2 = zt /\ t < zt /\
@@ -2670,7 +2655,7 @@ Proof.
  - clarify; do 5 eexists; [eapply iexec_exec; eauto|].
    exploit sim_step; eauto; clarify.
   
-Qed.
+Qed.*)Abort.
 
 Definition bounded V z := forall t, ~t < z -> V t = 0.
 
@@ -2742,14 +2727,14 @@ Proof.
   - specialize (Hrace s); contradiction Hrace; apply ss_refl.
   - destruct x as (x, o).
     destruct Hs as (HC & HL & HRW).
-    generalize (HRW x); intro HRWx.
+(*    generalize (HRW x); intro HRWx.
     setoid_rewrite Forall_app in Hlocs; clarify.
     inversion Hlocs2 as [|?? Hi ?]; clarify.
     inversion Hi; clarify.
     generalize (clock_match_bounded HRWx2); intro Hbound.
     destruct (bounded_le_dec (clock_of s t0) Hbound) as [? | (t & Hgt)].
     { destruct s as (((?, ?), ?), ?); exploit Hrace; [|clarify].
-      econstructor; [constructor; auto | apply ss_refl]. }
+      econstructor; [constructor; auto | apply ss_refl]. }*)
     admit.
 (*    exploit load_handler_race_spec.
     { eauto. }
@@ -2835,9 +2820,6 @@ Lemma exec_other_thread : forall P t li (Hin : In (t, li) P) t' (Ht' : t' <> t)
 Proof.
   intros; inversion Hstep; clarify; rewrite in_app in *; clarify.
 Qed.
-
-Definition wf_lock (P : state) l := Forall (fun e => Forall (fun i =>
-  mods_loc i (l, 0) -> i = Lock l \/ i = Unlock l) (snd e)) P.
 
 Fixpoint instr_size i :=
   let instr_list_size := fix f l :=
@@ -3227,6 +3209,7 @@ Proof.
   - clarsimp.
 Qed.
 
+(*
 Lemma hb_check_len : forall C1 C2 z tmp1 tmp2,
   length (hb_check C1 C2 z tmp1 tmp2) = 3 * z.
 Proof.
@@ -3289,8 +3272,8 @@ Lemma wait_handler_len : forall t u z,
 Proof.
   intros; apply max_vc_len.
 Qed.
-
-(* up *)
+*)
+(*(* up *)
 Require Import Ensembles.
 Require Import List.
 
@@ -3301,7 +3284,7 @@ Proof.
   intros; apply Extensionality_Ensembles; split; repeat intro;
     rewrite Hext in *; auto.
 Qed.
-
+*)
 (*
 (* Fundamentally, what does "reordering steps" mean? How can we represent
    the steps so they can be reordered? *)
@@ -4031,6 +4014,8 @@ Proof.
   do 4 (destruct j; clarify).
 Qed.
 
+Transparent move.
+
 Lemma set_vc_no_wait : forall src tgt z tmp j u,
   nth_error (set_vc src tgt z tmp) j <> Some (Wait u).
 Proof.
@@ -4216,17 +4201,197 @@ Proof.
   exploit nth_error_lt; eauto; rewrite removelast_length; clarify.
 Qed.
 
-Lemma instrument_indep : forall P G t o c P1 G1 i li
-  (Hin : In (t, instrument_instr i t ++ li) P)
-  (Hbegin : exec P G t o c (Some P1) G1) lo lc P2 G2
-  (Hbody : exec_star (Some P1) G1 lo lc (Some P2) G2) o' c' P3 G3
-  (Hend : exec P2 G2 t o' c' (Some P3) G3) (Hin' : In (t, li) P3)
-  m (Hcon : consistent (m ++ opt_to_list c ++ lc ++ opt_to_list c')),
-  Forall (fun c1 => Forall (fun c2 => loc_of c2 <> loc_of c1)
-    (opt_to_list c ++ filter (fun c => beq (thread_of c) t) lc ++
-     opt_to_list c')) (filter (fun x => negb (beq (thread_of x) t)) lc).
+Lemma beq_negb : forall A (A_eq : EqDec_eq A) B (a : A) (b c : B),
+  (if negb (beq a a) then b else c) = c.
 Proof.
-  
+  unfold negb, beq; clarify.
+Qed.
+
+Lemma Forall_locs : forall l1 l2,
+  Forall (fun c1 => Forall (fun c2 => loc_of c2 <> loc_of c1) l2) l1 <->
+  Forall (fun l => ~In l (map loc_of l2)) (map loc_of l1).
+Proof.
+  induction l1; clarify.
+  { split; clarify. }
+  split; intro H; inversion H; clarify; constructor; try rewrite IHl1 in *;
+    auto.
+  - rewrite Forall_forall in H2; rewrite in_map_iff; intro Hin; clarify.
+    specialize (H2 _ Hin2); auto.
+  - rewrite Forall_forall; rewrite in_map_iff in H2; eauto.
+Qed.
+
+Definition touches_loc i x :=
+  match i with
+  | Load _ y => y = x
+  | Store y _ => y = x
+  | Lock y => x = (y, 0)
+  | Unlock y => x = (y, 0)
+  | _ => False
+  end.
+
+Definition wf_lock (P : state) l := Forall (fun e => Forall (fun i =>
+  touches_loc i (l, 0) -> i = Lock l \/ i = Unlock l) (snd e)) P.
+
+Variable (is_lock : state -> nat -> bool).
+(* This could be provided by an analysis. *)
+Hypothesis is_lock_spec : forall P x, if is_lock P x then wf_lock P x else
+  Forall (fun e => Forall (fun i => i <> Lock x /\ i <> Unlock x) (snd e)) P.
+
+Definition is_lock' P p := match p with (x, 0) => is_lock P x | _ => false end.
+
+Lemma can_read_thread' : forall m p v t, consistent (m ++ [Read t p v]) ->
+  can_read m p v.
+Proof.
+  unfold can_read, consistent, SC; setoid_rewrite lower_app; clarify.
+Qed.
+
+Lemma exec_safe_locs : forall P G t o c P' G' (Hstep : exec P G t o c P' G')
+  m (Hcon : consistent (m ++ opt_to_list c)) (Hdistinct : distinct P)
+  i li (Hin : In (t, i :: li) P) (Hsafe : safe_instr i),
+  Forall (fun l => ~meta_loc l /\
+          if is_lock' P l then can_read m l 0 \/ can_read m l (S t) else
+          (* not currently true *) can_read m (X + fst l, 0) (S t))
+    (map loc_of (opt_to_list c)).
+Proof.
+  intros.
+  exploit in_split; eauto; intros (Pa & Pb & ?); subst.
+  inversion Hstep; subst; exploit distinct_thread; eauto; clarify;
+    constructor; clarify.
+  - destruct (is_lock' (Pa ++ (t, Load a x :: li) :: Pb) x) eqn: Hlock.
+    { unfold is_lock' in Hlock; destruct x; clarify.
+      exploit is_lock_spec; setoid_rewrite Hlock.
+      setoid_rewrite Forall_app; intros [_ Hwf].
+      inversion Hwf; clarify.
+      inversion H1; clarify. }
+    admit.
+  - admit.
+  - destruct (is_lock (Pa ++ (t, Lock m0 :: li) :: Pb) m0) eqn: Hlock.
+    rewrite can_arw_SC_iff in Hcon; specialize (Hcon 0).
+    left; eapply can_read_thread', consistent_app_SC; eauto.
+    { exploit is_lock_spec; setoid_rewrite Hlock.
+      rewrite Forall_app; intros [_ Hwf].
+      inversion Hwf; clarify.
+      inversion H1; clarify. }
+  - destruct (is_lock (Pa ++ (t, Unlock m0 :: li) :: Pb) m0) eqn: Hlock.
+    rewrite can_arw_SC_iff in Hcon; specialize (Hcon 0).
+    right; eapply can_read_thread', consistent_app_SC; eauto.
+    { exploit is_lock_spec; setoid_rewrite Hlock.
+      rewrite Forall_app; intros [_ Hwf].
+      inversion Hwf; clarify.
+      inversion H1; clarify. }
+Qed.    
+
+Lemma exec_instr_locs : forall P G t o c P' G' (Hstep : exec P G t o c P' G')
+  m (Hcon : consistent (m ++ opt_to_list c)) (Hdistinct : distinct P)
+  i li (Hin : In (t, i :: li) P) i' (Hsafe : In i (instrument_instr i' t)),
+  Forall (fun l => (forall x, x < zv -> l = (X + x, 0) \/
+    (forall o, l = (R + x, o) \/ l = (W + x, o) \/ l = (x, o) /\
+       is_lock' P (x, o) = false) ->
+       can_read m (X + x, 0) 0 \/ can_read m (X + x, 0) (S t)) /\
+    (forall t' o, t' < zt -> l = (C + t', o) -> t' = t) /\
+    (forall k, k < zl -> l = (k, 0) -> is_lock P k = true ->
+       can_read m (L + k, 0) 0 \/ can_read m (L + k, 0) (S t)))
+    (map loc_of (opt_to_list c)).
+Proof.
+Abort.
+
+(* safe_locs *)
+Lemma untouched_locs : forall t P G lo lc P' G'
+  (Hminus : exec_star_minus t P G lo lc P' G')
+  m (Hcon : consistent (m ++ lc)),
+  Forall (fun l =>
+    (forall x, x < zv -> (l = (X + x, 0) \/ (exists o, l = (R + x, o) \/
+       l = (W + x, o) \/ l = (x, o))) -> ~can_read m (X + x, 0) (S t)) /\
+    (forall o, l <> (C + t, o)) /\
+    (forall k, k < zl -> l = (k, 0) -> ~can_read m (L + k, 0) (S t)))
+    (map loc_of lc).
+Proof.
+  intros ????????; induction Hminus; clarify.
+  rewrite app_assoc in Hcon; specialize (IHHminus _ Hcon).
+  rewrite map_app, Forall_app; split.
+  - 
+
+Lemma instrument_indep : forall P G t lo lc P1 G1 i li
+  (Hdistinct : distinct P) (Hin : In (t, instrument_instr i t ++ li) P)
+  (Hsteps : t_steps P G t (length (instrument_instr i t) - 1) lo lc
+                    (Some P1) G1) o c P2 G2
+  (Hend : exec P1 G1 t o c (Some P2) G2) (Hin' : In (t, li) P2)
+  m (Hcon : consistent (m ++ lc ++ opt_to_list c)),
+  Forall (fun c1 => Forall (fun c2 => loc_of c2 <> loc_of c1)
+    (filter (fun c => beq (thread_of c) t) lc ++ opt_to_list c))
+    (filter (fun x => negb (beq (thread_of x) t)) lc).
+Proof.
+  intros; rewrite Forall_locs.
+  destruct i; clarify.
+  - destruct x; repeat rewrite <- app_assoc in *; clarify.
+    rewrite app_length, <- minus_n_O in Hsteps; clarify.
+    rewrite <- plus_n_Sm in Hsteps; simpl in Hsteps.
+    destruct Hsteps as (o0 & c0 & P0 & G0 & Hstep0 & lo1 & lc1 & [P'|] & G' &
+      lo2 & lc2 & Hminus0 & Hrest); clarify.
+    generalize (in_split _ _ Hin); intros (Pa & Pb & ?); subst.
+    inversion Hstep0; subst; exploit distinct_thread; eauto 2;
+      intros (? & ? & Hi); inversion Hi; subst.
+    exploit exec_other_threads; try apply Hminus0.
+    { rewrite in_app; clarify. }
+    intro; exploit in_split; eauto; intros (P'a & P'b & ?); subst.
+    exploit t_steps_plus; eauto.
+    intros (lo3 & lc3 & P3 & G3 & lo4 & lc4 & Hcheck & Hrest' & ? & ?); subst.
+    assert (In (t, [Load tmp1 (C + t, t); Store (R + v, t) (V tmp1);
+      Unlock (X + v); Load a (v, n)] ++ li) P3) by admit.
+    exploit in_split; eauto; intros (P3a & P3b & ?); subst.
+    exploit distinct_step; eauto; intro Hdistinct1.
+    exploit distinct_steps; eauto.
+    { eapply exec_minus_exec; eauto. }
+    intro; exploit distinct_steps; eauto.
+    { eapply t_steps_exec; eauto. }
+    intro; simpl in Hrest'.
+    destruct Hrest' as (o1 & c1 & P4 & G4 & Hstep1 & lo5 & lc5 & [P5|] & G5 &
+      lo6 & lc6 & Hminus1 & Hrest2 & ? & ?); [subst | clarify].
+    destruct Hrest2 as (o2 & c2 & P6 & G6 & Hstep2 & lo7 & lc7 & [P7|] & G7 &
+      lo8 & lc8 & Hminus2 & Hrest3 & ? & ?); [subst | clarify].
+    destruct Hrest3 as (o3 & c3 & P8 & G8 & Hstep3 & lo9 & lc9 & [P9|] & G9 &
+      lo10 & lc10 & Hminus3 & Hrest4 & ? & ?); clarify.
+    inversion Hstep1; subst; exploit distinct_thread; eauto 2;
+      intros (? & ? & Hi); inversion Hi; subst; clear Hi.
+    exploit exec_other_threads; try apply Hminus1.
+    { rewrite in_app; clarify. }
+    intro; exploit in_split; eauto; intros (P5a & P5b & ?); subst.
+    exploit distinct_step; eauto; intro.
+    exploit distinct_steps; eauto.
+    { eapply exec_minus_exec; eauto. }
+    intro; inversion Hstep2; subst; exploit distinct_thread; eauto 2;
+      intros (? & ? & Hi); inversion Hi; subst; clear Hi.
+    exploit exec_other_threads; try apply Hminus2.
+    { rewrite in_app; clarify. }
+    intro; exploit in_split; eauto; intros (P7a & P7b & ?); subst.
+    exploit distinct_step; eauto; intro.
+    exploit distinct_steps; eauto.
+    { eapply exec_minus_exec; eauto. }
+    intro; inversion Hstep3; subst; exploit distinct_thread; eauto 2;
+      intros (? & ? & Hi); inversion Hi; subst; clear Hi.
+    exploit exec_other_threads; try apply Hminus3.
+    { rewrite in_app; clarify. }
+    intro; exploit in_split; eauto; intros (P9a & P9b & ?); subst.
+    exploit distinct_step; eauto; intro.
+    exploit distinct_steps; eauto.
+    { eapply exec_minus_exec; eauto. }
+    intro; inversion Hend; subst; exploit distinct_thread; eauto 2;
+      intros (? & ? & Hi); inversion Hi; subst; clear Hi.
+    repeat rewrite filter_app; simpl.
+    repeat rewrite beq_refl, beq_negb.
+    rewrite beq_negb; simpl.
+    generalize (exec_minus_ops Hminus0), (exec_minus_ops Hminus1),
+      (exec_minus_ops Hminus2), (exec_minus_ops Hminus3);
+      intros Hall0 Hall1 Hall2 Hall3.
+    rewrite (filter_none _ Hall0), (filter_negb_all _ Hall0),
+      (filter_none _ Hall1), (filter_negb_all _ Hall1),
+      (filter_none _ Hall2), (filter_negb_all _ Hall2),
+      (filter_none _ Hall3), (filter_negb_all _ Hall3); simpl.
+    rewrite app_nil_r.
+    repeat rewrite map_app; simpl.
+    repeat rewrite Forall_app; repeat split.
+    + 
+    
 Abort.
 
 Lemma exec_t_maintain : forall P G lo lc P' G' t li (Hdistinct : distinct P)
@@ -4255,7 +4420,6 @@ Lemma exec_t_iexec : forall t P G lo lc P' G' i li (Hdistinct : distinct P)
   (Ht : exec_star_t t (Some P) G lo lc (Some P') G') (Hin' : In (t, li) P'),
   iexec P G t lo lc P' G'.
 Proof.
-  intros.
   destruct i; clarify.
   - inversion Ht; clarify.
     { generalize (NoDup_id_inj _ _ _ Hdistinct Hin Hin'); clarify.

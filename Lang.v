@@ -112,6 +112,9 @@ Section Semantics.
   Definition upd_env G (t : tid) (a : local) (v : nat) :=
     upd G t (upd (G t) a v).
 
+  Notation Acq t x := (ARW t%nat (x, 0) 0 (S t)).
+  Notation Rel t x := (ARW t%nat (x, 0) (S t) 0).
+
   Inductive exec P G t :
     option operation -> option conc_op -> option state -> env -> Prop :=
   | exec_assign P1 P2 a e rest
@@ -131,12 +134,12 @@ Section Semantics.
 
   | exec_lock P1 P2 m rest
       (Hlock : P = P1 ++ (t, Lock m :: rest) :: P2) :
-      exec P G t (Some (acq t m)) (Some (ARW t (m, 0) 0 (S t)))
+      exec P G t (Some (acq t m)) (Some (Acq t m))
         (Some (P1 ++ (t, rest) :: P2)) G
 
   | exec_unlock P1 P2 m rest
       (Hunlock : P = P1 ++ (t, Unlock m :: rest) :: P2) :
-      exec P G t (Some (rel t m)) (Some (ARW t (m, 0) (S t) 0))
+      exec P G t (Some (rel t m)) (Some (Rel t m))
         (Some (P1 ++ (t, rest) :: P2)) G
 
   | exec_spawn P1 P2 u li rest
@@ -250,3 +253,6 @@ Section Semantics.
        | None => True end) /\ consistent lc.
 
 End Semantics.
+
+Notation Acq t x := (ARW t%nat (x, 0) 0 (S t)).
+Notation Rel t x := (ARW t%nat (x, 0) (S t) 0).
