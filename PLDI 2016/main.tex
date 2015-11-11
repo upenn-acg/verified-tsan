@@ -94,9 +94,9 @@ Multicore processors have steadily invaded a broad swathe of the computing ecosy
 
 While these analyses have been proven correct, such proofs have two main shortcomings: they are proofs of the algorithms, instead of the implementations, and they are paper proofs instead of machine-checked proofs. Because of these shortcomings, it is possible that a race detector does not faithfully implement its algorithm, or that the algorithm itself is not fully correct. Indeed, our verified approach reveals a small issue in the paper proof from \cite{fasttrack} that, while fixable, illustrates the potential dangers that stem from best-effort proofs and implementations.
 
-Our approach seeks to rectify these concerns and place dynamic race detection on a provably-correct foundation by providing the first fully-verified implementation of vector clock race detection. We adopt a two-level approach, first verifying the high-level algorithm and then verifying that an instrumentation pass for a simple language faithfully implements the algorithm and preserves the semantics of the original, uninstrumented program. 
+Our approach seeks to rectify these concerns and place dynamic race detection on a provably-correct foundation by providing the first fully-verified implementation of vector clock race detection. We adopt a two-level approach, first verifying the high-level algorithm and then verifying that an instrumentation pass for a simple language faithfully implements the algorithm and preserves the semantics of the original, uninstrumented program. We believe that our approach is useful for verifying race detection algorithms and implementations, which we show by verifying the correctness of the FastTrack \cite{fasttrack} algorithm. Crucially, our verification of FastTrack is achieved by proving it equivalent to the simpler vector clock race detection algorithm, which is more efficient than proving FastTrack's correctness directly. We believe our general approach may be useful for verifying a broad range of dynamic analyses, helping to ensure that debugging tools are themselves free from bugs.
 
-\TODO{need more technical nuggets here, or a figure...}
+\TODO{need more technical nuggets here, and/or a figure?}
 
 This paper makes the following contributions:
 
