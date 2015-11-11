@@ -2540,7 +2540,7 @@ Section Simple.
     inversion Hread1; econstructor; eauto; clarsimp.
     - rewrite nth_error_app in *; clarsimp.
       exploit (Min.min_r (length l1' + S (length l2')) (length l1'));
-        [omega | intro Hmin; rewrite Hmin in *; timeout 10 clarsimp].
+        [omega | intro Hmin; rewrite Hmin in *; clarsimp].
     - rewrite nth_error_app in *.
       destruct (lt_dec j (length (filter (fun c => negb (beq (block_of c) b))
         l1'))); [omega|].

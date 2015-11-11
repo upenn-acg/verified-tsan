@@ -59,9 +59,9 @@ Definition L_base := 32.
 Definition R_base := 48.
 Definition W_base := 64.
 Definition local_base := 0.
-
+(*
 Definition instrumented_p1 :=instrument C_base L_base R_base W_base 3 local_base (local_base+1) (p1 1 2) t0.
-(*Definition instrumented_p1_t1 := instrument C_base L_base R_base W_base 3 local_base (local_base+1) (p1_t1 l1) t1.
+Definition instrumented_p1_t1 := instrument C_base L_base R_base W_base 3 local_base (local_base+1) (p1_t1 l1) t1.
 Definition instrumented_p1_t2 := instrument C_base L_base R_base W_base 3 local_base (local_base+1) (p1_t2 l1) t2.
 
 Theorem dummy: instrumented_p1_t1 = instrumented_p1_t1.
