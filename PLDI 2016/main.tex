@@ -7,7 +7,10 @@
 \usepackage{semantic}
 \usepackage{graphicx}
 \usepackage{cases}
+\usepackage{xcolor}
+\usepackage{xspace}
 
+\newcommand{\TODO}[1]{\textbf{\textcolor{red}{[ TODO: #1]}}}
 \newcommand{\ignore}[1]{}
 \newcommand{\con}[1]{\ensuremath{\mathsf{consistent}(#1)}}
 \newcommand{\seqcon}[1]{\ensuremath{\mathsf{seq\_con}(#1)}}
@@ -44,6 +47,7 @@
 \newtheorem{definition}{Definition}
 \newtheorem{principle}{Principle}
 
+
 \begin{document}
 
 \special{papersize=8.5in,11in}
@@ -68,8 +72,8 @@
 \titlebanner{banner above paper title}        % These are ignored unless
 \preprintfooter{short description of paper}   % 'preprint' option specified.
 
-\title{Verified Instrumentation for Race Detection (Draft)}
-\ignore{\authorinfo{William Mansky \and Yuanfeng Peng \and Steve Zdancewic \and Joe Devietti}
+\title{Verified Instrumentation for Dynamic Race Detection}
+\ignore{\authorinfo{William Mansky \and Yuanfeng Peng \and Steve Zdancewic \and Joseph Devietti}
            {University of Pennsylvania}
            {wmansky@seas.upenn.edu, yuanfeng@cis.upenn.edu, stevez@cis.upenn.edu, devietti@cis.upenn.edu}}
 \authorinfo{}{}{}
@@ -86,14 +90,21 @@ dynamic race detection, interactive theorem proving
 
 \section{Introduction}
 
-Our approach involves two levels: verifying the high-level algorithm, and proving that an instrumentation pass implements the algorithm.
+Multicore processors have steadily invaded a broad swathe of the computing ecosystem in everything from datacenters to smart watches. Writing multithreaded code for such platforms can bring good performance but also a host of programmability challenges. One of the key challenges is dealing with data races, as the presence of a data race introduces non-sequentially-consistent \cite{manson_java_2005} and in some cases undefined \cite{boehm_foundations_2008} behavior into programs, making program semantics very difficult to understand. There are many systems that provide sound and complete data race detection via dynamic analysis \cite{djit+,fasttrack,slimstate} to help programmers detect and remove data races from their programs. 
 
-Our contributions are:
+While these analyses have been proven correct, such proofs have two main shortcomings: they are proofs of the algorithms, instead of the implementations, and they are paper proofs instead of machine-checked proofs. Because of these shortcomings, it is possible that a race detector does not faithfully implement its algorithm, or that the algorithm itself is not fully correct. Indeed, our verified approach reveals a small issue in the paper proof from \cite{fasttrack} that, while fixable, illustrates the potential dangers that stem from best-effort proofs and implementations.
+
+Our approach seeks to rectify these concerns and place dynamic race detection on a provably-correct foundation by providing the first fully-verified implementation of vector clock race detection. We adopt a two-level approach, first verifying the high-level algorithm and then verifying that an instrumentation pass for a simple language faithfully implements the algorithm and preserves the semantics of the original, uninstrumented program. 
+
+\TODO{need more technical nuggets here, or a figure...}
+
+This paper makes the following contributions:
+
 \begin{itemize}
-\item First mechanized proofs of correctness of vector clock race detection and FastTrack
-\item Discovered an issue/asymmetry in the paper proof of correctness for FastTrack
-\item An instrumentation pass that has been proved to implement vector clock race detection for a simple language
-\item A method for verifying race detection instrumentation (the deep spec approach)
+\item We give the first mechanized proofs of correctness of vector clock race detection and the FastTrack algorithm
+\item We discovered an issue in the paper proof of correctness for FastTrack that we repair in our mechanized proof
+\item We describe an instrumentation pass that has been proved to implement vector clock race detection for a simple language
+\item We present a method for verifying race detection instrumentation (the deep spec approach)
 \end{itemize}
 
 \section{Proof Strategy}
