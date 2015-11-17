@@ -1077,8 +1077,8 @@ Definition clocks_sim (m : list conc_op) (s : vstate) :=
   (forall t, t < zt -> clock_match m (clock_of s t) (C + t)) /\
   (forall l, l < zl -> clock_match m (lock_of s l) (L + l)) /\
   (forall v, v < zv -> clock_match m (read_of s v) (R + v) /\
-     clock_match m (write_of s v) (W + v))/\
-  (forall x, x < zv -> can_read m (X+x,0) 0 /\ can_write m (X+x,0))  .
+     clock_match m (write_of s v) (W + v)) (*/\
+  (forall x, x < zv -> can_read m (X+x,0) 0 /\ can_write m (X+x,0)) *) .
 
 Lemma op_indep : forall c1 c2 (Hindep : loc_of c1 <> loc_of c2),
    Forall (fun l => Forall (independent l) (map block_model.loc_of (to_seq c2)))
