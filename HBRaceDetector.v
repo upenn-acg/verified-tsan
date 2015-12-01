@@ -1357,7 +1357,7 @@ Fixpoint safe_instr (i : instr) :=
   | Store p _ => ~meta_loc p /\ fst p < zv
   | Lock m => ~meta_loc (m, 0) /\ m < zl
   | Unlock m => ~meta_loc (m, 0) /\ m < zl
-  | Spawn _ li => list_safe li
+  | Spawn u li => u<zt /\ list_safe li
   | _ => True
   end.
 
@@ -1373,8 +1373,9 @@ Proof.
     clarify; inversion Hlocs2 as [|? ? Hi]; clarify; inversion Hi; clarify;
     constructor; auto.
   constructor; auto.
-  clear - H2.
+  
   induction li; clarify.
+  admit.
 Qed.  
 
 (* if all locals used in e have the same values in G1 & G2, then e evaluates to the same result under G1 & G2*)
@@ -1470,36 +1471,10 @@ Proof.
     apply can_read_thread; auto.
   - clarsimp.
   - unfold clocks_sim in Hs; clarify.
-    specialize (Hs221 _ Hx); clarify.
-    specialize (Hs2212 n); clarify.
+    specialize (Hs22 _ Hx); clarify.
+    specialize (Hs222 n); clarify.
     apply can_read_thread; auto.
 Qed.
-
-Definition not_clocks p := 
- forall t l x (Ht:t<zt) (Hl:l< zl) (Hx: x<zv),
-  p <> C+t /\ p <> R+x /\ p<> W+x /\ p<> L+l.
-
-Print meta_loc.
-Definition clocks_loc (x:ptr) :=
-C <= fst x < C + zt \/
-L <= fst x < L + zl \/
-R <= fst x < R + zv \/ W <= fst x < W + zv \/ X <= fst x < X + zv.
-
-(* conflict with the definition of clocks_sim
-Lemma clocks_sim_app: forall m s (Hs : clocks_sim m s) ops
-  (Hnomod: Forall (fun c=> match c with 
-                             |Read _ _ _ => True
-                             |Write _ x _ => ~ clocks_loc x
-                             |ARW _ x _ _ => ~ clocks_loc x
-                           end) ops ), 
-  clocks_sim (m++ops) s.
-Proof.
-  intros.
-  unfold clocks_sim in *; split;[|split;[|split]]; unfold clock_match in *; clarify.
-  
-  admit.
-Qed.
-*)
 
 
 Lemma mops_max_vc_off : forall src tgt f g t n,
@@ -1587,8 +1562,8 @@ Proof.
     apply can_read_thread; auto.
   - clarsimp.
   - unfold clocks_sim in Hs; clarify.
-    specialize (Hs221 _ Hx); clarify.
-    specialize (Hs2211 n); clarify.
+    specialize (Hs22 _ Hx); clarify.
+    specialize (Hs221 n); clarify.
     apply can_read_thread; auto.
 Qed.
 
@@ -1600,8 +1575,8 @@ Proof.
   unfold mops_move; clarify.
   unfold clocks_sim in Hs; clarify.
   rewrite read_noop_SC.
-  - specialize (Hs221 _ Hx); clarify.
-    specialize (Hs2211 t); clarify.
+  - specialize (Hs22 _ Hx); clarify.
+    specialize (Hs221 t); clarify.
     apply can_write_thread; auto.
   - specialize (Hs1 _ Ht t); clarify.
     apply can_read_thread; auto.
@@ -1615,8 +1590,8 @@ Proof.
   unfold mops_move; clarify.
   unfold clocks_sim in Hs; clarify.
   rewrite read_noop_SC.
-  - specialize (Hs221 _ Hx); clarify.
-    specialize (Hs2212 t); clarify.
+  - specialize (Hs22 _ Hx); clarify.
+    specialize (Hs222 t); clarify.
     apply can_write_thread; auto.
   - specialize (Hs1 _ Ht t); clarify.
     apply can_read_thread; auto.
@@ -1703,6 +1678,35 @@ Proof.
    +specialize(IHn _ _ _ _ _ _ H); clarify.
   -destruct vs1,vs2, x; clarify.
    specialize(IHn _ _ _ _ _ _ Hin); clarify.
+Qed.
+
+Lemma in_mops_set_vc: forall n c vc1 vc2 vs t
+  (Hin: In c (mops_set_vc vc1 vc2 n t vs)) (Hdis: vc1<>vc2),
+match c with
+    | Read _ _ _ => True
+    | Write _ x _ => (vc1, t) <> x
+    | ARW _ x _ _ => False
+  end.
+Proof.
+  intro n. induction n; intros; destruct c; clarify.
+  -destruct vs; clarify.
+   inversion Hin; clarify.
+   +intro Heq. inversion H. clarify.
+   +specialize(IHn (Write t0 x v) vc1 vc2 vs t H Hdis). simpl in IHn. auto.
+  -destruct vs; clarify.
+   specialize(IHn (ARW t0 x v v') vc1 vc2 vs t Hin Hdis). simpl in IHn. auto.
+Qed.
+
+
+Lemma mops_set_vc_meta_cc: forall vs n u t c (Hx : u < zt) (Ht : t < zt)
+  (Hin : In c (mops_set_vc (C + u) (C + t) n t vs )), meta_loc (loc_of c).
+Proof.
+  induction vs; clarify.
+  induction n; clarify.
+  destruct n; clarify.
+  destruct Hin; clarify; [ unfold meta_loc; clarify; omega | ].
+  destruct H; clarify. unfold meta_loc; simpl; omega.
+  specialize(IHvs n u t c Hx Ht H). auto.
 Qed.
 
 
