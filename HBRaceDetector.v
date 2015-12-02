@@ -1699,13 +1699,14 @@ Qed.
 
 
 Lemma mops_set_vc_meta_cc: forall vs n u t c (Hx : u < zt) (Ht : t < zt)
-  (Hin : In c (mops_set_vc (C + u) (C + t) n t vs )), meta_loc (loc_of c).
+  (Hin : In c (mops_set_vc (C + t) (C + u) n t vs )), meta_loc (loc_of c).
 Proof.
   induction vs; clarify.
   induction n; clarify.
   destruct n; clarify.
   destruct Hin; clarify; [ unfold meta_loc; clarify; omega | ].
-  destruct H; clarify. unfold meta_loc; simpl; omega.
+  destruct H; clarify. unfold meta_loc; simpl; omega. 
+  
   specialize(IHvs n u t c Hx Ht H). auto.
 Qed.
 
