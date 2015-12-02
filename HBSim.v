@@ -813,7 +813,12 @@ Qed.
 
 Lemma instrument_sim_race : forall P P1 P2 G1 G2 t h
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1)
-  (Ht : Forall (fun e => fst e < zt) P1)
+  (Ht : Forall (fun e => fst e < zt) P1)  (Hdistinct : distinct P2)
+ 
+  (Ht_spawn: Forall (fun p =>  match p with
+                                 | (t0,Spawn u li::rest) => u <> t0
+                                 | _ => True
+                               end) P1)
   (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2)
   m (Hroot : exec_star (Some (init_state P)) init_env h m (Some P1) G1)
   o c P1' G1' (Hstep : exec P1 G1 t o c (Some P1') G1')
@@ -825,50 +830,61 @@ Proof.
   inversion Hstep; clarify; exploit Forall2_app_inv_l; eauto 2;
     intros (P0' & P3' & HP0 & Hrest & ?);
     inversion Hrest as [|? (?, ?) ? ? ? HP3]; clarify.
-  - specialize (Hrace s); contradiction Hrace; apply ss_refl.
+  - specialize (Hrace s); contradiction Hrace; apply ss_refl. Check ss_refl.
   - destruct x as (x, o).
     destruct Hs as (HC & HL & HRW).
-(*    generalize (HRW x); intro HRWx.
+    generalize (HRW x); intro HRWx.
     setoid_rewrite Forall_app in Hlocs; clarify.
     inversion Hlocs2 as [|?? Hi ?]; clarify.
     inversion Hi; clarify.
     generalize (clock_match_bounded HRWx2); intro Hbound.
     destruct (bounded_le_dec (clock_of s t0) Hbound) as [? | (t & Hgt)].
     { destruct s as (((?, ?), ?), ?); exploit Hrace; [|clarify].
-      econstructor; [constructor; auto | apply ss_refl]. }*)
-    admit.
-(*    exploit load_handler_race_spec.
-    { eauto. }
-    { eauto. }
-    { instantiate (2 := map (write_of s x) (rev (interval 0 zt))).
-      rewrite map_length, rev_length, interval_length.
-      rewrite <- minus_n_O, plus_0_r; eauto. }
-    { instantiate (1 := map (clock_of s t0) (rev (interval 0 zt))).
-      rewrite map_length, rev_length, interval_length; omega. }
-    { rewrite first_gt_spec.
-      destruct Hgt as (Hgt1 & Hgt2 & Hclock); split; [apply Hgt2|].
-      repeat rewrite map_rev;
-        exists (length (map (write_of s x) (interval 0 zt)) - t - 1).
-      split.
-      { apply nth_error_rev; erewrite map_nth_error; eauto.
-        rewrite nth_error_interval; clarify; omega. }
-      split.
-      { assert (length (map (write_of s x) (interval 0 zt)) =
-          length (map (clock_of s t0) (interval 0 zt))) as Heq
-          by (repeat rewrite map_length; auto).
-        rewrite Heq; apply nth_error_rev; erewrite map_nth_error; eauto.
-        rewrite nth_error_interval; clarify; omega. }
-      intros ??? Hlt Hj1 Hj2.
-      generalize (nth_error_rev' _ _ Hj1), (nth_error_rev' _ _ Hj2);
-        intros Hj1' Hj2'.
-      rewrite map_length, interval_length in *.
-      generalize (nth_error_interval (zt - 0 - j - 1) 0 zt); intro Hnth.
-      rewrite <- minus_n_O in *; destruct (lt_dec (zt - j - 1) zt); [|omega].
-      rewrite (map_nth_error _ _ _ Hnth) in Hj1';
-        rewrite (map_nth_error _ _ _ Hnth) in Hj2'; clarify.
-      apply Hclock; omega. }
-    rewrite plus_0_r; intro Hload.
-    rewrite <- app_assoc; eauto.*)
+      econstructor; [constructor; auto | apply ss_refl]. }
+    { 
+      exploit load_handler_race_spec.
+      { eauto. }
+      { eauto. }
+      { instantiate (2 := map (clock_of s t0) (rev (interval 0 zt))).
+        rewrite map_length, rev_length, interval_length.
+        rewrite <- minus_n_O, plus_0_r; eauto. 
+        instantiate (1 := map (write_of s x) (rev (interval 0 zt))).
+        rewrite map_length, rev_length, interval_length. omega. }
+      { rewrite first_gt_spec.
+        destruct Hgt as (Hgt1 & Hgt2 & Hclock); split; [apply Hgt2|].
+        repeat rewrite map_rev;
+          exists (length (map (write_of s x) (interval 0 zt)) - t - 1).
+        split.
+        { apply nth_error_rev; erewrite map_nth_error; eauto.
+          rewrite nth_error_interval; clarify; omega. }
+        split.
+        { assert (length (map (write_of s x) (interval 0 zt)) =
+                  length (map (clock_of s t0) (interval 0 zt))) as Heq
+                                                                  by (repeat rewrite map_length; auto).
+          rewrite Heq; apply nth_error_rev; erewrite map_nth_error; eauto.
+          rewrite nth_error_interval; clarify; omega. }
+        intros ??? Hlt Hj1 Hj2.
+        generalize (nth_error_rev' _ _ Hj1), (nth_error_rev' _ _ Hj2);
+          intros Hj1' Hj2'.
+        rewrite map_length, interval_length in *.
+        generalize (nth_error_interval (zt - 0 - j - 1) 0 zt); intro Hnth.
+        rewrite <- minus_n_O in *; destruct (lt_dec (zt - j - 1) zt); [|omega].
+        rewrite (map_nth_error _ _ _ Hnth) in Hj1';
+          rewrite (map_nth_error _ _ _ Hnth) in Hj2'; clarify.
+        apply Hclock; omega. 
+      }
+      rewrite plus_0_r; intro Hload.
+      instantiate(1:=t0) in Hload.
+      instantiate(1:=G2) in Hload. instantiate(1:=x) in Hload. 
+      instantiate(1:= l') in Hload.
+      instantiate(1:=[Load a (x, o); Unlock (X' + x)] ++ instrument rest t0) in Hload.
+      instantiate(1:=P0') in Hload.
+      do 3 eexists.
+      rewrite <- app_assoc. unfold load_handler in Hload.
+      rewrite map_length, rev_length, interval_length, <- minus_n_O in Hload.
+      simpl in Hload. simpl. eapply Hload.
+    }
+    -
 Admitted.
 
 (* There's no escape from fine-grained interleaving. We can either:
