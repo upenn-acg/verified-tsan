@@ -2107,6 +2107,22 @@ Proof.
     apply nth_error_split.
 Qed.
 
+Transparent move.
+Lemma set_vc_len : forall src tgt z tmp,
+  length (set_vc src tgt z tmp) = 2 * z.
+Proof.
+  induction z; clarify.
+  rewrite IHz; omega.
+Qed.
+Opaque move.
+
+Lemma spawn_handler_len : forall t u z tmp,
+  length (spawn_handler t u z tmp) = 2 * z + 3.
+Proof.
+  unfold spawn_handler; clarify.
+  rewrite app_length, set_vc_len; simpl; omega.
+Qed.
+
 Lemma iexec_inv : forall i P P1 t rest P2 G lo lc P' G'
   (HP : P = P1 ++ (t, instrument_instr i t ++ rest) :: P2)
   (Hdistinct : distinct P) (Hiexec : iexec P G t lo lc P' G'),
@@ -2169,14 +2185,41 @@ Proof.
   intros.
   inversion Hiexec; clarify; exploit distinct_thread; eauto; clarify.
   - destruct i; clarify; try (destruct x); destruct zt; clarify.
-  - admit.  
-  - admit.
-  - admit.
-  - admit.
-  - destruct i; clarify; try solve [try destruct x; destruct zt; clarify].
-    admit.
-  - admit.
-  - admit.
+  - destruct i; clarify; try (destruct x0); destruct zt; clarify.
+    rewrite Nat.add_cancel_l in *; subst.
+    repeat rewrite <- app_assoc in *; simpl in *.
+    exploit app_eq_inv; eauto; clarify.
+    exploit app_eq_inv; eauto; clarify.
+    repeat eexists; eauto.
+    { repeat rewrite <- app_assoc in *; simpl in *.
+      exploit app_eq_inv; eauto; clarify. }
+  - destruct i; clarify; try (destruct x0); destruct zt; clarify.
+    { repeat rewrite <- app_assoc in *; simpl in *.
+      exploit app_eq_inv; eauto; clarify. }
+    rewrite Nat.add_cancel_l in *; subst.
+    repeat rewrite <- app_assoc in *; simpl in *.
+    exploit app_eq_inv; eauto; clarify.
+    exploit app_eq_inv; eauto; clarify.
+    repeat eexists; eauto.
+  - destruct i; clarify; try (destruct x); destruct zt; clarify.
+    exploit app_eq_inv; eauto; clarify.
+    repeat eexists; eauto.
+  - destruct i; clarify; try (destruct x); destruct zt; clarify.
+    rewrite Nat.add_cancel_l in *; subst.
+    repeat rewrite <- app_assoc in *; simpl in *.
+    exploit app_eq_inv; eauto; clarify.
+    repeat eexists; eauto.
+  - destruct i; clarify; try (destruct x); destruct zt; clarify.
+    repeat rewrite <- app_assoc in *; simpl in *.
+    exploit app_eq_inv.
+    { do 2 rewrite spawn_handler_len; eauto. }
+    { eauto. }
+    clarify.
+    repeat eexists; eauto.
+  - destruct i; clarify; try (destruct x); destruct zt; clarify.
+    exploit app_eq_inv; eauto; clarify.
+    repeat eexists; eauto.
+  - destruct i; clarify; try (destruct x); destruct zt; clarify.
 Qed.
 
 Lemma state_sim_step : forall P1 P2 G1 G2 t o lo c lc P1' P2' G1' G2'
@@ -2218,7 +2261,8 @@ Proof.
 Qed.
 
 Lemma sim_step : forall P1 P2 G1 G2 t o lo c lc P1' P2' G1' G2'
-  (Hfresh : fresh_tmps P1) (Hdistinct : distinct P2)
+  (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1) (Hdistinct : distinct P2)
+  (Ht : Forall (fun e => fst e < zt) P1)
   (Hexec : exec P1 G1 t o c (Some P1') G1')
   (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2)
   (Hiexec : iexec P2 G2 t lo lc P2' G2') (Hmem : mem_sim c lc),
@@ -2244,9 +2288,18 @@ Proof.
     destruct (eq_dec v1 a); [subst | repeat rewrite upd_old; auto].
     destruct (eq_dec t t0); [subst | repeat rewrite upd_old_t; auto].
     repeat rewrite upd_same; auto.
-    specialize (Hmem (Read t0 (x, o) v)); destruct Hmem; clarify.
+    specialize (Hmem (Read t0 (x, o) v)); destruct Hmem as (Hmem & _);
+      clarify.
     rewrite in_app in *; clarify.
-    admit.
+    setoid_rewrite Forall_app in Hlocs; clarify.
+    inversion Hlocs2 as [|? ? Hx ?]; inversion Hx; clarify.
+    setoid_rewrite Forall_app in Ht; clarify.
+    inversion Ht2; clarify.
+    destruct Hmem1 as [? | [Hmem1 | [? | [Hmem1 | ?]]]]; clarify.
+    + exploit mops_hb_check_meta; eauto; clarify.
+    + inversion Hmem1; clarify.
+      contradiction Hmem2; unfold meta_loc; simpl; omega.
+    + inversion Hmem1; auto.
   - destruct x as (x, o).
     exploit (iexec_inv (Store (x, o) e)); eauto.
     { apply Hdistinct. }
@@ -2258,10 +2311,15 @@ Proof.
     unfold state_sim; clarify.
     unfold env_sim in *; clarify.
     repeat rewrite upd_old; eauto.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
+  - exploit (iexec_inv (Unlock m)); simpl; eauto; clarify.
+    unfold env_sim in *; unfold upd_env, upd; clarify.
+    destruct (eq_dec tmp1 v); clarify.
+  - exploit (iexec_inv (Spawn u li)); simpl; eauto; clarify.
+    unfold env_sim in *; unfold upd_env, upd; clarify.
+  - exploit (iexec_inv (Wait u)); simpl; eauto; clarify.
+    unfold env_sim in *; unfold upd_env, upd; clarify.
+    destruct (eq_dec tmp2 v); clarify.
+  - exploit (iexec_inv (Assert_le e1 e2)); simpl; eauto; clarify.
 Qed.
 
 End Sim_Defs.

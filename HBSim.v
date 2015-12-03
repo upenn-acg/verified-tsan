@@ -1529,13 +1529,6 @@ Proof.
   rewrite app_length, max_vc_len; simpl; omega.
 Qed.
 
-Lemma set_vc_len : forall src tgt z tmp,
-  length (set_vc src tgt z tmp) = 2 * z.
-Proof.
-  induction z; clarify.
-  rewrite IHz; omega.
-Qed.
-
 Lemma spawn_handler_len : forall t u z tmp,
   length (spawn_handler t u z tmp) = 2 * z + 3.
 Proof.

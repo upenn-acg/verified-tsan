@@ -12,3 +12,6 @@ PLDI 2016/main.bbl
 *.fdb_latexmk
 PLDI 2016/main.fls
 PLDI 2016/main.synctex.gz
+PLDI 2016/main.pdf
+*.log
+PLDI 2016/main.blg
