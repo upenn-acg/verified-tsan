@@ -1360,7 +1360,6 @@ Fixpoint fresh (v : local) (i : instr) :=
 (*P2 is the instrumented program of P1*)
 Definition state_sim (P1 P2 : state) := Forall2 (fun t1 t2 => fst t1 = fst t2 /\
   snd t2 = instrument (snd t1) (fst t1)) P1 P2.
-Check state_sim.
 (*all locals except tmp1 or tmp2 in G1 & G2 have the same values *)
 Definition env_sim (G1 G2 : env) := forall t v, v <> tmp1 -> v <> tmp2 ->
   G1 t v = G2 t v.
@@ -1419,9 +1418,9 @@ Proof.
     clarify; inversion Hlocs2 as [|? ? Hi]; clarify; inversion Hi; clarify;
     constructor; auto.
   constructor; auto.
-  
+  simpl.
+  clear Hlocs2 Hnew Hi.
   induction li; clarify.
-  admit.
 Qed.  
 
 (* if all locals used in e have the same values in G1 & G2, then e evaluates to the same result under G1 & G2*)
@@ -1681,7 +1680,6 @@ Proof.
   repeat rewrite lower_single; simpl; apply write_any_value.
 Qed.  
 
-Check mops_hb_check.
 Lemma in_mops_hb_check: forall n c vc1 vc2 vs1 vs2 t
    (Hin: In c (mops_hb_check vc1 vc2 vs1 vs2 n t) ),
   match c with
