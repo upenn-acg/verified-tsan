@@ -877,6 +877,50 @@ Proof.
       clarify; rewrite app_length; rewrite plus_comm; auto.
 Qed.
 
+Lemma store_handler_race_waw_spec: forall n x t P G P1 P2 rest v1 v2 vs1 vs2
+ (Hstore_handler_spec: P= P1++(t,store_handler t x  n++rest)::P2) 
+ (Hvs1: length vs1 = n) (Hvs2: length vs2 = n) 
+ (Hfirst_gt: first_gt vs1 vs2 = Some (v1,v2)),
+ exec_star (Some P) G (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t)
+           (Acq t (X + x) :: mops_hb_check (W + x) (C + t) vs1 vs2 n t) 
+           None (upd_env (upd_env G t tmp1 v1) t tmp2 v2). 
+Proof.
+  destruct n; intros.
+  -destruct vs1, vs2; clarify.
+  -eapply store_handler_race_waw_spec_n; eauto.
+Qed.
+ 
+
+Lemma store_handler_race_war_spec: forall n x t P G P1 P2 rest v2 v3 vs1 vs2 vs3
+ (Hstore_handler_spec: P= P1++(t,store_handler t x n ++rest)::P2) 
+ (Hvs1: length vs1 = n) (Hvs2: length vs2 = n) (Hvs3: length vs3 = n) 
+ (Hfirst_gt12: first_gt vs1 vs2 = None)
+ (Hfirst_gt32: first_gt vs3 vs2 = Some (v3,v2)),
+
+ exec_star (Some P) G 
+           (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t ++
+            events_hb_check (R + x) (C + t) vs3 vs2 t)
+           (Acq t (X + x) :: mops_hb_check (W + x) (C + t) vs1 vs2 n t ++
+            mops_hb_check (R + x) (C + t) vs3 vs2 n t) 
+           None (upd_env (upd_env G t tmp1 v3) t tmp2 v2). 
+Proof.
+  destruct n; intros.
+  -destruct vs1, vs2, vs3; clarify.
+  -assert(Hves: exists ve1 ve2 ve3 vss1 vss2 vss3, vs1=vss1++[ve1]/\ vs2=vss2++[ve2] /\ vs3=vss3++[ve3]).
+     destruct vs1, vs2, vs3; clarify.
+     do 6 eexists.
+     instantiate(1:=last (n2::vs3) n2). instantiate (1:=removelast (n2::vs3)).
+     instantiate(1:=last (n1::vs2) n1). instantiate (1:=removelast (n1::vs2)).
+     instantiate(1:=last (n0::vs1) n0). instantiate (1:=removelast (n0::vs1)).
+     repeat rewrite <- app_removelast_last; clarify.
+    inversion Hves; clarify.
+    eapply store_handler_race_war_spec_n; eauto. 
+    +instantiate(1:=P2). instantiate(1:=rest). instantiate(1:=P1). auto.
+    + rewrite app_length in *. simpl in *. omega.
+    + rewrite app_length in *. simpl in *. omega.
+    + rewrite app_length in *. simpl in *. omega.
+Qed.
+
 Lemma store_handler_norace_spec_n: forall n x t P G P1 P2 rest v1 v2 v3 vs1 vs2 vs3
  (Hstore_handler_spec: P= P1++(t,store_handler t x (S n)++rest)::P2) 
  (Hvs1: length vs1 = n) (Hvs2: length vs2 = n) (Hvs3: length vs3 =n) 
@@ -904,6 +948,8 @@ Proof.
       setoid_rewrite upd_assoc at 2; auto.
       setoid_rewrite <- (upd_overwrite _ _ _ v3) at 3; apply move_spec; auto.
 Qed.
+
+
 
 Transparent hb_check.
 
