@@ -2846,7 +2846,7 @@ Proof.
        v0 (since tmp1 and tmp2 are fresh in e). *)
     admit.
 Qed.
-
+(*
 Lemma instrument_indep : forall P G t lo lc P1 G1 i li
   (Hdistinct : distinct P) (Hin : In (t, instrument_instr i t ++ li) P)
   (Hsteps : t_steps P G t (length (instrument_instr i t) - 1) lo lc
@@ -2930,7 +2930,7 @@ Proof.
     + 
     
 Abort.
-
+*)
 Lemma exec_t_maintain : forall P G lo lc P' G' t li (Hdistinct : distinct P)
   (Hin : In (t, li) P) (Hsteps : exec_star_t t (Some P) G lo lc (Some P') G')
   (Hin' : In (t, li) P'), P' = P /\ G' = G /\ lo = [] /\ lc = [].
@@ -3101,19 +3101,22 @@ Proof.
     rewrite app_length, Hinstr; simpl; omega.
 Qed.
  
-Lemma instrument_sim_safe2 : forall P P1 P2 G1 G2 h
+
+Lemma instrument_sim_safe2 : forall P P1 P2 G1 G2 t h
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1)
   (Ht : Forall (fun e => fst e < zt) P1)
   (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2)
   m (Hroot : exec_star (Some (init_state P)) init_env h m (Some P1) G1)
-  o2 c2 P2' G2' (Hstep : iexec P2 G2 o2 c2 P2' G2')
-  (Hcon : consistent (m ++ opt_to_list c2)) s (Hs : clocks_sim m s),
-  exists o c P1' G1', exec P1 G1 o c (Some P1') G1' /\
+  o2 c2 P2' G2' (Hstep : iexec P2 G2 t o2 c2 P2' G2')
+  (Hcon : consistent (m ++ c2)) s (Hs : clocks_sim m s),
+  exists o c P1' G1', exec P1 G1 t o c (Some P1') G1' /\
     state_sim P1' P2' /\ env_sim G1' G2' /\
-    mem_sim c (opt_to_list c2) /\
+    mem_sim c c2 /\
         exists s', step_star s (opt_to_list o) s' /\
-                   clocks_sim (m ++ opt_to_list c2) s'.
+                   clocks_sim (m ++ c2) s'.
 Proof.
+
+
 Abort.
 
 Theorem instrument_correct : forall P h m P' G'
