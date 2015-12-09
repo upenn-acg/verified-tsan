@@ -55,7 +55,8 @@ Section Semantics.
   Inductive conc_op : Type :=
   | Read (t : tid) (x : ptr) (v : nat)
   | Write (t : tid) (x : ptr) (v : nat)
-  | ARW (t : tid) (x : ptr) (v : nat) (v' : nat).
+  | ARW (t : tid) (x : ptr) (v : nat) (v' : nat)
+  | Alloc (b : block) | Free (b : block).
 
   Definition thread_of c :=
     match c with
