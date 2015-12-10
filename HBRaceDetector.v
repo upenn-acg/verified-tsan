@@ -1126,7 +1126,11 @@ Definition clocks_sim (m : list conc_op) (s : vstate) :=
      clock_match m (write_of s v) (W + v)) (*/\
   (forall x, x < zv -> can_read m (X+x,0) 0 /\ can_write m (X+x,0)) *) .
 
-Lemma op_indep : forall c1 c2 (Hindep : loc_of c1 <> loc_of c2),
+Definition prog_op c := match c with Read _ _ _ | Write _ _ _ | ARW _ _ _ _ =>
+  True | _ => False end.
+
+Lemma op_indep : forall c1 c2 (Hindep : loc_of c1 <> loc_of c2)
+   (Hc1 : prog_op c1) (Hc2 : prog_op c2),
    Forall (fun l => Forall (independent l) (map block_model.loc_of (to_seq c2)))
      (map block_model.loc_of (to_seq c1)).
 Proof.
@@ -1134,6 +1138,7 @@ Proof.
 Qed.
 
 Lemma loc_comm_SC : forall m1 c1 c2 m2 (Hindep : loc_of c1 <> loc_of c2)
+  (Hc1 : prog_op c1) (Hc2 : prog_op c2)
   (Hcon : consistent (m1 ++ c1 :: c2 :: m2)), consistent (m1 ++ c2 :: c1 :: m2).
 Proof.
   unfold consistent, SC; clarify.
@@ -1144,20 +1149,23 @@ Proof.
 Qed.
   
 Lemma loc_comm_ops1_SC : forall c lc m1 m2
-  (Hindep : Forall (fun c' => loc_of c' <> loc_of c) lc),
+  (Hindep : Forall (fun c' => loc_of c' <> loc_of c) lc)
+  (Hc : prog_op c) (Hlc : Forall prog_op lc),
   consistent (m1 ++ c :: lc ++ m2) <-> consistent (m1 ++ lc ++ c :: m2).
 Proof.
   induction lc; clarify; [reflexivity|].
-  inversion Hindep; clarify.
+  inversion Hlc; inversion Hindep; clarify.
   specialize (IHlc (m1 ++ [a]) m2); clarsimp.
   etransitivity; eauto; split; apply loc_comm_SC; auto.
 Qed.
 
 Lemma loc_comm_ops_SC : forall lc1 lc2 m1 m2
-  (Hindep : Forall (fun c => Forall (fun c' => loc_of c' <> loc_of c) lc2) lc1),
+  (Hindep : Forall (fun c => Forall (fun c' => loc_of c' <> loc_of c) lc2) lc1)
+  (Hlc1 : Forall prog_op lc1) (Hlc2 : Forall prog_op lc2),
   consistent (m1 ++ lc1 ++ lc2 ++ m2) <-> consistent (m1 ++ lc2 ++ lc1 ++ m2).
 Proof.
   induction lc1; clarify; [reflexivity|].
+  inversion Hlc1; clarify.
   specialize (IHlc1 lc2 (m1 ++ [a]) m2); inversion Hindep; clarsimp.
   etransitivity; eauto; apply loc_comm_ops1_SC; auto.
 Qed.
@@ -1169,7 +1177,8 @@ Proof.
   rewrite lower_app in Hcon; eapply consistent_app; eauto.
 Qed.
 
-Lemma loc_valid_SC : forall m c1 c2 (Hindep : loc_of c1 <> loc_of c2),
+Lemma loc_valid_SC : forall m c1 c2 (Hindep : loc_of c1 <> loc_of c2)
+  (Hc1 : prog_op c1) (Hc2 : prog_op c2),
   consistent (m ++ [c1; c2]) <->
   (consistent (m ++ [c1]) /\ consistent (m ++ [c2])).
 Proof.
@@ -1186,13 +1195,15 @@ Proof.
 Qed.
 
 Lemma loc_valid_ops1_SC : forall c lc m
-  (Hindep : Forall (fun c' => loc_of c' <> loc_of c) lc),
+  (Hindep : Forall (fun c' => loc_of c' <> loc_of c) lc)
+  (Hc : prog_op c) (Hlc : Forall prog_op lc),
   consistent (m ++ lc ++ [c]) <->
   (consistent (m ++ lc) /\ consistent (m ++ [c])).
 Proof.
   induction lc; clarify.
   { split; clarsimp.
     eapply consistent_app_SC; eauto. }
+  inversion Hlc; clarify.
   specialize (IHlc (m ++ [a])); inversion Hindep; clarsimp.
   rewrite IHlc, loc_valid_SC; auto.
   split; intro Hcon; clarify.
@@ -1200,7 +1211,8 @@ Proof.
 Qed.
 
 Corollary loc_valid_ops2_SC : forall m c lc
-  (Hindep : Forall (fun c' => loc_of c' <> loc_of c) lc),
+  (Hindep : Forall (fun c' => loc_of c' <> loc_of c) lc)
+  (Hc : prog_op c) (Hlc : Forall prog_op lc),
   consistent (m ++ c :: lc) <->
   (consistent (m ++ lc) /\ consistent (m ++ [c])).
 Proof.
@@ -1209,13 +1221,15 @@ Proof.
 Qed.
 
 Lemma loc_valid_ops_SC : forall lc1 lc2 m
-  (Hindep : Forall (fun c => Forall (fun c' => loc_of c' <> loc_of c) lc2) lc1),
+  (Hindep : Forall (fun c => Forall (fun c' => loc_of c' <> loc_of c) lc2) lc1)
+  (Hlc1 : Forall prog_op lc1) (Hlc2 : Forall prog_op lc2),
   consistent (m ++ lc1 ++ lc2) <->
   (consistent (m ++ lc1) /\ consistent (m ++ lc2)).
 Proof.
   induction lc1; clarify.
   { split; clarsimp.
     eapply consistent_app_SC; eauto. }
+  inversion Hlc1; clarify.
   specialize (IHlc1 lc2 (m ++ [a])); inversion Hindep; clarsimp.
   rewrite IHlc1; setoid_rewrite loc_valid_ops2_SC at 2; auto.
   split; intro Hcon; clarify.
@@ -1259,9 +1273,11 @@ Proof.
 Qed.
 
 Lemma can_write_SC : forall p ops m (Hcan : can_write m p)
-  (Hcon : consistent (m ++ ops)), can_write (m ++ ops) p.
+  (Hcon : consistent (m ++ ops)) (Hops : Forall prog_op ops),
+  can_write (m ++ ops) p.
 Proof.
   induction ops; clarsimp.
+  inversion Hops; clarify.
   specialize (IHops (m ++ [a])); clarsimp.
   apply IHops; auto; clear IHops.
   rewrite split_app in Hcon; exploit consistent_app_SC; eauto; intro Hcon'.
@@ -1277,14 +1293,13 @@ Proof.
 Qed.
 
 Lemma can_read_SC: forall p ops m v (Hcan: can_read m p v)
- (Hcon: consistent ( m ++ops)) (Hnmods: Forall (fun c => match c with
-                                                            | Write _ x _ => p <> x
-                                                            | ARW _ x _ _=> p <> x
-                                                            | _ => True
-                                                          end) ops),
+ (Hcon: consistent (m ++ ops)) (Hops : Forall prog_op ops)
+  (Hnmods: Forall (fun c => match c with | Write _ x _ => p <> x
+     | ARW _ x _ _=> p <> x | _ => True end) ops),
  can_read (m++ops) p v.
 Proof.
  induction ops; clarsimp.
+ inversion Hops; clarify.
  specialize(IHops (m++[a])); clarsimp.
  apply IHops; auto.
  rewrite split_app in Hcon; exploit consistent_app_SC; eauto; intro Hcon'.
@@ -1331,6 +1346,7 @@ Proof.
   apply can_write_SC; auto.
   apply can_read_thread.
   auto.
+  { constructor; clarify. }
 Qed.
   
 (* returns true if v is not used in e*)
@@ -1534,20 +1550,27 @@ Proof.
   destruct (loc_of a); omega.
 Qed.
 
+Lemma max_vc_prog : forall src tgt t z vs1 vs2,
+  Forall prog_op (mops_max_vc src tgt vs1 vs2 t z).
+Proof.
+  induction z; intros; destruct vs1; clarify; destruct vs2; clarify.
+  repeat constructor; clarify.
+Qed.
+Hint Resolve max_vc_prog.
+
 (* mops generated by max_vc are consistent?*)
 Lemma mops_max_vc_con_lc : forall m s (Hs : clocks_sim m s) m0 t0 n
   (Hn : n <= zt) (Hl : m0 < zl) (Ht : t0 < zt) (Hcon : consistent m),
   consistent (m ++ 
     (mops_max_vc (L + m0) (C + t0) (map (lock_of s m0) (rev (interval 0 n)))
        (map (clock_of s t0) (rev (interval 0 n))) t0 n)).
-
 Proof.
   induction n; clarify.
   { rewrite app_nil_r; auto. }
   rewrite rev_app_distr; clarify.
   unfold clocks_sim in Hs; clarify.
   do 2 rewrite read_noop_SC.
-  - rewrite loc_valid_ops2_SC; [split|].
+  - rewrite loc_valid_ops2_SC; clarify; try split.
     + apply IHn; auto; omega.
     + specialize (Hs1 _ Ht n); clarify.
       apply can_write_thread; auto.
@@ -1574,7 +1597,7 @@ Proof.
   rewrite rev_app_distr; clarify.
   unfold clocks_sim in Hs; clarify.
   do 2 rewrite read_noop_SC.
-  - rewrite loc_valid_ops2_SC; [split|].
+  - rewrite loc_valid_ops2_SC; clarify; try split.
     + apply IHn; auto; omega.
     + specialize (Hs21 _ Hl n); clarify.
       apply can_write_thread; auto.
@@ -1696,32 +1719,20 @@ Proof.
     *specialize(IHn _ _ _ _ _ _ H0); clarify.
   -specialize(IHn _ _ _ _ _ _ Hin); clarify.
   -specialize(IHn _ _ _ _ _ _ Hin); clarify.
+  -exploit IHn; eauto.
+  -exploit IHn; eauto.
 Qed.
 
 Lemma in_mops_max_vc: forall n c vc1 vc2 vs1 vs2 t
-   (Hin: In c (mops_max_vc vc1 vc2 vs1 vs2 t n) ) (Hdis: vc1<>vc2) ,
+   (Hin: In c (mops_max_vc vc1 vc2 vs1 vs2 t n)) (Hdis: vc1<>vc2),
   match c with 
   | Write tc p _ => fst p <> vc1
-  | ARW _ _ _ _ => False
-  | Read tc p _  => fst p = vc1 \/ fst p= vc2
+  | Read tc p _  => fst p = vc1 \/ fst p = vc2
+  | _ => False
   end.
 Proof.
-  intro n.
-  induction n; intros;
-  destruct c; clarify.
-  -destruct vs1, vs2; clarify.
-  -destruct vs1, vs2; clarify.
-  -destruct vs1, vs2; clarify.
-  -destruct vs1, vs2, x; clarify. 
-   inversion Hin; inversion H; clarify.
-   +inversion H0; clarify.
-   + specialize(IHn _ _ _ _ _ _ H0); clarify.
-  -destruct vs1,vs2, x; clarify.
-   inversion Hin; clarify.
-   +inversion H; clarify.
-   +specialize(IHn _ _ _ _ _ _ H); clarify.
-  -destruct vs1,vs2, x; clarify.
-   specialize(IHn _ _ _ _ _ _ Hin); clarify.
+  induction n; intros; destruct vs1; clarify; destruct vs2; clarify.
+  destruct c; clarify; exploit IHn; eauto.
 Qed.
 
 Lemma in_mops_set_vc: forall n c vc1 vc2 vs t
@@ -1729,18 +1740,14 @@ Lemma in_mops_set_vc: forall n c vc1 vc2 vs t
 match c with
     | Read _ _ _ => True
     | Write _ x _ => (vc1, t) <> x
-    | ARW _ x _ _ => False
+    | _ => False
   end.
 Proof.
-  intro n. induction n; intros; destruct c; clarify.
-  -destruct vs; clarify.
-   inversion Hin; clarify.
-   +intro Heq. inversion H. clarify.
-   +specialize(IHn (Write t0 x v) vc1 vc2 vs t H Hdis). simpl in IHn. auto.
-  -destruct vs; clarify.
-   specialize(IHn (ARW t0 x v v') vc1 vc2 vs t Hin Hdis). simpl in IHn. auto.
+  induction n; intros; destruct vs; clarify; destruct c; clarify;
+    try solve [exploit IHn; eauto].
+  destruct Hin; [|exploit IHn; eauto].
+  inversion H; intro; clarify.
 Qed.
-
 
 Lemma mops_set_vc_meta_cc: forall vs n u t c (Hx : u < zt) (Ht : t < zt)
   (Hin : In c (mops_set_vc (C + t) (C + u) n t vs )), meta_loc (loc_of c).
@@ -1756,14 +1763,13 @@ Qed.
 
 
 Lemma can_read_SC': forall p ops m v (Hcan: can_read m p v)
- (Hcon: consistent ( m ++ops)) (Hnmods: Forall (fun c => match c with
-                                                            | Write _ x _ => p <> x
-                                                            | ARW _ x _ _=> p <> x
-                                                            | _ => True
-                                                          end) ops),
- can_read (m++ops) p v.
+  (Hcon: consistent (m ++ ops)) (Hops : Forall prog_op ops)
+  (Hnmods: Forall (fun c => match c with | Write _ x _ => p <> x
+     | ARW _ x _ _=> p <> x | _ => True end) ops),
+ can_read (m ++ ops) p v.
 Proof.
  induction ops; clarsimp.
+ inversion Hops; clarify.
  specialize(IHops (m++[a])); clarsimp.
  apply IHops; auto.
  rewrite split_app in Hcon; exploit consistent_app_SC; eauto; intro Hcon'.
@@ -1822,7 +1828,9 @@ Proof.
   rewrite can_arw_SC_iff.
   apply can_write_SC.
   -apply can_write_SC; auto.
+   constructor; clarify.
   -rewrite read_arwritten_SC; auto.
+  -constructor; clarify.
 Qed.
 
 
@@ -1838,7 +1846,7 @@ Proof.
   rewrite rev_app_distr; clarify.
   unfold clocks_sim in Hs; clarify.
   do 2 rewrite read_noop_SC.
-  - rewrite loc_valid_ops2_SC; [split|].
+  - rewrite loc_valid_ops2_SC; clarify; try split.
     + apply IHn; auto; omega.
     + specialize (Hs1 _ Ht n); clarify.
       apply can_write_thread; auto.
@@ -1866,11 +1874,18 @@ Proof.
   destruct (loc_of a); omega.
 Qed.
 
+Lemma set_vc_prog : forall src tgt z t vs,
+  Forall prog_op (mops_set_vc src tgt z t vs).
+Proof.
+  induction z; intros; destruct vs; clarify.
+  repeat constructor; clarify.
+Qed.
+Hint Resolve set_vc_prog.
+
 Lemma mops_set_vc_con_cc : forall m s (Hs : clocks_sim m s) u t0 n
   (Hn : n <= zt) (Hu : u < zt) (Ht : t0 < zt) (Hcon : consistent m),
   consistent (m ++ 
     (mops_set_vc (C + t0) (C + u) n t0 (map (clock_of s t0) (rev (interval 0 n))))).
-
 Proof.
   induction n; clarify.
   { rewrite app_nil_r; auto. }
@@ -1878,7 +1893,7 @@ Proof.
   unfold clocks_sim in Hs; clarify.
   
   rewrite read_noop_SC.
-  - rewrite loc_valid_ops2_SC; [split|].
+  - rewrite loc_valid_ops2_SC; clarify; try split.
     + apply IHn; auto; omega.
     + specialize (Hs1 _ Hu n); clarify.
       apply can_write_thread; auto.
@@ -1895,12 +1910,18 @@ Proof.
   induction l1; clarify.
   destruct n; clarify.
   destruct l2; clarify.
-  destruct Hin;
-  destruct n; clarify; destruct l2; clarify;
-  repeat (destruct H; clarify;  [unfold meta_loc; clarify; omega |]);
-  eauto.
+  specialize (IHl1 l2 n u t c); clarify.
+  repeat (destruct Hin as [Hin | Hin]); clarify; unfold meta_loc; simpl;
+    abstract omega.
 Qed.
 
+Lemma hb_check_prog : forall C1 C2 z t vs1 vs2,
+  Forall prog_op (mops_hb_check C1 C2 vs1 vs2 z t).
+Proof.
+  induction z; intros; destruct vs1; clarify; destruct vs2; clarify.
+  repeat constructor; clarify.
+Qed.
+Hint Resolve hb_check_prog.
 
 (* Bigger-step semantics *)
 Inductive iexec P G t :
@@ -2323,3 +2344,4 @@ Qed.
 End Sim_Defs.
 
 End Instrumentation.
+Hint Resolve max_vc_prog set_vc_prog hb_check_prog.

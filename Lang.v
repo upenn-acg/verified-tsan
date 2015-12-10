@@ -56,13 +56,15 @@ Section Semantics.
   | Read (t : tid) (x : ptr) (v : nat)
   | Write (t : tid) (x : ptr) (v : nat)
   | ARW (t : tid) (x : ptr) (v : nat) (v' : nat)
-  | Alloc (b : block) | Free (b : block).
+  | Alloc (t : tid) (b : var) (n : nat) | Free (t : tid) (b : var).
 
   Definition thread_of c :=
     match c with
     | Read t _ _ => t
     | Write t _ _ => t
     | ARW t _ _ _ => t
+    | Alloc t _ _ => t
+    | Free t _ => t
     end.
 
   Definition to_seq c :=
@@ -70,6 +72,8 @@ Section Semantics.
     | Read _ x v => [MRead x v]
     | Write _ x v => [MWrite x v]
     | ARW _ x v v' => [MRead x v; MWrite x v']
+    | Alloc _ b n => [MAlloc b n]
+    | Free _ b => [MFree b]
     end.
 
   Definition loc_of c :=
@@ -77,6 +81,8 @@ Section Semantics.
     | Read _ x _ => x
     | Write _ x _ => x
     | ARW _ x _ _ => x
+    | Alloc _ b _ => (b, 0)
+    | Free _ b => (b, 0)
     end.
 
   Definition synchronizes_with c1 c2 := loc_of c1 = loc_of c2 /\
@@ -100,10 +106,9 @@ Section Semantics.
     drop_b_reads := drop_b_reads }.
   Proof.
     - induction ops; clarify.
-      rewrite filter_app; destruct a; clarify.
+      rewrite filter_app; destruct a; clarsimp.
       + destruct x as (b', ?); unfold negb, beq; clarify.
         rewrite IHops; auto.
-      + rewrite IHops; auto.
       + destruct x as (b', ?); unfold negb, beq; simpl; destruct (eq_dec b' b);
           clarify; rewrite IHops; auto.
     - destruct c; clarsimp.
