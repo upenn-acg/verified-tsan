@@ -121,6 +121,7 @@ Proof.
 Qed.
 
 Hypothesis zt_non_zero : zt <> 0.
+(*
 Lemma instrument_sim_safe : forall P P1 P2 G1 G2 t h
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1) (Hdistinct : distinct P2)
   (Ht : Forall (fun e => fst e < zt) P1) 
@@ -1044,7 +1045,7 @@ Proof.
       econstructor; [constructor; auto | apply ss_refl].
     -specialize(Hrace s). contradiction Hrace; apply ss_refl.
 Qed.
-
+*)
 
 (* There's no escape from fine-grained interleaving. We can either:
    - use a messy simulation relation with cases for intermediate states; or
@@ -3101,6 +3102,38 @@ Proof.
     rewrite app_length, Hinstr; simpl; omega.
 Qed.
  
+Lemma list_part_diff : forall (X:Type) (l1 l2 l3 l4: list X)
+ (Hlen: length l1 = length l2) (Hdiff: l3<>l4), l1++l3<> l2++l4.
+Proof.
+  induction l1; intros.
+  -destruct l2; clarify.
+  -destruct l2; clarify.
+   intro Heq; inversion Heq; clarify. inversion Hlen. 
+   specialize(IHl1 l2 l3 l4 H0 Hdiff). clarify.
+Qed.
+
+Lemma list_part_same : forall (X:Type) (l1 l2 l3 l4: list X)
+  (Hlen: length l1 = length l2) (Hsame: l1++l3=l2++l4), 
+  l1=l2.
+Proof.
+  induction l1; intros.
+  -destruct l2; clarify.
+  -destruct l2; clarify. inversion Hlen.
+   specialize(IHl1 l2 l3 l4 H0 H1). clarify.
+Qed.
+
+Lemma length_hb_check : forall C1 C2 z t1 t2,
+  length (hb_check C1 C2 z t1 t2) = z+z+z.
+Proof.
+  induction z; intros.
+  -clarify.
+  -simpl. specialize(IHz t1 t2). rewrite IHz. omega.
+Qed.
+
+Lemma hb_check_C_diff : forall x C1 C2 z t1 t2
+  (Hnonzero : z <> 0) (Hdist: C1 <> C2), 
+  hb_check (x+C1) (x+C2) z t1 t2 <> hb_check (x+C1) (x+C2) z t1 t2.
+Admitted.
 
 Lemma instrument_sim_safe2 : forall P P1 P2 G1 G2 t h
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1)
@@ -3110,13 +3143,165 @@ Lemma instrument_sim_safe2 : forall P P1 P2 G1 G2 t h
   o2 c2 P2' G2' (Hstep : iexec P2 G2 t o2 c2 P2' G2')
   (Hcon : consistent (m ++ c2)) s (Hs : clocks_sim m s),
   exists o c P1' G1', exec P1 G1 t o c (Some P1') G1' /\
-    state_sim P1' P2' /\ env_sim G1' G2' /\
+    state_sim P1' P2' /\ env_sim G1' G2' /\ consistent (m ++ opt_to_list c) /\
     mem_sim c c2 /\
         exists s', step_star s (opt_to_list o) s' /\
                    clocks_sim (m ++ c2) s'.
 Proof.
+  intros.
+  inversion Hs as [ Hs_c (Hs_l,Hs_rw)]; clarify.
+  assert (Hemc: exists o c P1' G1', exec P1 G1 t o c (Some P1') G1' /\mem_sim c c2 /\ consistent (m ++ opt_to_list c) ).
+   inversion Hstep; clarify;  exploit Forall2_app_inv_r; eauto ;
+   intros (P0' & P3' & HP0 & Hrest & HP1);
+   inversion Hrest as [|? (?, ?) ? ? ? HP3]; clarify.
+   -(*assign*)destruct x as (tx,ix); destruct ix; clarify.
+    unfold instrument_instr in H12; clarify. destruct i; clarify.
+    +do 4 eexists. split;[|split].
+     *apply exec_assign. eauto.
+     *unfold mem_sim. intros. simpl. split; clarify.
+     *simpl. auto.
+    +
+     destruct x as (x0,o). simpl in H12.  do 2 rewrite <- app_assoc in H12. inversion H12.  
+    + destruct x as (x0,o). simpl in H12.  do 2 rewrite <- app_assoc in H12. inversion H12.
+    +destruct zt; clarify.
+    +destruct zt; clarify.
+   -(*load*) 
+    destruct x0 as (tx, ix); destruct ix; clarify.
+    unfold instrument_instr in H12; clarify. destruct i; clarify.
+    +do 4 eexists. split;[|split].
+     *apply exec_load. eauto.
+     *unfold mem_sim. intros. simpl. split; clarify.
+      { split.
+        -right.
+         destruct x0; clarify. 
+         do 2 rewrite split_app in H1. do 5 rewrite <- app_assoc in H1. simpl in H1.
+         destruct (eq_dec x v0); destruct (eq_dec n o); clarify.
+         +apply in_app. right. unfold In. eauto.
+         +apply app_inv_head in H1. clarify.
+         +eapply hb_check_C_diff in n0. contradiction n0. eauto. eapply zt_non_zero.
+         +eapply hb_check_C_diff in n0. contradiction n0. eauto. eapply zt_non_zero.
+        -setoid_rewrite Forall_app in Hlocs. clarify. inversion Hlocs2; clarify. inversion H1. 
+         unfold safe_instr in H3. clarify. 
+      }  
+      {left.
+       setoid_rewrite Forall_app in Hlocs. clarify. inversion Hlocs2; clarify. inversion H3; clarify.
+       rewrite Forall_app in Ht. clarify. inversion Ht2; clarify.
+       destruct x0; destruct (eq_dec x v0); destruct (eq_dec n o); clarify.
+       -inversion H1; clarify. 
+        +contradiction H2. unfold meta_loc. simpl. repeat right. omega.
+        +rewrite in_app in H. inversion H; clarify.
+         *apply in_mops_hb_check in H8. destruct c; clarify. inversion H8; destruct x; clarify.
+          contradiction H2. unfold meta_loc. simpl. omega.
+          contradiction H2. unfold meta_loc. simpl. left.  omega.
+         *inversion H8; clarify.
+          contradiction H2. unfold meta_loc. simpl. left. omega.
+          inversion H9; clarify. contradiction H2. unfold meta_loc. simpl. do 2 right. left. omega.
+          contradiction H2. unfold meta_loc. simpl. repeat right. omega.
+       -eapply hb_check_C_diff in n0. contradiction n0; eauto.  eapply zt_non_zero.
+       -eapply hb_check_C_diff in n0. contradiction n0. eauto. eapply zt_non_zero.
+       -eapply hb_check_C_diff in n0. contradiction n0. eauto. eapply zt_non_zero.
+      }
+     *simpl.
+assert(Hlist_silly1: forall (X:Type) (a b c d e: X) (l1 l2 l3 l4: list X), 
+               l1++a::l2++[b;c;d;e]=(l1++[a])++(l2++[b;c])++[d;e]).
+       intros. simpl. do  2 rewrite app_assoc. clarify. rewrite split_app. rewrite app_assoc. do 2 rewrite split_app. repeat rewrite <- app_assoc. simpl. auto.
+      rewrite Hlist_silly1 in Hcon; auto. rewrite loc_valid_ops_SC in Hcon.
+      {
+        inversion Hcon; clarify. 
+        assert(Hacq_con: consistent (m ++ [Acq tx (X'+x)])).
+         eapply consistent_app_SC. eauto.
+        rewrite loc_valid_ops2_SC in Hcon2.
+        -inversion Hcon2; clarify. rewrite <- app_assoc in Hcon22. rewrite loc_valid_ops_SC in Hcon22.
+         +inversion Hcon22; clarify.
+          destruct x0; destruct (eq_dec x v0); destruct (eq_dec n o); clarify.
+          *simpl in H0. repeat rewrite <- app_assoc in H0. simpl in H0.
+           eapply app_inv_head in H0. inversion H0. clarify.
+          *eapply hb_check_C_diff in n0. contradiction n0; eauto. eapply zt_non_zero.
+          *simpl. eapply hb_check_C_diff in n0. contradiction n0; eauto. eapply zt_non_zero.
+         +rewrite Forall_forall. intros x1 Hin. inversion Hin; clarify.
+          rewrite Forall_forall. intros x1 Hin. inversion Hin; clarify.
+          intro Heq.  setoid_rewrite Forall_app in Hlocs. clarify. inversion Hlocs2; clarify. inversion H3; clarify.
+          destruct x0. destruct (eq_dec x v0); clarify.
+          *contradiction H71. rewrite H0. unfold meta_loc. simpl. repeat right. omega.
+          *eapply hb_check_C_diff in n0. contradiction n0; eauto. eapply zt_non_zero.
+        -rewrite Forall_forall. intros x1 Hin. inversion Hin; clarify.
+         intros Heq. inversion Heq; clarify.  setoid_rewrite Forall_app in Hlocs. clarify. inversion Hlocs2; clarify. inversion H3; clarify.
+         destruct x0. destruct (eq_dec x v0); clarify.
+         +simpl. contradiction H71.  rewrite <- H0. unfold meta_loc. simpl. repeat right. omega.
+         +eapply hb_check_C_diff in n0. contradiction n0; eauto. eapply zt_non_zero.
+        
+      }
+      {
+        rewrite Forall_forall. intros x1 Hin. rewrite Forall_forall. intros x2 Hin2.
+        setoid_rewrite Forall_app in Hlocs. clarify. inversion Hlocs2; clarify. inversion H1; clarify.
+        rewrite Forall_app in Ht. inversion Ht; clarify. inversion Ht2; clarify.
+        inversion Hin2;rewrite in_app in Hin; clarify. 
+        -inversion Hin; clarify.
+         +apply in_mops_hb_check in H. destruct x1; clarify. 
+          destruct x0.  destruct (eq_dec x v1); destruct (eq_dec n o); clarify. 
+          *intro Heq. clarify. contradiction H31; inversion H; unfold meta_loc; clarify. 
+           rewrite H0. do 3 right. left. omega.
+           left. omega.
+          *intro Heq. clarify. contradiction H31; inversion H; unfold meta_loc; clarify.
+            rewrite H0. do 3 right. left. omega.
+           left. omega.
+          *eapply hb_check_C_diff in n0. contradiction n0; eauto. eapply zt_non_zero.
+          *eapply hb_check_C_diff in n0. contradiction n0; eauto. eapply zt_non_zero. 
+         +inversion H; destruct x0; destruct (eq_dec x v0); destruct (eq_dec n o);  clarify.  
+          *simpl.intros Heq. clarify. contradiction H31; unfold meta_loc. left. simpl. omega.
+          *intro Heq. clarify. contradiction H31; unfold meta_loc. simpl. left. omega.
+          *eapply hb_check_C_diff in n0. contradiction n0; eauto. eapply zt_non_zero.
+          *eapply hb_check_C_diff in n0. contradiction n0; eauto. eapply zt_non_zero.
+          *intro Heq. clarify. contradiction H31; unfold meta_loc. simpl. do 2 right. left. omega.
+          *eapply hb_check_C_diff in n0. contradiction n0; eauto. eapply zt_non_zero.
+          *eapply hb_check_C_diff in n0. contradiction n0; eauto. eapply zt_non_zero.
+          *eapply hb_check_C_diff in n0. contradiction n0; eauto. eapply zt_non_zero.
+        -inversion Hin; clarify.
+         +apply in_mops_hb_check in H. destruct x1; clarify. 
+          destruct x0.  destruct (eq_dec x v1); destruct (eq_dec n o); clarify. 
+          *intro Heq. clarify. contradiction H31; inversion H; unfold meta_loc; clarify. 
+           rewrite H0. do 3 right. left. omega.
+           left. omega.
+          *intro Heq. clarify. contradiction H31; inversion H; unfold meta_loc; clarify.
+            rewrite H0. do 3 right. left. omega.
+           left. omega.
+          *eapply hb_check_C_diff in n0. contradiction n0; eauto. eapply zt_non_zero.
+          *eapply hb_check_C_diff in n0. contradiction n0; eauto. eapply zt_non_zero. 
+         +inversion H; destruct x0; destruct (eq_dec x v0); destruct (eq_dec n o);  clarify.  
+          *simpl.intros Heq. clarify. contradiction H31; unfold meta_loc. left. simpl. omega.
+          *intro Heq. clarify. contradiction H31; unfold meta_loc. simpl. left. omega.
+          *eapply hb_check_C_diff in n0. contradiction n0; eauto. eapply zt_non_zero.
+          *eapply hb_check_C_diff in n0. contradiction n0; eauto. eapply zt_non_zero.
+          *intro Heq. clarify. contradiction H31; unfold meta_loc. simpl. do 2 right. left. omega.
+          *eapply hb_check_C_diff in n0. contradiction n0; eauto. eapply zt_non_zero.
+          *eapply hb_check_C_diff in n0. contradiction n0; eauto. eapply zt_non_zero.
+          *eapply hb_check_C_diff in n0. contradiction n0; eauto. eapply zt_non_zero.
+          
+      }  
+     
+    +rewrite <- app_assoc in H12. rewrite app_comm_cons in H12.
+     destruct x0; clarify. rewrite <- app_assoc in H1. rewrite <- app_assoc in H1. 
+     destruct (eq_dec x v0); clarify.
+     *apply app_inv_head in H1. destruct zt; clarify.
+     *destruct zt; clarify. apply app_inv_head in H3. inversion H3.
+    +destruct zt; clarify.
+    +destruct zt; clarify.
+    +destruct zt; clarify.
+   -(*store*)
+     apply list_part_same in H1.
+     exploit list_part_diff. instantiate(1:=hb_check (W' + v0) (C' + tx) zt tmp1 tmp2).
+     instantiate(1:= hb_check (W' + x) (C' + tx) zt tmp1 tmp2). 
+       rewrite <-app_comm_cons.
+     inversion H12
+     setoid_rewrite app_comm_cons in H12.
+     inversion H12.
 
 
+   +apply exec_assign.
+    
+    clarify. exploit Forall2_app_inv_l; eauto 2.
+   intros (P0' & P3' & HP0 & Hrest & ?);
+   inversion Hrest as [|? (?, ?) ? ? ? HP3]; clarify.
 Abort.
 
 Theorem instrument_correct : forall P h m P' G'
