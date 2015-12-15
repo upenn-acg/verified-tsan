@@ -4136,11 +4136,15 @@ assert(Hlist_silly1: forall (X:Type) (a b c d e: X) (l1 l2 l3 l4: list X),
           destruct x0. destruct (eq_dec x v0); clarify.
           *contradiction H71. rewrite H0. unfold meta_loc. simpl. repeat right. omega.
           *apply plus_reg_l in H9. clarify.
+         +rewrite Forall_forall. intros. inversion H; clarify.
+         +rewrite Forall_forall. intros. inversion H; clarify.
         -rewrite Forall_forall. intros x1 Hin. inversion Hin; clarify.
          intros Heq. inversion Heq; clarify.  setoid_rewrite Forall_app in Hlocs. clarify. inversion Hlocs2; clarify. inversion H3; clarify.
          destruct x0. destruct (eq_dec x v0); clarify.
          +simpl. contradiction H71.  rewrite <- H0. unfold meta_loc. simpl. repeat right. omega.
          +apply plus_reg_l in H9. clarify.
+        -unfold prog_op. clarify.
+        -rewrite Forall_forall. intros. inversion H; clarify.
       }
       {
         rewrite Forall_forall. intros x1 Hin. rewrite Forall_forall. intros x2 Hin2.
@@ -4189,7 +4193,14 @@ assert(Hlist_silly1: forall (X:Type) (a b c d e: X) (l1 l2 l3 l4: list X),
           *apply plus_reg_l in H6. clarify.
           *apply plus_reg_l in H6. clarify.
       }  
-     
+     {
+       rewrite Forall_app. do 2 rewrite Forall_forall. split; intros.
+       apply in_mops_hb_check in H. destruct x1; clarify.
+       inversion H; unfold prog_op; clarify.
+     }
+     {
+       rewrite Forall_forall. intros. inversion H; clarify.
+     }
     +rewrite <- app_assoc in H12. rewrite app_comm_cons in H12.
      destruct x0; clarify. rewrite <- app_assoc in H1. rewrite <- app_assoc in H1. 
      destruct (eq_dec x v0); clarify.
