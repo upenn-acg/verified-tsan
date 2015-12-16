@@ -77,28 +77,34 @@ Proof.
    destruct (lt_dec t1 zt); clarify.
    split; auto.
    +apply can_read_SC; auto.
-    { constructor; clarify. specialize(Hmetalocs_disjoint_CX H Hx2). intro Heq. inversion Heq; clarify. }
+    { constructor; clarify. }
+    { constructor; clarify.  specialize(Hmetalocs_disjoint_CX H Hx2). intro Heq. inversion Heq; clarify. }
     
    +apply can_write_SC; auto.
+    { constructor; clarify. }
   -unfold clock_match. intros.
    destruct (lt_dec t zt); simpl.
    specialize(Hs_l l H). unfold clock_match in Hs_l. specialize(Hs_l t).
    split; auto.
    +apply can_read_SC; clarify.
     apply acq_con; auto.
+    { constructor; clarify. }
     { constructor; clarify. specialize(Hmetalocs_disjoint_LX H Hx2). intro Heq; inversion Heq; clarify. }
    +apply can_write_SC; clarify.
     apply acq_con; auto.
+    constructor; clarify.
    +specialize(Hs_l l H). unfold clock_match in Hs_l. specialize(Hs_l t). clarify.
   -unfold clock_match. intros; destruct (lt_dec t zt); clarify;
    specialize(Hs_rw v H); unfold clock_match in Hs_rw; inversion Hs_rw.
    +clarify. specialize(Hs_rw1 t). clarify. split; auto.
     *apply can_read_SC; auto.
      apply acq_con; auto.
+     { constructor; clarify. }
      { constructor; clarify. specialize(Hmetalocs_disjoint_RX H Hx2). intro Heq; inversion Heq; clarify. }
      
     *apply can_write_SC; auto.
      apply acq_con; auto.
+     constructor; clarify.
    +specialize(H0 t). clarify.
   
    -unfold clock_match. intros; destruct (lt_dec t zt); clarify;
@@ -106,10 +112,12 @@ Proof.
     +clarify. specialize(Hs_rw2 t). clarify. split; auto.
     *apply can_read_SC; auto.
      apply acq_con; auto.
+     { constructor; clarify. }
      { constructor; clarify. specialize(Hmetalocs_disjoint_WX H Hx2). intro Heq; inversion Heq; clarify. }
      
     *apply can_write_SC; auto.
      apply acq_con; auto.
+     constructor; clarify.
    +specialize(H1 t). clarify.
 Qed.
 
@@ -4114,14 +4122,16 @@ assert(Hlist_silly1: forall (X:Type) (a b c d e: X) (l1 l2 l3 l4: list X),
           intro Heq.  setoid_rewrite Forall_app in Hlocs. clarify. inversion Hlocs2; clarify. inversion H3; clarify.
           destruct x0. destruct (eq_dec x v0); clarify.
           *contradiction H71. rewrite H0. unfold meta_loc. simpl. repeat right. omega.
-          *apply plus_reg_l in H9. clarify.
-         
+          * apply plus_reg_l in H9. clarify.
+         + constructor; clarify.
+         + constructor; clarify.
         -rewrite Forall_forall. intros x1 Hin. inversion Hin; clarify.
          intros Heq. inversion Heq; clarify.  setoid_rewrite Forall_app in Hlocs. clarify. inversion Hlocs2; clarify. inversion H3; clarify.
          destruct x0. destruct (eq_dec x v0); clarify.
          +simpl. contradiction H71.  rewrite <- H0. unfold meta_loc. simpl. repeat right. omega.
          +apply plus_reg_l in H9. clarify.
-        
+        - simpl; auto.
+        - constructor; clarify.
       }
       {
         rewrite Forall_forall. intros x1 Hin. rewrite Forall_forall. intros x2 Hin2.
@@ -4170,7 +4180,8 @@ assert(Hlist_silly1: forall (X:Type) (a b c d e: X) (l1 l2 l3 l4: list X),
           *apply plus_reg_l in H6. clarify.
           *apply plus_reg_l in H6. clarify.
       }  
-     
+     { rewrite Forall_app; split; auto; repeat constructor; simpl; auto. }
+     { repeat constructor; simpl; auto. }
     +rewrite <- app_assoc in H12. rewrite app_comm_cons in H12.
      destruct x0; clarify. rewrite <- app_assoc in H1. rewrite <- app_assoc in H1. 
      destruct (eq_dec x v0); clarify.
@@ -4202,18 +4213,18 @@ assert(Hlist_silly1: forall (X:Type) (a b c d e: X) (l1 l2 l3 l4: list X),
          +apply plus_reg_l in H0. clarify.
         -setoid_rewrite Forall_app in Hlocs. clarify. inversion Hlocs2; clarify. inversion H1. 
          unfold safe_instr in H3. clarify. 
-      }  
-      {left.
+      } 
+      { left.
        setoid_rewrite Forall_app in Hlocs. clarify. inversion Hlocs2; clarify. inversion H3; clarify.
        rewrite Forall_app in Ht. clarify. inversion Ht2; clarify.
        destruct x0; destruct (eq_dec x v0); destruct (eq_dec n o); clarify.
-       -inversion H1; clarify. 
+       - inversion H1; clarify. 
         +contradiction H2. unfold meta_loc. simpl. repeat right. omega.
         +rewrite in_app in H. inversion H; clarify.
          *apply in_mops_hb_check in H8. destruct c; clarify. inversion H8; destruct x; clarify.
           contradiction H2. unfold meta_loc. simpl. omega.
           contradiction H2. unfold meta_loc. simpl. left.  omega.
-         *inversion H8; clarify.
+         * inversion H8; clarify.
           contradiction H2. unfold meta_loc. simpl. left. omega.
           inversion H9; clarify. contradiction H2. unfold meta_loc. simpl. do 2 right. left. omega.
           contradiction H2. unfold meta_loc. simpl. repeat right. omega.
