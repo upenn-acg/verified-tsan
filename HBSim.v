@@ -2701,6 +2701,7 @@ Proof.
   rewrite (exec_minus_env Hminus1), upd_same.
   clear; clarsimp.
 Qed.
+*) *)
 
 Typeclasses eauto := 2.
 
@@ -2778,8 +2779,9 @@ Proof.
       destruct j; clarify.
       destruct j; clarsimp.
     + exists x; rewrite last_op_app; right; clarify.
-Qed.      
+Qed.
 
+(*
 Lemma t_steps_store : forall P G t lo lc P1 G1 x o e li
   (Hdistinct : distinct P)
   (Hfresh1 : expr_fresh tmp1 e) (Hfresh2 : expr_fresh tmp2 e)
@@ -3960,7 +3962,6 @@ Proof.
     rewrite app_length, Hinstr; simpl; omega.
 Qed.
 *) *)
-*)
 
 Lemma list_part_diff : forall (X:Type) (l1 l2 l3 l4: list X)
  (Hlen: length l1 = length l2) (Hdiff: l3<>l4), l1++l3<> l2++l4.
@@ -4043,11 +4044,75 @@ Lemma Forall2_cons_inv (X:Type) l1 l2 (x1 x2: X) P:
 Proof.
   intros. inversion H. clarify. Qed.
 
-Lemma instrument_sim_safe2 : forall P P1 P2 G1 G2 t h
+Lemma first_gt_vc : forall (V1 V2: tid->nat) l
+  (Hgt: first_gt (map V1 l) (map V2 l) = None) i (Hi : In i l), V1 i <= V2 i.
+Proof.
+  induction l; clarify.
+  rewrite leb_le in *; clarify.
+Qed.
+
+Lemma first_gt_vc_le : forall (V1 V2: tid->nat) m x1 x2
+  (Hgt: first_gt (map V1 (rev (interval 0 zt))) (map V2 (rev (interval 0 zt))) =
+     None)
+  (Hmatch1 : clock_match m V1 x1) (Hmatch2 : clock_match m V2 x2),
+  vc_le V1 V2.
+Proof.
+  repeat intro.
+  specialize (Hmatch1 t); specialize (Hmatch2 t).
+  destruct (lt_dec t zt); clarsimp.
+  eapply first_gt_vc; eauto.
+  rewrite <- in_rev, interval_in_iff; auto.
+Qed.
+
+Lemma hb_check_vals1 : forall m C1 C2 z vs1 vs2 t V1 V2
+  (Hinit1 : forall z, z < zt -> initialized m (C1, z))
+  (Hinit2 : forall z, z < zt -> initialized m (C2, z))
+  (Hcon : consistent (m ++ mops_hb_check C1 C2 vs1 vs2 z t))
+  (Hvs1 : length vs1 = z) (Hvs2 : length vs2 = z) (Hz : z <= zt)
+  (Hmatch1 : clock_match m V1 C1) (Hmatch2 : clock_match m V2 C2)
+  (Hle : first_gt vs1 vs2 = None),
+  vs1 = map V1 (rev (interval 0 z)) /\ vs2 = map V2 (rev (interval 0 z)).
+Proof.
+  induction z; destruct vs1, vs2; clarify.
+  rewrite rev_app_distr; clarify.
+  assert (consistent (m ++ [Read t (C1, z) n])) as Hn.
+  { eapply consistent_app_SC; rewrite <- app_assoc; simpl; eauto. }
+  assert (consistent (m ++ [Read t (C2, z) n0])) as Hn0.
+  { rewrite read_noop_SC in Hcon; auto.
+    eapply consistent_app_SC; rewrite <- app_assoc; simpl; eauto. }
+  exploit (IHz vs1 vs2); eauto.
+  { do 2 (rewrite read_noop_SC in Hcon; eauto). }
+  { omega. }
+  intros (IH1 & IH2); rewrite IH1, IH2.
+  specialize (Hmatch1 z); specialize (Hmatch2 z).
+  destruct (lt_dec z zt); [|omega].
+  generalize (can_read_thread' _ _ _ _ Hn), (can_read_thread' _ _ _ _ Hn0);
+    clarify.
+  generalize (consistent_app_SC _ _ Hn); intro.
+  generalize (can_read_unique(m := m)(p := (C1, z)) n (V1 z)); clarify.
+  generalize (can_read_unique(m := m)(p := (C2, z)) n0 (V2 z)); clarify.
+Qed.  
+
+Corollary hb_check_vals : forall m C1 C2 vs1 vs2 t V1 V2
+  (Hinit1 : forall z, z < zt -> initialized m (C1, z))
+  (Hinit2 : forall z, z < zt -> initialized m (C2, z))
+  (Hcon : consistent (m ++ mops_hb_check C1 C2 vs1 vs2 zt t))
+  (Hvs1 : length vs1 = zt) (Hvs2 : length vs2 = zt)
+  (Hmatch1 : clock_match m V1 C1) (Hmatch2 : clock_match m V2 C2)
+  (Hle : first_gt vs1 vs2 = None),
+  vs1 = map V1 (rev (interval 0 zt)) /\ vs2 = map V2 (rev (interval 0 zt)).
+Proof.
+  intros; eapply hb_check_vals1 with (C1 := C1); eauto.
+Qed.
+  
+Typeclasses eauto := 5.
+
+Lemma instrument_sim_safe2 : forall (*P*) P1 P2 G1 G2 t (*h*)
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1)
   (Ht : Forall (fun e => fst e < zt) P1) (Hdistinct: distinct P2)
   (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2)
-  m (Hroot : exec_star (Some (init_state P)) init_env h m (Some P1) G1)
+  m (*(Hroot : exec_star (Some (init_state P)) init_env h m (Some P1) G1)*)
+  (Hinit : forall p, meta_loc p -> initialized m p)
   o2 c2 P2' G2' (Hstep : iexec P2 G2 t o2 c2 P2' G2')
   (Hcon : consistent (m ++ c2)) s (Hs : clocks_sim m s),
   exists o c P1' G1', exec P1 G1 t o c (Some P1') G1' /\
@@ -4143,23 +4208,28 @@ Proof.
           + exploit Hmetalocs_disjoint_RX; eauto. }
      { rewrite Forall_app; split; auto; repeat constructor; simpl; auto. }
      { repeat constructor; simpl; auto. }
-     +eexists. simpl. split.
-      *eapply ss_step; eauto.
-       instantiate (1:=(vc,vl,upd vr x (upd (vr x) t (vc t t)),vw)).
-       apply read_upd; eauto. 
-Lemma first_gt_vc_le : forall (V1 V2: tid->nat) l 
-(Hgt: first_gt (map V1 l) (map V2 l) = None),
- vc_le V1 V2.
-Proof.
-  intros. induction l. admit. apply IHl. inversion Hgt.
-  destruct (dec_le (V1 a) (V2 a)); clarify.
-Qed.  Print clock_match.
-       eapply first_gt_vc_le. 
-       instantiate(1:=rev (interval 0 zt)). Check iexec_load.
-       
-       eapply ss_refl.
-      *clarify.
-      
+     + setoid_rewrite Forall_app in Hlocs; destruct Hlocs as (_ & Hlocs).
+       inversion Hlocs as [|?? Hi ?]; inversion Hi; clarify.
+       rewrite Forall_app in Ht; destruct Ht as (_ & Ht).
+       inversion Ht; clarify.
+       rewrite loc_valid_ops2_SC in Hcon; clarify.
+       rewrite app_assoc in Hcon1; generalize (consistent_app_SC _ _ Hcon1);
+         intro Hhb.
+       specialize (Hs_rw x); clarify.
+       exploit hb_check_vals; try apply Hhb; eauto.
+       { intros; apply Hinit; unfold meta_loc; simpl; omega. }
+       { intros; apply Hinit; unfold meta_loc; simpl; omega. }
+       clarify; eexists; simpl; split.
+       * eapply ss_step; eauto.
+         eapply read_upd; eauto.
+         eapply first_gt_vc_le; eauto.
+         apply ss_refl.
+      * admit.
+      * rewrite Forall_app; clarify.
+        admit.
+      * rewrite Forall_app; clarify.
+        repeat (constructor; simpl; auto).
+    
    -(*store*) (* see above *)
     exploit (instrument_incom (Store (x, o) e)).
     { simpl; rewrite <- app_assoc; simpl. eauto. }
