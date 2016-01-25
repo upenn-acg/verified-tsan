@@ -33,8 +33,11 @@ Hypothesis Hs_x : forall (x0 : nat) m ,
 Hypothesis Hmetalocs_disjoint_CX: forall t x, (t < zt -> x < zv -> C' + t <> X' + x).
 Hypothesis Hmetalocs_disjoint_RX: forall z x,   (z < zv -> x < zv -> R' + z <> X' + x).
 Hypothesis Hmetalocs_disjoint_CR: forall t x, (t < zt -> x < zv -> C' + t <> R' + x).
+Hypothesis Hmetalocs_disjoint_CW: forall t x, (t < zt -> x < zv -> C' + t <> W' +x ).
 Hypothesis Hmetalocs_disjoint_LR: forall l x, (l < zl -> x < zv -> L' +l  <> R' + x).
+Hypothesis Hmetalocs_disjoint_LW: forall l x, (l < zl -> x < zv -> L' + l <> W' + x).
 Hypothesis Hmetalocs_disjoint_WX: forall y x,  (y < zv -> x < zv -> W' + y <> X' + x).
+Hypothesis Hmetalocs_disjoint_WR: forall y x, (y < zv -> x < zv -> W' + y <> R' + x).
 Hypothesis Hmetalocs_disjoint_LX: forall l x,  (l < zl -> x < zv -> L' + l <> X' + x).
 Hypothesis Hmetalocs_disjoint_CL: forall l t,  (l < zl -> t < zt -> C' + t <> L' + l).
 
@@ -780,6 +783,9 @@ Proof.
   unfold clock_match, bounded; intros.
   specialize (H t); clarify.
 Qed.
+
+
+
 
 Lemma bounded_le_dec : forall z V V', bounded V z -> vc_le V V' \/
   exists t, t < z /\ V t > V' t /\ forall t', t < t' -> V t' <= V' t'.
@@ -2781,6 +2787,18 @@ Proof.
     + exists x; rewrite last_op_app; right; clarify.
 Qed.
 
+Lemma init_steps : forall m p s (Hinit : initialized m p) (Hprog : Forall prog_op s),
+  initialized (m ++ s) p.
+Proof.
+  intros. generalize dependent m. induction s. 
+  -intros. rewrite app_nil_r. auto.
+  -intros. rewrite split_app. apply IHs.
+   +rewrite Forall_forall in *. intros. clarify.
+   +apply init_step; auto.
+    eapply Forall_inv. eauto.
+Qed.
+
+(*
 Lemma t_steps_store : forall P G t lo lc P1 G1 x o e li
   (Hdistinct : distinct P)
   (Hfresh1 : expr_fresh tmp1 e) (Hfresh2 : expr_fresh tmp2 e)
@@ -4922,7 +4940,7 @@ Proof.
   - eapply component_decr; eauto.
     { eapply exec_t_exec; eauto. }
     rewrite app_length, Hinstr; simpl; omega.
-Qed.
+Qed.*)
 
 
 Lemma list_part_diff : forall (X:Type) (l1 l2 l3 l4: list X)
@@ -5001,6 +5019,107 @@ Proof.
   rewrite <- in_rev, interval_in_iff; auto.
 Qed.
 
+Lemma mops_max_vc_off' : forall src tgt vs1 vs2 t n
+  (Hvs1: length vs1 = n) (Hvs2: length vs2 = n),
+  Forall (fun c' => match loc_of c' with (x, o) => o < n end)
+     (mops_max_vc src tgt vs1 vs2 t n).
+Proof.
+  intros. generalize dependent vs1. generalize dependent vs2.
+  induction n; clarify.
+  -apply empty_list in Hvs1. apply empty_list in Hvs2. clarify.
+  -apply nonempty_list in Hvs1. apply nonempty_list in Hvs2.
+   inversion Hvs1. inversion H. inversion Hvs2. inversion H1.
+   inversion H0. inversion H2. rewrite H3, H5.
+   rewrite mops_max_vc_step. rewrite Forall_app. split.
+   +unfold mops_max. rewrite Forall_forall. intros c Hin.
+    inversion Hin; clarify. destruct Hin as [Hc|[Hc|[Hc|Hc]]]; clarify.
+   +assert( forall c ,
+              (fun c' : conc_op => let (_, o) := loc_of c' in o < n) c ->
+              (fun c' : conc_op => let (_, o) := loc_of c' in o < S n) c) as Himpl.
+      intros. destruct (loc_of c); clarify.
+    eapply Forall_impl; eauto.
+Qed.
+
+Lemma in_mops_max_vc': forall n c vc1 vc2 vs1 vs2 t
+   (Hin: In c (mops_max_vc vc1 vc2 vs1 vs2 t n)),
+  match c with 
+  | Write tc p _ => fst p = vc2
+  | Read tc p _  => fst p = vc1 \/ fst p = vc2
+  | _ => False
+  end.
+Proof.
+  induction n; intros; destruct vs1; clarify; destruct vs2; clarify.
+  destruct c; clarify; exploit IHn; eauto.
+Qed.
+
+Lemma in_mops_max_vcn: forall n c vc1 vc2 vs1 vs2 t
+   (Hin: In c (mops_max_vc vc1 vc2 vs1 vs2 t n)),
+  match c with 
+  | Write tc (a,b) _ => a = vc2 /\ b < n
+  | Read tc (a,b) _  => (a = vc1 \/ a = vc2) /\ b < n
+  | _ => False
+  end.
+Proof.
+  induction n; intros; destruct vs1; clarify; destruct vs2; clarify.
+  destruct c; clarify; exploit IHn; eauto; destruct x; clarify.
+Qed.
+
+Lemma max_vc_vals1: forall m C1 C2 z vs1 vs2 t V1 V2
+  (Hinit1: forall z, z < zt -> initialized m (C1, z))
+  (Hinit2: forall z, z < zt -> initialized m (C2, z))
+  (Hcon: consistent (m ++mops_max_vc C1 C2 vs1 vs2  t z))
+  (Hvs1: length vs1 =z) (Hvs2: length vs2 = z) (Hz : z <= zt)
+  (Hmatch1 : clock_match m V1 C1) (Hmatch2 : clock_match m V2 C2),
+  vs1 = map V1 (rev (interval 0 z)) /\ vs2 = map V2 (rev (interval 0 z)).
+Proof.
+  induction z; destruct vs1, vs2; clarify.
+  rewrite rev_app_distr; clarify.
+  assert ( consistent (m++ [Read t (C1, z) n])) as Hn.
+  { eapply consistent_app_SC; rewrite <- app_assoc; simpl; eauto. }
+  assert ( consistent (m++ [Read t (C2, z) n0])) as Hn0.
+  { rewrite read_noop_SC in Hcon; auto.
+    eapply consistent_app_SC; rewrite <- app_assoc; simpl; eauto. }
+  assert ( consistent (m++ [Write t (C2, z) (Peano.max n n0)])) as Hwn0.
+  { do 2 (rewrite read_noop_SC in Hcon; auto).
+    eapply consistent_app_SC; rewrite <- app_assoc; simpl; eauto. }
+  exploit (IHz vs1 vs2); eauto.
+  {do 2 (rewrite read_noop_SC in Hcon; eauto).
+   rewrite loc_valid_ops2_SC in Hcon; eauto.
+   -clarify. eauto.
+   -rewrite Forall_forall. intros c Hin. simpl.
+    inversion Hvs1. inversion Hvs2.
+    exploit mops_max_vc_off'.
+    { apply H0. }
+    { apply H1. }
+    instantiate(1:= t). instantiate (1:= C2). instantiate (1:= C1).
+    intro Hcltz. rewrite Forall_forall in Hcltz. apply Hcltz in Hin.
+    intro Heq. destruct (loc_of c); clarify.
+    eapply lt_irrefl. eauto.
+   -clarify.
+  }
+  { apply le_Sn_le. auto. }
+  {
+    intros (IH1 & IH2); rewrite IH1, IH2.
+    specialize (Hmatch1 z); specialize (Hmatch2 z).
+    destruct (lt_dec z zt); [| omega ].
+    generalize (can_read_thread' _ _ _ _ Hn), (can_read_thread' _ _ _ _ Hn0); clarify.
+    generalize ( consistent_app_SC _ _ Hn); intro.
+    generalize (can_read_unique(m:=m) (p:= (C1, z)) n (V1 z)); clarify.
+    generalize (can_read_unique(m:=m) (p:= (C2, z)) n0 (V2 z)); clarify.
+  }
+Qed.
+
+Corollary max_vc_vals : forall m C1 C2 vs1 vs2 t V1 V2
+  (Hinit1 : forall z, z < zt -> initialized m (C1, z))
+  (Hinit2 : forall z, z < zt -> initialized m (C2, z))
+  (Hcon : consistent (m ++ mops_max_vc C1 C2 vs1 vs2 t zt))
+  (Hvs1 : length vs1 = zt) (Hvs2 : length vs2 = zt)
+  (Hmatch1 : clock_match m V1 C1) (Hmatch2 : clock_match m V2 C2),
+  vs1 = map V1 (rev (interval 0 zt)) /\ vs2 = map V2 (rev (interval 0 zt)).
+Proof.
+  intros; eapply max_vc_vals1 with (C1 := C1); eauto.
+Qed.
+
 Lemma hb_check_vals1 : forall m C1 C2 z vs1 vs2 t V1 V2
   (Hinit1 : forall z, z < zt -> initialized m (C1, z))
   (Hinit2 : forall z, z < zt -> initialized m (C2, z))
@@ -5045,12 +5164,23 @@ Qed.
 Typeclasses eauto := 5.
 
 Lemma clock_match_value: forall m vct ct t v x
-  (Hmatch: clock_match (m++[Read t (ct, x) v]) vct ct),
-                           v = vct x.
+  (Hmatch: clock_match (m++[Read t (ct, x) v]) vct ct) (Hinit: initialized m (ct,x))
+  (Hx : x < zt),                         v = vct x.
 Proof.
   intros.
-  unfold clock_match in *. specialize (Hmatch x).
-  destruct (lt_dec x zt); clarify.
+  unfold clock_match in *. specialize (Hmatch x). clarify.
+  assert(Hcon: consistent (m ++ [Read t (ct, x) v])).
+    eapply consistent_app_SC. eauto.
+  assert(Hcan_read1: can_read m (ct, x) v).
+    unfold can_read, consistent, SC in *. setoid_rewrite lower_app in Hcon. rewrite lower_single in Hcon. unfold can_read, consistent, SC.  setoid_rewrite lower_app. rewrite lower_single.
+    clarify. 
+  assert(Hcan_read2: can_read m (ct, x) (vct x)).
+    unfold can_read in Hmatch1. rewrite <- app_assoc in Hmatch1.
+    setoid_rewrite reads_noops_SC in Hmatch1; auto.
+  apply can_read_unique with (m:= m) (p:=(ct,x)); auto.
+  eapply consistent_app_SC; eauto.
+Qed.
+
 Lemma clock_match_nomod: forall m1 m2 vct ct
   (Hmatch_m1: clock_match m1 vct ct) (Hcon: consistent (m1++m2) ) (Hprog: Forall prog_op m2)
    (Hnmods: Forall (fun c => match c with | Write _ (x,o) _ => ct <> x
@@ -5100,9 +5230,10 @@ Proof.
   rewrite lower_app, lower_single in Hcon. clarify.
 Qed.
 
-Lemma clock_match_mods: forall m vr r t v x (Hclock_match_m: clock_match m (vr x) (r+x))
-                              (Hcon: consistent (m++[Write t (r+x,t) v])) (Ht: t < zt),
-                          clock_match (m++[Write t (r+x,t) v]) (upd vr x (upd (vr x) t v) x) (r+x).
+
+Lemma clock_match_mods: forall m vr r t t' v x (Hclock_match_m: clock_match m (vr x) (r+x))
+                              (Hcon: consistent (m++[Write t' (r+x,t ) v])) (Ht: t < zt),
+                          clock_match (m++[Write t' (r+x,t) v]) (upd vr x (upd (vr x) t v) x) (r+x).
 Proof.
   intros.
   unfold clock_match in *. intros t0. specialize (Hclock_match_m t0).
@@ -5112,14 +5243,275 @@ Proof.
     *unfold upd. clarify.
      apply can_read_written_SC; auto.
     *unfold upd. clarify.
-     setoid_rewrite Heq. apply can_read_SC; auto;
-     rewrite Forall_forall; intros x0 Hin; inversion Hin; clarify.
-     intro Hsb. inversion Hsb. clarify.
+     apply can_read_SC; eauto.
+     { rewrite Forall_forall. intros c Hin. clarify. }
+     { rewrite Forall_forall. intros c Hin. clarify.  intro Heq'.
+       inversion Heq'; clarify. }
    +apply can_write_SC; auto.
     rewrite Forall_forall; intros x0 Hin; inversion Hin; clarify.
   -unfold upd; clarify.
 Qed.
-  
+
+
+
+Definition clock_match_z m V x z:= forall t,
+  if lt_dec t z then can_read m (x, t) (V t) /\ can_write m (x, t)
+  else True.
+
+   
+Lemma clock_match_mods_z: forall m vr r t t' v x f z (Hclock_match_m: clock_match_z m (vr x) (r+x) z)
+                              (Hcon: consistent (m++[Write t' (r+x,t ) v])) (Ht: t < z)
+                          (* (Hbounded: bounded f z)*)
+                           (Hf: forall y, y< z -> f y = (upd vr x (upd (vr x) t v) x) y),
+                           clock_match_z (m++[Write t' (r+x,t) v]) f (r+x) z.
+Proof.
+  intros.
+  unfold clock_match in *. intros t0. specialize (Hclock_match_m t0).
+  destruct (lt_dec t0 z); clarify.
+  -split.
+   +destruct (eq_dec t t0) eqn: Heq; clarify.
+    *rewrite Hf; auto.
+     unfold upd. clarify.
+     apply can_read_written_SC; auto.
+    *rewrite Hf; auto.
+     unfold upd. clarify.
+     apply can_read_SC; eauto.
+     { rewrite Forall_forall. intros c Hin. clarify. }
+     { rewrite Forall_forall. intros c Hin. clarify.  intro Heq'.
+       inversion Heq'; clarify. }
+   +apply can_write_SC; auto.
+    rewrite Forall_forall; intros x0 Hin; inversion Hin; clarify.
+Qed.
+
+
+Lemma clock_match_nomod_z: forall m1 m2 vct ct z
+  (Hmatch_m1: clock_match_z m1 vct ct z) (Hcon: consistent (m1++m2) ) (Hprog: Forall prog_op m2) (Hz: z <> 0)
+   (Hnmods: Forall (fun c => match c with | Write _ (x,o) _ => ct <> x
+     | ARW _ (x,o) _ _=> ct <> x | _ => True end)  m2),     clock_match_z (m1++m2) vct ct z.
+Proof.
+  induction m2; intros; auto.
+  -rewrite app_nil_r in *. auto.
+  -unfold clock_match_z. intros.
+   inversion Hnmods; clarify.
+   assert(Hcon_a : consistent (m1++[a])).
+   eapply consistent_app_SC. rewrite <- split_app. eauto.
+   assert(Himpl: forall x,  (fun x0 : conc_op =>
+          match x0 with
+          | Write _ (p, _) _ => ct <> p
+          | ARW _ (p, _) _ _ => ct <> p
+          | _ => True
+          end) x -> (forall t, (fun x0 : conc_op => 
+          match x0 with
+          | Write _ x _ => (ct, t) <> x
+          | ARW _ x _ _ => (ct, t) <> x
+          | _ => True
+          end) x) ).
+     intros x0 Himpl0. destruct x0; clarify; intro Heq; clarify.
+     
+   destruct (lt_dec t z); clarify.
+   unfold clock_match_z in Hmatch_m1. specialize(Hmatch_m1 t).  
+   +split.
+    *apply can_read_SC;clarify.
+     apply Forall_cons.
+       destruct a; clarify;
+       intro Heq; clarify.
+       eapply Forall_impl.
+       {intros. apply Himpl. apply H.  }
+       {auto. }
+    *apply can_write_SC;clarify.
+Qed.
+
+Lemma clock_match_Sz_z : forall m V x z, clock_match_z m V x (S z)-> clock_match_z m V x z.
+Proof.
+  unfold clock_match_z, bounded; intros.
+  specialize (H t); clarify.
+  assert(Hlt:= l). apply lt_S in Hlt. clarify.
+Qed.
+
+Lemma clock_match_z_Sz: forall m V x z, can_read m (x, z) (V z) -> can_write m (x, z)-> clock_match_z m V x z -> clock_match_z m V x (S z).
+Proof.
+  unfold clock_match_z. clarify.
+  specialize(H1 t).
+  destruct (lt_dec t z); clarify.
+  assert(Htz: t=z).
+    omega.
+  rewrite Htz.
+  split; auto.
+Qed.
+
+Lemma clock_match_decompose: forall m V x z, z <= zt-> clock_match m V x -> clock_match_z m V x z /\ bounded V zt.
+Proof.
+  unfold clock_match, clock_match_z, bounded. clarify.
+  split; clarify;
+  specialize(H0 t); clarify. assert(Hlt:=l). apply lt_le_trans with (p:=zt) in Hlt; clarify.
+Qed.
+
+Lemma bounded_z_le: forall V z1 z2, z1 <=z2 -> bounded V z1 -> bounded V z2.
+Proof.
+  unfold bounded. clarify.
+  specialize(H0 t). destruct (lt_dec t z1); clarify.
+  apply lt_le_trans with (p:=z2) in l; clarify.
+Qed.
+(*
+Lemma clock_match_max : forall m VC1 VC2 vc1 vc2 t1 t2 t z
+  (Hmatch1: clock_match_z m (vc1 t1) (VC1 + t1) (S z) ) (Hmatch2: clock_match_z m (vc2 t2) (VC2 + t2) (S z))  (Hcon: consistent (m ++ mops_max (VC1+t1, z) (VC2+t2, z) (vc1 t1 z) (vc2 t2 z) t)), 
+  clock_match_z (m ++ mops_max (VC1+t1, z) (VC2+t2, z) (vc1 t1 z) (vc2 t2 z) t) (upd vc2 t2 (vc_join (vc2 t2) (vc1 t1)) t2) 
+                (VC2 + t2) (S z) .
+Proof.
+  unfold mops_max. clarify.
+  do 2 rewrite split_app.
+  eapply clock_match_mods_z; eauto.
+  instantiate(1:=vc2).
+  -rewrite <- app_assoc.
+   apply clock_match_nomod_z; auto.
+   +eapply consistent_app_SC; eauto.
+    do 2 rewrite <- app_assoc. simpl. eauto.
+   +rewrite Forall_forall. intros c Hin. inversion Hin; clarify.
+   +rewrite Forall_forall. intros c Hin. inversion Hin; clarify.
+  -do 2 rewrite <- app_assoc. simpl. eauto.
+  -apply clock_match_z_bounded in Hmatch2.
+   unfold bounded, upd, vc_join in *. clarify.
+   specialize (Hmatch2 t0 H). apply clock_match_z_bounded in Hmatch1.
+   specialize (Hmatch1 t0 H). rewrite Hmatch2, Hmatch1. auto.
+  -unfold vc_join, upd. clarify.
+   destruct y eqn:Hy; clarify.
+   destruct (le_dec (vc2 t2 0) (vc1 t1 0)); clarify.
+   rewrite max_r, max_l; auto.
+   apply not_le in n. apply gt_le_S in n.  apply le_Sn_le in n.
+   rewrite max_l, max_r; auto.
+   inversion H. clarify. apply le_n_0_eq in H1.  inversion H1. *)
+Lemma map_same_bounded : forall (X:Type) (f g: nat -> X ) z
+  (Hsame_bounded : forall x, x < z -> f x = g x), map f (interval 0 z) = map g (interval 0 z ).                                
+Proof.
+  induction z; clarify.
+  do 2 rewrite map_app. clarify.
+  rewrite IHz, Hsame_bounded; auto.
+Qed.
+
+Lemma max_comm: forall  a b, Peano.max a b = Peano.max b a.
+Proof.
+  clarify. destruct (le_dec a b); clarify.
+  rewrite max_r; auto. rewrite max_l; auto.
+  apply not_le in n. rewrite max_l; try omega. rewrite max_r; omega.
+Qed.
+
+Lemma clock_match_iff_z : forall m v V ,
+  clock_match m v V <-> clock_match_z m v V zt /\ bounded v zt.                           
+Proof.
+  clarify.
+  split; clarify.
+  -split; auto.
+   +unfold clock_match_z, clock_match in *.
+    clarify. specialize(H t). clarify.
+   +eapply clock_match_bounded. eauto.
+  -unfold clock_match, clock_match_z in *. clarify.
+   specialize(H1 t). clarify.
+Qed.
+
+Lemma clock_match_z_max_vc : forall m VC1 VC2 vc1 vc2 t1 t2 t z
+  (Hmatch1: clock_match_z m (vc1 t1) (VC1+ t1) z)
+  (Hmatch2: clock_match_z m (vc2 t2) (VC2 + t2) z)
+  (Hdistinct:  VC1 + t1 <> VC2 + t2)
+  (*(Hbounded1: bounded (vc1 t1) z) (Hbounded2: bounded (vc2 t2) z)*)
+  (Hcon: consistent (m ++ mops_max_vc (VC1+t1) (VC2 + t2) (map (vc1 t1) (rev (interval 0 z))) (map (vc2 t2) (rev (interval 0 z ))) t z )) (* (Hz: z <> 0)  (Ht2: t2 < z)*),
+                             clock_match_z (m ++ mops_max_vc (VC1+t1) (VC2+t2) (map (vc1 t1) (rev (interval 0 z))) (map (vc2 t2) (rev (interval 0 z))) t z) (upd vc2 t2 (vc_join (vc2 t2) (vc1 t1)) t2) (VC2+t2) z.
+Proof.
+  intros. generalize dependent m. generalize dependent vc1. generalize dependent vc2. 
+  induction z; clarify.
+  rewrite rev_unit in *. clarify.
+  do 3 rewrite split_app in *.
+  assert( consistent (m ++ Read t (VC1 + t1, z) (vc1 t1 z)
+            :: Read t (VC2 + t2, z) (vc2 t2 z)
+            :: [Write t (VC2 + t2, z) (Peano.max (vc1 t1 z) (vc2 t2 z))])) as Hcon1.
+    apply consistent_app_SC in Hcon.
+    do 2 rewrite <- app_assoc in Hcon. clarify.
+  assert(  clock_match_z
+     (((m ++ [Read t (VC1 + t1, z) (vc1 t1 z)]) ++
+       [Read t (VC2 + t2, z) (vc2 t2 z)]) ++
+      [Write t (VC2 + t2, z) (Peano.max (vc1 t1 z) (vc2 t2 z))] )
+     (vc1 t1) (VC1 + t1) 
+     (S z)) as Hm1.
+  {
+    do 2 rewrite <-app_assoc.  simpl.
+    eapply clock_match_nomod_z; eauto.
+    rewrite Forall_forall. intros c Hin. destruct Hin as [?|[?|?]]; clarify.
+  }
+  assert(  clock_match_z
+     (((m ++ [Read t (VC1 + t1, z) (vc1 t1 z)]) ++
+       [Read t (VC2 + t2, z) (vc2 t2 z)]) ++
+      [Write t (VC2 + t2, z) (Peano.max (vc1 t1 z) (vc2 t2 z))] )
+     (upd vc2 t2 (upd (vc2 t2) z (Peano.max (vc1 t1 z) (vc2 t2 z))) t2) (VC2 + t2) 
+     (S z)) as Hm2.
+  {
+    eapply clock_match_mods_z; eauto.
+    -rewrite <-app_assoc. simpl.
+     apply clock_match_nomod_z; eauto.
+     +eapply consistent_app_SC; eauto.
+      instantiate(1:=[Write t (VC2 + t2, z) (Peano.max (vc1 t1 z) (vc2 t2 z))]).
+      rewrite <- app_assoc. clarify.
+     +rewrite Forall_forall. intros c Hin. inversion Hin; clarify.
+    -do 2 rewrite <- app_assoc. clarify.
+    
+  }
+  assert(Hm2z:=Hm2). assert(Hm1z:=Hm1).
+  apply clock_match_Sz_z in Hm2z. apply clock_match_Sz_z in Hm1z.
+ 
+  assert(  map (vc2 t2) (rev (interval 0 z)) = map
+                (upd vc2 t2
+                   (upd (vc2 t2) z (Peano.max (vc1 t1 z) (vc2 t2 z))) t2)
+                (rev (interval 0 z))) as Hmap.
+  {
+    do 2 rewrite map_rev.
+    rewrite map_same_bounded with (g:=(upd vc2 t2 (upd (vc2 t2) z (Peano.max (vc1 t1 z) (vc2 t2 z))) t2)); clarify.
+    unfold upd. clarify. apply lt_irrefl in H. clarify.
+  }
+  rewrite Hmap in Hcon. 
+  specialize(IHz _ _ _ Hm1z Hm2z Hcon). rewrite <- Hmap in IHz.
+  assert((upd
+             (upd vc2 t2 (upd (vc2 t2) z (Peano.max (vc1 t1 z) (vc2 t2 z))))
+             t2
+             (vc_join
+                (upd vc2 t2
+                   (upd (vc2 t2) z (Peano.max (vc1 t1 z) (vc2 t2 z))) t2)
+                (vc1 t1)) t2) = upd vc2 t2 (vc_join (vc2 t2) (vc1 t1)) t2) as Hfun.
+  {
+    unfold upd, vc_join. clarify. apply functional_extensionality. clarify.
+    destruct (le_dec (vc1 t1 x) (vc2 t2 x)); clarify.
+    -rewrite max_r with (m:=(vc2 t2 x)); auto.
+    -apply not_le in n. rewrite max_r; auto.
+     +rewrite max_r; auto. omega.
+     +rewrite max_l; auto. omega.
+  }
+  setoid_rewrite Hfun in IHz.
+  apply clock_match_z_Sz; auto.
+  -apply can_read_SC; auto.
+   +unfold vc_join, upd. clarify.
+    rewrite max_comm.
+    apply can_read_written_SC; auto.
+    rewrite max_comm. do 2 rewrite <- split_app. auto.
+   +rewrite Hmap; auto.
+   +rewrite Forall_forall. clarify. apply in_mops_max_vcn in H.
+    destruct x; clarify.
+    destruct x; clarify.
+    intro Heq. inversion Heq; clarify. apply (lt_irrefl n). auto.
+  -do 3 rewrite <- split_app.  
+   apply can_write_SC; auto.
+   +unfold clock_match_z in Hmatch2. specialize(Hmatch2 z). clarify.
+    contradiction n. omega.
+   +do 3 rewrite split_app.  rewrite Hmap . auto.
+   +rewrite Forall_forall. intros c Hin. 
+    destruct Hin as [Hin | [Hin|[Hin|Hin]]]; clarify.
+    apply in_mops_max_vc in Hin. destruct c; clarify. auto.
+Qed.
+(*
+Lemma clock_match_max_vc : forall m VC1 VC2 vc1 vc2 t1 t2 t z
+  (Hmatch1: clock_match m (vc1 t1) (VC1+ t1) )
+  (Hmatch2: clock_match m (vc2 t2) (VC2 + t2) )
+  (Hdistinct:  VC1 + t1 <> VC2 + t2)
+  (Hcon: consistent (m ++ mops_max_vc (VC1+t1) (VC2 + t2) (map (vc1 t1) (rev (interval 0 z))) (map (vc2 t2) (rev (interval 0 z ))) t z )) (* (Hz: z <> 0)  (Ht2: t2 < z)*),
+                             clock_match (m ++ mops_max_vc (VC1+t1) (VC2+t2) (map (vc1 t1) (rev (interval 0 z))) (map (vc2 t2) (rev (interval 0 z))) t z) (upd vc2 t2 (vc_join (vc2 t2) (vc1 t1)) t2) (VC2+t2).
+Proof.*)
+
 Lemma instrument_sim_safe2 : forall (*P*) P1 P2 G1 G2 t (*h*)
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1)
   (Ht : Forall (fun e => fst e < zt) P1) (Hdistinct: distinct P2)
@@ -5254,7 +5646,7 @@ Proof.
            apply in_mops_hb_check in H2. destruct x0; clarify.
            destruct H2 as [? |[?|?]]; clarify.
          }
-
+       assert(Hs_rw':= Hs_rw).
        specialize (Hs_rw x); clarify.
        exploit hb_check_vals; try apply Hhb; eauto.
        { intros; apply Hinit; unfold meta_loc; simpl; omega. }
@@ -5318,23 +5710,75 @@ Proof.
               -apply (consistent_app_SC _ ([Write t (R'+v0,t) vt; Read t (v0, o) v; Rel t (X'+v0)])).
                rewrite <- split_app. rewrite <- app_assoc,  <- app_comm_cons. auto.
               -rewrite Forall_forall. intros x Hin. inversion Hin; clarify.
+              -apply init_steps.
+               +apply Hinit. unfold meta_loc. clarify. left. omega.
+               +rewrite Forall_forall. intros x Hin. inversion Hin; clarify.
+                apply in_mops_hb_check in H2. destruct x; clarify.
+              -auto.
              }
             rewrite <- Hvt_vctt.
             apply clock_match_mods; auto.
+            *rewrite <- split_app, <- app_assoc.
+             apply clock_match_nomod; auto.
+             { eapply consistent_app_SC; eauto.
+               instantiate(1:=[Write t (R' + v0, t) vt;
+               Read t (v0, o) v; Rel t (X' + v0)]). rewrite <- app_comm_cons.
+               rewrite <- app_assoc. rewrite <- app_comm_cons. rewrite <- app_assoc.
+               simpl. auto.
+             }
+             { rewrite Forall_forall. intros x Hin. inversion Hin; clarify.
+               rewrite in_app in H2. destruct H2 as [Hin2 | Hin2]; clarify.
+               apply in_mops_hb_check in Hin2. destruct x; clarify.
+             }
+             { rewrite Forall_forall. intros x Hin. rewrite in_app in Hin.
+               destruct Hin as [Hin | Hin]; clarify.
+               apply in_mops_hb_check in Hin. destruct x; clarify.
+             }
+            *rewrite <- app_assoc. simpl. rewrite <- app_assoc. rewrite <- split_app.
+             eapply consistent_app_SC; eauto.
+             instantiate(1:=[Read t (v0, o) v; Rel t (X' + v0)]).
+             rewrite <- app_assoc.  rewrite <- app_comm_cons. rewrite <- app_assoc. simpl.
+             auto.
+           +assert(Hv0: upd vr x (upd (vr x) t (vc t t )) v0 =vr v0).
+              unfold upd. clarify.
+            setoid_rewrite Hv0.
+            do 2 rewrite <- app_assoc. simpl.  rewrite <- split_app.  
+            apply clock_match_nomod; auto.
+            *specialize(Hs_rw' v0). clarify.
+            *eapply consistent_app_SC; eauto.
+             instantiate(1:=[Read t (x, o) v; Rel t (X' + x)]).
+             rewrite <- app_assoc. rewrite <- app_comm_cons. rewrite <- app_assoc.
+             simpl. auto.
+            *rewrite Forall_forall. intros c Hin. inversion Hin; clarify.
+             rewrite in_app in H2. destruct H2 as [Hin2| Hin2]; clarify.
+             apply in_mops_hb_check in Hin2. destruct c; clarify.
+             destruct Hin2; clarify.
+            *rewrite Forall_forall. intros c Hin. inversion Hin; clarify.
+             rewrite in_app in Hin. destruct Hin as [Hin | Hin].
+             apply in_mops_hb_check in Hin. destruct c; clarify.
+             inversion Hin; clarify. intro Heq. clarify. apply plus_reg_l in Heq. clarify.
+            
+            
           -repeat rewrite <- app_assoc. simpl. auto.
           -rewrite Forall_forall. intros c Hin. inversion Hin; clarify.
         }
+        {
+          specialize (Hs_rw' v0 H). 
+          apply clock_match_nomod; clarify;
+          rewrite Forall_forall; intros c Hin; inversion Hin; clarify.
+          -rewrite in_app in H2; destruct H2 as [Hin2 | Hin2 ]; clarify.
+           +apply in_mops_hb_check in Hin2. destruct c; clarify.
+           + destruct Hin2 as [? | [?|[?|[?|?]]]]; clarify.
+          -rewrite in_app in Hin; destruct Hin as [Hin | Hin]; clarify.
+           apply in_mops_hb_check in Hin. destruct c; clarify.
           
-      * rewrite Forall_app; clarify.
-        admit.
-      * rewrite Forall_app; clarify.
-        repeat (constructor; simpl; auto).
+        }
     
    -(*store*) (* see above *)
     exploit (instrument_incom (Store (x, o) e)).
     { simpl; rewrite <- app_assoc; simpl. eauto. }
     clarify.
-    do 4 eexists. split;[|split].
+    do 4 eexists. split;[|split;[|split]].
     +apply exec_store. eauto.
     +unfold mem_sim. intros. simpl. split; clarify.
      { split.
@@ -5378,6 +5822,7 @@ Proof.
           exploit eval_sim.
           {instantiate(1:=G2 t). instantiate(1:=G1 t). instantiate(1:=e). intros. apply HGsim; intro Heq; clarify. }
           intro Heval. rewrite Heval. auto.
+         
          +rewrite Forall_forall; clarify.
           rewrite Forall_forall; clarify.
           intro Heq. setoid_rewrite Forall_app in Hlocs. clarify. inversion Hlocs2; clarify. inversion H4; clarify.
@@ -5419,11 +5864,182 @@ Proof.
 
       { do  2 rewrite Forall_app; split; auto; repeat constructor; simpl; auto. }
       { repeat constructor; simpl; auto. }
+     +setoid_rewrite Forall_app in Hlocs; destruct Hlocs as (_ & Hlocs).
+      inversion Hlocs as [|?? Hi ?]; inversion Hi; clarify.
+      rewrite Forall_app in Ht; destruct Ht as (_ & Ht).
+      inversion Ht; clarify.
+      assert(Hsilly: (
+                        [Read t (C' + t, t) v; Write t (W' + x, t) v;
+                         Write t (x, o) (eval (G2 t) e); Rel t (X' + x)]) = (
+                                                                [Read t (C' + t, t) v; Write t (W' + x, t) v;
+                                                                 Write t (x, o) (eval (G2 t) e)])++ [Rel t (X' + x)] ).
+      erewrite app_removelast_last ; clarify.
+      
+      assert(Hhbs : consistent (m ++ mops_hb_check (W' + x) (C' + t) vs1 vs2 zt t ++ mops_hb_check (R' + x) (C' + t) vs3 vs2 zt t )).
+      {
+        rewrite app_comm_cons in Hcon. do 2 rewrite app_assoc in Hcon.
+        apply consistent_app_SC in Hcon.
+        rewrite <- app_assoc in Hcon. rewrite <- app_comm_cons in Hcon. 
+        rewrite loc_valid_ops2_SC in Hcon; clarify.
+        -rewrite Forall_forall.  intros c Hin. rewrite in_app in Hin.
+         destruct Hin as [Hin | Hin]; clarify; apply in_mops_hb_check in Hin; destruct c; clarify; destruct x0 as (x0,off); intro Heq; inversion Heq; clarify.
+         +specialize(Hmetalocs_disjoint_WX H52 H52). specialize (Hmetalocs_disjoint_CX H3 H52). destruct Hin; clarify.
+         +specialize(Hmetalocs_disjoint_RX H52 H52). specialize (Hmetalocs_disjoint_CX H3 H52). destruct Hin; clarify.
+        -rewrite Forall_forall. intros c Hin. rewrite in_app in Hin.
+         destruct Hin as [Hin | Hin]; clarify; apply in_mops_hb_check in Hin; destruct c; clarify.
+      }
+      assert(Hs_rw':= Hs_rw).
+      specialize (Hs_rw x); clarify.
+      assert(Hhb1: consistent ( m++ mops_hb_check (W'+x) (C'+t) vs1 vs2 zt t )).
+        eapply consistent_app_SC; eauto. rewrite <- app_assoc. eauto.
+      assert(Hhb2: consistent ( m ++ mops_hb_check (R'+x) (C'+t) vs3 vs2 zt t)).
+        apply reads_noops_SC in Hhbs; auto.
+        apply mops_hb_check_read.
+      exploit hb_check_vals; try apply Hhb1; eauto.
+      { intros; apply Hinit; unfold meta_loc; simpl; omega. }
+      { intros; apply Hinit; unfold meta_loc; simpl; omega. }
+      exploit hb_check_vals; try apply Hhb2; eauto.
+      { intros; apply Hinit; unfold meta_loc; simpl; omega. }
+      { intros; apply Hinit; unfold meta_loc; simpl; omega. }
+      clarify; eexists; simpl; split. 
+      *eapply ss_step; eauto.
+       eapply write_upd; eauto.
+       eapply first_gt_vc_le; eauto.
+       eapply first_gt_vc_le; eauto.
+       apply ss_refl.
+      *unfold clocks_sim. split;[|split;[|split]]; intros;clarify.
+       {apply clock_match_nomod; auto.
+        rewrite Forall_forall. intros ? Hin. inversion Hin; clarify. 
+        rewrite in_app in H2. destruct H2 as [Hin1 | Hin2]; clarify.
+        -apply in_mops_hb_check in Hin1. destruct x0; clarify.
+        -rewrite in_app in Hin2. destruct Hin2 as [Hin2 | Hin2]; clarify.
+         +apply in_mops_hb_check in Hin2. destruct x0; clarify.
+         +destruct Hin2 as [?|[?|[?|?]]]; clarify.
+        -rewrite Forall_forall. intros x0 Hin. destruct x0; clarify;
+         do 2 rewrite in_app in Hin; destruct Hin as [Hin | [Hin | [Hin |[Hin | [Hin | [Hin | Hin]]]]]]; try apply in_mops_hb_check in Hin; clarify.
+          *inversion Hin; clarify. 
+          *inversion Hin; clarify. intro Heq. contradiction H51.
+           rewrite <- Heq. unfold meta_loc. left. simpl. omega.
+          *inversion Hin; clarify.
+          *inversion H2; clarify.
+           
+       }
+       {apply clock_match_nomod; auto.
+        rewrite Forall_forall. intros ? Hin. inversion Hin; clarify. 
+        rewrite in_app in H2. destruct H2 as [Hin1 | Hin2]; clarify.
+        -apply in_mops_hb_check in Hin1. destruct x0; clarify.
+        -rewrite in_app in Hin2. destruct Hin2 as [Hin2 | Hin2]; clarify.
+         +apply in_mops_hb_check in Hin2. destruct x0; clarify.
+         +destruct Hin2 as [?|[?|[?|?]]]; clarify.
+        -rewrite Forall_forall. intros x0 Hin. destruct x0; clarify;
+         do 2 rewrite in_app in Hin; destruct Hin as [Hin | [Hin | [Hin |[Hin | [Hin | [Hin | Hin]]]]]]; try apply in_mops_hb_check in Hin; clarify.
+          *inversion Hin; clarify. 
+          *inversion Hin; clarify. intro Heq. contradiction H51.
+           rewrite <- Heq. unfold meta_loc. right. left. simpl. omega.
+          *inversion Hin; clarify.
+          *inversion H2; clarify.
+           
+       }
+       {
+          specialize (Hs_rw' v0 H). 
+          apply clock_match_nomod; clarify;
+          rewrite Forall_forall; intros c Hin; inversion Hin; clarify.
+          -do 2 rewrite in_app in H2; destruct H2 as [Hin2 | Hin2 ]; clarify.
+           +apply in_mops_hb_check in Hin2. destruct c; clarify.
+           + destruct Hin2 as [Hin2 | [?|[?|[?|[?|?]]]]]; clarify.
+             apply in_mops_hb_check in Hin2. destruct c; clarify.
+          -do 2 rewrite in_app in Hin; destruct Hin as [Hin | [Hin|[?|[?|[?|?]]]]]; clarify.
+           +apply in_mops_hb_check in Hin. destruct c; clarify.
+           +apply in_mops_hb_check in Hin. destruct c; clarify.
+           +specialize(Hmetalocs_disjoint_WR H52 H). clarify.
+           +intro Heq. contradiction H51. rewrite <- Heq. unfold meta_loc.  do 2 right. left. simpl. omega.
+       }
+       { rewrite split_app, app_assoc, app_assoc. do 2 rewrite split_app. 
+         apply clock_match_nomod; auto.
+         -destruct (eq_dec x v0); clarify.
+          +assert(Hvt_vctt : v= vc t t ).
+           {
+             apply clock_match_value with (m:= m ++
+                                                 Acq t (X' + v0)
+                                                 :: mops_hb_check (W' + v0) (C' + t)
+                                                 (map (vw v0) (rev (interval 0 zt)))
+                                                 (map (vc t) (rev (interval 0 zt))) zt t ++
+                                                 mops_hb_check (R' + v0) (C' + t)
+                                                 (map (vr v0) (rev (interval 0 zt)))
+                                                 (map (vc t) (rev (interval 0 zt))) zt t) (ct:=C'+t) (t:=t); auto.
+             apply clock_match_nomod; auto.
+             -apply clock_match_nomod; auto.
+              +apply (consistent_app_SC _  ([Read t (C' + t, t) v; Write t (W' + v0, t) v;
+                                             Write t (v0, o) (eval (G2 t) e); Rel t (X' + v0)])); auto.
+               rewrite <- app_assoc.  rewrite <- app_comm_cons. rewrite <- app_assoc. auto.
+              +rewrite Forall_forall. intros ? Hin. inversion Hin; clarify.
+               rewrite in_app in H2. destruct H2 as [Hin2 | Hin2]; clarify;
+               apply in_mops_hb_check in Hin2; destruct x; clarify.
+              +rewrite Forall_forall. intros ? Hin. inversion Hin; clarify.
+               rewrite in_app in Hin. destruct Hin as [Hin | Hin]; clarify;
+               apply in_mops_hb_check in Hin; destruct x; clarify.
+             -apply (consistent_app_SC _ ([Write t (W'+v0,t) v; Write t (v0, o) (eval (G2 t) e); Rel t (X'+v0)])); auto.
+              rewrite <- split_app. rewrite <- app_assoc,  <- app_comm_cons, <- app_assoc. auto. 
+             -rewrite Forall_forall. intros x Hin. inversion Hin; clarify.
+             -apply init_steps.
+              +apply Hinit. unfold meta_loc. clarify. left. omega.
+              +rewrite Forall_forall. intros x Hin. inversion Hin; clarify.
+               rewrite in_app in H2. destruct H2 as [Hin2 | Hin2]; clarify;
+               apply in_mops_hb_check in Hin2; destruct x; clarify.
+           }
+           rewrite <- Hvt_vctt.
+           apply clock_match_mods; auto.
+           *rewrite <- split_app, <- app_assoc, <- app_assoc.
+            apply clock_match_nomod; auto.
+            { eapply consistent_app_SC; eauto.
+              instantiate(1:=[Write t (W' + v0, t) v;
+                               Write t (v0, o) (eval (G2 t) e); Rel t (X' + v0)]). rewrite <- app_comm_cons.
+              rewrite <- app_assoc. rewrite <- app_comm_cons. do 2 rewrite <- app_assoc.
+              auto.
+            }
+            { rewrite Forall_forall. intros x Hin. inversion Hin; clarify.
+              do 2 rewrite in_app in H2. destruct H2 as [Hin2 | [Hin2 |Hin2]]; clarify;
+              apply in_mops_hb_check in Hin2; destruct x; clarify.
+            }
+            { rewrite Forall_forall. intros x Hin. do 2 rewrite in_app in Hin.
+              destruct Hin as [Hin | [Hin |Hin]]; clarify;
+              apply in_mops_hb_check in Hin; destruct x; clarify.
+            }
+           *rewrite <- app_assoc. simpl. rewrite <- app_assoc. rewrite <- split_app.
+            rewrite <- app_assoc.
+            eapply consistent_app_SC; eauto.
+            instantiate(1:=[Write t (v0, o) (eval (G2 t) e); Rel t (X' + v0)]).
+            do 2 rewrite <- app_assoc.  rewrite <- app_comm_cons. rewrite <- app_assoc. 
+            auto.
+          +assert(Hv0: upd vw x (upd (vw x) t (vc t t )) v0 =vw v0).
+             unfold upd. clarify.
+           setoid_rewrite Hv0.
+           do 3 rewrite <- app_assoc. simpl.  rewrite <- split_app.  
+           apply clock_match_nomod; auto.
+           *specialize(Hs_rw' v0). clarify.
+           *eapply consistent_app_SC; eauto.
+            instantiate(1:=[Write t (x, o) (eval (G2 t) e); Rel t (X' + x)]).
+            rewrite <- app_assoc. rewrite <- app_comm_cons. do 2 rewrite <- app_assoc.
+            auto.
+           *rewrite Forall_forall. intros c Hin. inversion Hin; clarify.
+            do 2 rewrite in_app in H2. destruct H2 as [Hin2| [Hin2 |Hin2]]; clarify;
+            try apply in_mops_hb_check in Hin2; try destruct c; clarify.
+           *rewrite Forall_forall. intros c Hin. inversion Hin; clarify.
+            do 2 rewrite in_app in Hin. destruct Hin as [Hin | [Hin | Hin]];clarify;
+            try apply in_mops_hb_check in Hin; try destruct c; clarify.
+            intro Heq. clarify. apply plus_reg_l in Heq. clarify.
+              
+         -repeat rewrite <- app_assoc. auto.
+         -rewrite Forall_forall. intros c Hin. inversion Hin; clarify.
+         -rewrite Forall_forall. intros c Hin. inversion Hin; clarify.
+          intro Heq. contradiction H51. unfold meta_loc. simpl. do 3 right. left. omega.
+       }
+
    -(*lock*)   
      exploit (instrument_incom (Lock m0)).
      { simpl;  eauto. }
      clarify.
-     do 4 eexists. split;[|split].
+     do 4 eexists. split;[|split;[|split]].
      +apply exec_lock. eauto.
      +unfold mem_sim. intros. simpl.
       setoid_rewrite Forall_app in Hlocs. clarify. inversion Hlocs2; clarify. 
@@ -5436,6 +6052,108 @@ Proof.
       }
      +rewrite split_app in Hcon.
       simpl. eapply consistent_app_SC; eauto.
+     +setoid_rewrite Forall_app in Hlocs; destruct Hlocs as (_ & Hlocs).
+      inversion Hlocs as [|?? Hi ?]; inversion Hi; clarify.
+      rewrite Forall_app in Ht; destruct Ht as (_ & Ht).
+      inversion Ht; clarify.
+      assert(Hhbs : consistent (m ++ mops_max_vc (L' + m0) (C' + t) vs1 vs2 t zt)).
+      { 
+        rewrite loc_valid_ops2_SC in Hcon; clarify.
+
+        rewrite Forall_forall.  intros c Hin. apply in_mops_max_vc' in Hin.
+        destruct c; clarify;
+        intro Heq; contradiction H41; unfold meta_loc.
+        -destruct Hin; clarify; try rewrite H; try omega.
+        -rewrite <- Heq, Hin. left. omega. 
+      }
+      exploit max_vc_vals; try apply Hhbs; eauto.
+      { intros; apply Hinit; unfold meta_loc; simpl; omega. }
+      { intros; apply Hinit; unfold meta_loc; simpl; omega. }
+      clarify; eexists; simpl; split. 
+      *eapply ss_step; eauto.
+       eapply acquire; eauto.
+       apply ss_refl.
+      *assert(Hcon_acq: consistent (m ++[Acq t m0])).
+       {
+         eapply consistent_app_SC; eauto.
+         instantiate (1:=mops_max_vc (L' + m0) (C' + t)
+                 (map (vl m0) (rev (interval 0 zt)))
+                 (map (vc t) (rev (interval 0 zt))) t zt).
+         rewrite <- split_app. auto.
+        }
+       unfold clocks_sim. split;[|split;[|split]]; intros;clarify.
+       {
+         destruct (eq_dec t t0); clarify.
+         -rewrite clock_match_iff_z.
+          split; auto.
+          +rewrite split_app. apply clock_match_z_max_vc; auto.
+           {apply clock_match_nomod_z; auto.
+            -specialize (Hs_l m0 H42). rewrite clock_match_iff_z in Hs_l. clarify.
+            -rewrite Forall_forall. clarify.
+            -rewrite Forall_forall. clarify.
+             intro Heq. contradiction H41. rewrite <- Heq. unfold meta_loc.
+             simpl. omega.
+            }
+           {apply clock_match_nomod_z; auto.
+            -specialize (Hs_c t0 H). rewrite clock_match_iff_z in Hs_c. clarify.
+            -rewrite Forall_forall. clarify.
+            -rewrite Forall_forall. clarify.
+             intro Heq. contradiction H41. rewrite <- Heq. unfold meta_loc.
+             simpl. omega.
+            }
+           {specialize (Hmetalocs_disjoint_CL H42 H). clarify. }
+           {rewrite <- split_app. auto. }
+          +specialize(Hs_l m0 H42). apply clock_match_bounded in Hs_l.
+           specialize (Hs_c t0 H). apply clock_match_bounded in Hs_c.
+           unfold bounded,upd, vc_join in *. clarify.
+           rewrite Hs_l; auto. rewrite Hs_c; auto.
+         -assert( upd vc t ( vc_join (vc t) (vl m0)) t0 = vc t0) as Hvct0.
+          {
+            unfold upd. clarify.
+          }
+          rewrite Hvct0.
+          apply clock_match_nomod; auto.
+          rewrite Forall_forall. intros ? Hin. inversion Hin; clarify.
+          apply in_mops_max_vc in H1. destruct x; clarify.
+          specialize(Hmetalocs_disjoint_CL H42 Hlt). clarify.
+          rewrite Forall_forall.  intros c Hin. destruct Hin as [Hin | Hin]; clarify.
+          intros Heq. contradiction H41. rewrite <- Heq.  unfold meta_loc. simpl. omega.
+          apply in_mops_max_vc' in Hin. destruct c; clarify.
+          destruct x; clarify. intros Heq. contradiction n.
+          apply plus_minus in Heq .  rewrite minus_plus in Heq. auto.
+       }
+       {apply clock_match_nomod; auto.
+        rewrite Forall_forall. intros ? Hin. inversion Hin; clarify. 
+        apply in_mops_max_vc in H1. destruct x; clarify.
+        specialize(Hmetalocs_disjoint_CL H42 Hlt). clarify.
+        rewrite Forall_forall.  intros c Hin. destruct Hin as [Hin | Hin]; clarify.
+        intros Heq. contradiction H41. rewrite <- Heq.  unfold meta_loc. simpl. omega.
+        apply in_mops_max_vc' in Hin. destruct c; clarify.
+        destruct x; clarify. specialize(Hmetalocs_disjoint_CL H Hlt). clarify.
+       }
+       {
+        assert(Hs_rw':=Hs_rw).
+        specialize (Hs_rw' v H). 
+        apply clock_match_nomod; clarify;
+        rewrite Forall_forall; intros c Hin; inversion Hin; clarify.
+        -exploit max_vc_prog. intro Hmax_prog. rewrite Forall_forall in Hmax_prog.
+         apply Hmax_prog. eauto.
+        -intro Heq. contradiction H41. rewrite <- Heq. unfold meta_loc. simpl. omega.
+        -apply in_mops_max_vc' in H1.  destruct c; clarify.
+         destruct x; clarify. specialize(Hmetalocs_disjoint_CR Hlt H). clarify.
+       }
+       {
+        assert(Hs_rw':=Hs_rw).
+        specialize (Hs_rw' v H). 
+        apply clock_match_nomod; clarify;
+        rewrite Forall_forall; intros c Hin; inversion Hin; clarify.
+        -exploit max_vc_prog. intro Hmax_prog. rewrite Forall_forall in Hmax_prog.
+         apply Hmax_prog. eauto.
+        -intro Heq. contradiction H41. rewrite <- Heq. unfold meta_loc. simpl. omega.
+        -apply in_mops_max_vc' in H1.  destruct c; clarify.
+         destruct x; clarify. specialize(Hmetalocs_disjoint_CW Hlt H). clarify.
+       }
+        
     -(*unlock-nil*) symmetry in Hi. apply app_cons_not_nil in Hi. clarify.
     -(*unlock*)
       exploit (instrument_incom (Unlock m0)).
@@ -5472,6 +6190,166 @@ Proof.
        }
        { repeat rewrite Forall_app; split; auto; repeat constructor; simpl; auto. }
        { repeat constructor; simpl; auto. }
+      + setoid_rewrite Forall_app in Hlocs; destruct Hlocs as (_ & Hlocs).
+       inversion Hlocs as [|?? Hi ?]; inversion Hi; clarify.
+       rewrite Forall_app in Ht; destruct Ht as (_ & Ht).
+       inversion Ht; clarify.
+       assert(Hsilly: (m ++
+            Acq t (X' + x)
+            :: mops_hb_check (W' + x) (C' + t) vs1 vs2 zt t ++
+               [Read t (C' + t, t) vt; Write t (R' + x, t) vt;
+               Read t (x, o) v; Rel t (X' + x)]) = (m ++
+            Acq t (X' + x)
+            :: mops_hb_check (W' + x) (C' + t) vs1 vs2 zt t ++
+               [Read t (C' + t, t) vt; Write t (R' + x, t) vt;
+                Read t (x, o) v])++ [Rel t (X' + x)] ).
+         symmetry. rewrite <- app_assoc. clarify. rewrite split_app. rewrite app_assoc. rewrite app_assoc.  symmetry.
+         rewrite split_app; rewrite app_assoc. do 3 rewrite split_app. repeat rewrite <- app_assoc. clarify.
+         assert(Hhb : consistent (m ++ mops_hb_check (W' + x) (C' + t) vs1 vs2 zt t)).
+         {
+         setoid_rewrite Hsilly in Hcon. apply consistent_app_SC in Hcon.
+         rewrite loc_valid_ops2_SC in Hcon; clarify.
+         rewrite app_assoc in Hcon1; generalize (consistent_app_SC _ _ Hcon1); auto.
+         rewrite Forall_app. split; rewrite Forall_forall; clarify.
+         apply in_mops_hb_check in H. destruct x0; clarify. destruct x0; clarify.
+         destruct H.
+           rewrite H. intro Hwrong. inversion Hwrong. specialize (Hmetalocs_disjoint_WX H52 H52). clarify.
+           rewrite H. intro Hwrong. inversion Hwrong. specialize (Hmetalocs_disjoint_CX H3 H52). clarify.
+         destruct H as [?|[?|[?|?]]]; clarify.
+           intro Hwrong. inversion Hwrong. specialize (Hmetalocs_disjoint_CX H3 H52). clarify.
+           intro Hwrong. inversion Hwrong. specialize (Hmetalocs_disjoint_RX H52 H52). clarify.
+           intro Hwrong. inversion Hwrong. clarify. contradiction H51. unfold meta_loc. clarify. rewrite H2. repeat right. omega.
+           rewrite Forall_forall. intros. rewrite in_app in H. inversion H; clarify. 
+           apply in_mops_hb_check in H2. destruct x0; clarify.
+           destruct H2 as [? |[?|?]]; clarify.
+         }
+       assert(Hs_rw':= Hs_rw).
+       specialize (Hs_rw x); clarify.
+       exploit hb_check_vals; try apply Hhb; eauto.
+       { intros; apply Hinit; unfold meta_loc; simpl; omega. }
+       { intros; apply Hinit; unfold meta_loc; simpl; omega. }
+       clarify; eexists; simpl; split. 
+       * eapply ss_step; eauto.
+         eapply read_upd; eauto.
+         eapply first_gt_vc_le; eauto.
+         apply ss_refl.
+       * unfold clocks_sim. split;[|split;[|split]]; intros;clarify.
+        {apply clock_match_nomod; auto.
+         rewrite Forall_forall. intros ? Hin. inversion Hin; clarify. 
+         rewrite in_app in H2. destruct H2 as [Hin1 | Hin2]; clarify.
+         -apply in_mops_hb_check in Hin1. destruct x0; clarify.
+         -destruct Hin2 as [?|[?|[?|?]]]; clarify.
+         -rewrite Forall_forall. intros x0 Hin. destruct x0; clarify.
+          +rewrite in_app in Hin. destruct Hin as [Hin | [Hin | [Hin |Hin]]]; clarify.
+           *apply in_mops_hb_check in Hin. clarify.
+           *inversion Hin; clarify.
+          +destruct Hin as [Hin | Hin]; clarify.
+           *inversion Hin; clarify.
+           *rewrite in_app in Hin. destruct Hin as [Hin | [Hin | [Hin | Hin ]]]; clarify.
+            {apply in_mops_hb_check in Hin. clarify. }
+            {inversion Hin; clarify. }
+            
+         }
+        {apply clock_match_nomod; auto.
+         rewrite Forall_forall. intros ? Hin. inversion Hin; clarify.
+         rewrite in_app in H2. destruct H2 as [Hin1 | Hin2]; clarify.
+         -apply in_mops_hb_check in Hin1. destruct x0; clarify.
+         -destruct Hin2 as [? | [? | [?|?]]]; clarify.
+         -rewrite Forall_forall. intros x0 Hin. destruct x0; clarify.
+          +rewrite in_app in Hin. destruct Hin as [Hin | [Hin | [Hin |Hin]]]; clarify.
+           *apply in_mops_hb_check in Hin. clarify.
+           *inversion Hin; clarify.
+          +destruct Hin as [Hin | Hin]; clarify.
+           *inversion Hin; clarify.
+           *rewrite in_app in Hin. destruct Hin as [Hin | [Hin | [Hin | Hin ]]]; clarify.
+            {apply in_mops_hb_check in Hin. clarify. }
+            {inversion Hin; clarify. }
+        }
+        { rewrite split_app, app_assoc. do 2 rewrite split_app. 
+          apply clock_match_nomod; auto.
+          -destruct (eq_dec x v0); clarify.
+           +assert(Hvt_vctt : vt= vc t t ).
+            {
+              apply clock_match_value with (m:= m ++
+           Acq t (X' + v0)
+           :: mops_hb_check (W' + v0) (C' + t)
+                (map (vw v0) (rev (interval 0 zt)))
+                (map (vc t) (rev (interval 0 zt))) zt t) (ct:=C'+t) (t:=t).
+              apply clock_match_nomod; auto.
+              -apply clock_match_nomod; auto.
+               +apply (consistent_app_SC _  ([Read t (C' + t, t) vt; Write t (R' + v0, t) vt;
+                                              Read t (v0, o) v; Rel t (X' + v0)])).
+                rewrite <- app_assoc.  rewrite <- app_comm_cons. auto.
+               +rewrite Forall_forall. intros ? Hin. inversion Hin; clarify.
+                apply in_mops_hb_check in H2; destruct x; clarify.
+               +rewrite Forall_forall. intros ? Hin. inversion Hin; clarify.
+                apply in_mops_hb_check in Hin; destruct x; clarify.
+              -apply (consistent_app_SC _ ([Write t (R'+v0,t) vt; Read t (v0, o) v; Rel t (X'+v0)])).
+               rewrite <- split_app. rewrite <- app_assoc,  <- app_comm_cons. auto.
+              -rewrite Forall_forall. intros x Hin. inversion Hin; clarify.
+              -apply init_steps.
+               +apply Hinit. unfold meta_loc. clarify. left. omega.
+               +rewrite Forall_forall. intros x Hin. inversion Hin; clarify.
+                apply in_mops_hb_check in H2. destruct x; clarify.
+              -auto.
+             }
+            rewrite <- Hvt_vctt.
+            apply clock_match_mods; auto.
+            *rewrite <- split_app, <- app_assoc.
+             apply clock_match_nomod; auto.
+             { eapply consistent_app_SC; eauto.
+               instantiate(1:=[Write t (R' + v0, t) vt;
+               Read t (v0, o) v; Rel t (X' + v0)]). rewrite <- app_comm_cons.
+               rewrite <- app_assoc. rewrite <- app_comm_cons. rewrite <- app_assoc.
+               simpl. auto.
+             }
+             { rewrite Forall_forall. intros x Hin. inversion Hin; clarify.
+               rewrite in_app in H2. destruct H2 as [Hin2 | Hin2]; clarify.
+               apply in_mops_hb_check in Hin2. destruct x; clarify.
+             }
+             { rewrite Forall_forall. intros x Hin. rewrite in_app in Hin.
+               destruct Hin as [Hin | Hin]; clarify.
+               apply in_mops_hb_check in Hin. destruct x; clarify.
+             }
+            *rewrite <- app_assoc. simpl. rewrite <- app_assoc. rewrite <- split_app.
+             eapply consistent_app_SC; eauto.
+             instantiate(1:=[Read t (v0, o) v; Rel t (X' + v0)]).
+             rewrite <- app_assoc.  rewrite <- app_comm_cons. rewrite <- app_assoc. simpl.
+             auto.
+           +assert(Hv0: upd vr x (upd (vr x) t (vc t t )) v0 =vr v0).
+              unfold upd. clarify.
+            setoid_rewrite Hv0.
+            do 2 rewrite <- app_assoc. simpl.  rewrite <- split_app.  
+            apply clock_match_nomod; auto.
+            *specialize(Hs_rw' v0). clarify.
+            *eapply consistent_app_SC; eauto.
+             instantiate(1:=[Read t (x, o) v; Rel t (X' + x)]).
+             rewrite <- app_assoc. rewrite <- app_comm_cons. rewrite <- app_assoc.
+             simpl. auto.
+            *rewrite Forall_forall. intros c Hin. inversion Hin; clarify.
+             rewrite in_app in H2. destruct H2 as [Hin2| Hin2]; clarify.
+             apply in_mops_hb_check in Hin2. destruct c; clarify.
+             destruct Hin2; clarify.
+            *rewrite Forall_forall. intros c Hin. inversion Hin; clarify.
+             rewrite in_app in Hin. destruct Hin as [Hin | Hin].
+             apply in_mops_hb_check in Hin. destruct c; clarify.
+             inversion Hin; clarify. intro Heq. clarify. apply plus_reg_l in Heq. clarify.
+            
+            
+          -repeat rewrite <- app_assoc. simpl. auto.
+          -rewrite Forall_forall. intros c Hin. inversion Hin; clarify.
+        }
+        {
+          specialize (Hs_rw' v0 H). 
+          apply clock_match_nomod; clarify;
+          rewrite Forall_forall; intros c Hin; inversion Hin; clarify.
+          -rewrite in_app in H2; destruct H2 as [Hin2 | Hin2 ]; clarify.
+           +apply in_mops_hb_check in Hin2. destruct c; clarify.
+           + destruct Hin2 as [? | [?|[?|[?|?]]]]; clarify.
+          -rewrite in_app in Hin; destruct Hin as [Hin | Hin]; clarify.
+           apply in_mops_hb_check in Hin. destruct c; clarify.
+          
+        }
     -(*spawn-nil*) symmetry in Hi. apply app_cons_not_nil in Hi. clarify.
     -(*spawn*)             
      destruct i; destruct zt; clarify.
