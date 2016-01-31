@@ -1019,13 +1019,37 @@ Proof.
    clarify. omega.
 Qed.
 
-Definition unlock_handler t l z :=
-  max_vc (C + t) (L+l) z tmp1 tmp2 ++ inc_vc t (C + t) tmp1.
 
-Lemma unlock_handler_spec_n : forall n l P G P1 P2 t rest v1 vss1 v2 vss2 vt
-(Hset_vc: P=P1++(t, unlock_handler t l (S n) ++ rest)::P2) (Hvs1: length vss1=n) (Hvs2: length vss2=n) (Htmp: tmp1<>tmp2),
+Definition unlock_handler t m z tmp :=
+  set_vc (C + t) (L + m) z tmp ++ inc_vc t (C + t) tmp.
+
+
+
+(* mod? *)
+Lemma unlock_handler_spec_n : forall n u tmp P G P1 P2 t rest v vss vt
+(Hset_vc: P=P1++(t, unlock_handler t u (S n) tmp++ rest)::P2) (Hvs: length vss=n),
  exec_star (Some P) G
-          (events_max_vc (C+t)(L+l) t (S n)++(events_inc_vc (C+t) t)) (mops_max_vc (C+t) (L+l )(vss1++[v1]) (vss2++[v2]) t (S n) ++ (mops_inc_vc (C+t) vt t)) (Some (P1++(t,rest)::P2)) (upd_env (upd_env G t tmp2 (Peano.max v1 v2)) t tmp1 (vt+1)).
+          (events_set_vc (C+t)(L+u) (S n) t++(events_inc_vc (C+t) t)) (mops_set_vc (C+t) (L+u) (S n) t (vss++[v])++ (mops_inc_vc (C+t) vt t)) (Some (P1++(t,rest)::P2)) (upd_env G t tmp (vt+1)).
+Proof.
+  intros.
+  unfold unlock_handler in Hset_vc.
+  apply exec_star_trans with (P':=P1++(t,inc_vc t (C+t) tmp++rest)::P2) (G':=upd_env G t tmp v). 
+  -eapply set_vc_spec_n;eauto.
+   rewrite app_assoc. eauto.
+  -assert(Hoverwrite:upd_env G t tmp (vt+1) =upd_env (upd_env G t tmp v) t tmp (vt+1)).
+   rewrite <- upd_overwrite with (v1:=v). eauto.
+   rewrite Hoverwrite.
+   apply inc_vc_spec. eauto.
+Qed.
+
+
+Definition spawn_handler t l z :=
+  max_vc (C + t) (C+l) z tmp1 tmp2 ++ inc_vc t (C + t) tmp1.
+
+Lemma spawn_handler_spec_n : forall n l P G P1 P2 t rest v1 vss1 v2 vss2 vt
+(Hset_vc: P=P1++(t, spawn_handler t l (S n) ++ rest)::P2) (Hvs1: length vss1=n) (Hvs2: length vss2=n) (Htmp: tmp1<>tmp2),
+ exec_star (Some P) G
+          (events_max_vc (C+t)(C+l) t (S n)++(events_inc_vc (C+t) t)) (mops_max_vc (C+t) (C+l )(vss1++[v1]) (vss2++[v2]) t (S n) ++ (mops_inc_vc (C+t) vt t)) (Some (P1++(t,rest)::P2)) (upd_env (upd_env G t tmp2 (Peano.max v1 v2)) t tmp1 (vt+1)).
 Proof.
   intros.
   apply exec_star_trans with (P':=P1++(t,inc_vc t (C+t) tmp1++rest)::P2) (G':=upd_env (upd_env G t tmp1 v1) t tmp2 (Peano.max v1 v2)).
@@ -1041,25 +1065,6 @@ Qed.
 
 
 
-Definition spawn_handler t u z tmp :=
-  set_vc (C + t) (C + u) z tmp ++ inc_vc t (C + t) tmp.
-
-(* mod? *)
-Lemma spawn_handler_spec_n : forall n u tmp P G P1 P2 t rest v vss vt
-(Hset_vc: P=P1++(t, spawn_handler t u (S n) tmp++ rest)::P2) (Hvs: length vss=n),
- exec_star (Some P) G
-          (events_set_vc (C+t)(C+u) (S n) t++(events_inc_vc (C+t) t)) (mops_set_vc (C+t) (C+u) (S n) t (vss++[v])++ (mops_inc_vc (C+t) vt t)) (Some (P1++(t,rest)::P2)) (upd_env G t tmp (vt+1)).
-Proof.
-  intros.
-  unfold spawn_handler in Hset_vc.
-  apply exec_star_trans with (P':=P1++(t,inc_vc t (C+t) tmp++rest)::P2) (G':=upd_env G t tmp v). 
-  -eapply set_vc_spec_n;eauto.
-   rewrite app_assoc. eauto.
-  -assert(Hoverwrite:upd_env G t tmp (vt+1) =upd_env (upd_env G t tmp v) t tmp (vt+1)).
-   rewrite <- upd_overwrite with (v1:=v). eauto.
-   rewrite Hoverwrite.
-   apply inc_vc_spec. eauto.
-Qed.
    
     
 
@@ -1090,8 +1095,8 @@ let instrument := fix f p t :=
  | Load a (x, _)   => load_handler t x zt ++ [ins; Unlock (X + x)]
  | Store (x, _) e  => store_handler t x zt ++ [ins; Unlock (X + x)]
  | Lock l          => [ins] ++ lock_handler t l zt
- | Unlock l   => unlock_handler t l zt ++ [ins]
- | Spawn u li =>  spawn_handler t u zt tmp1 ++ [Spawn u (instrument li u)] 
+ | Unlock l   => unlock_handler t l zt  tmp1++ [ins]
+ | Spawn u li =>  spawn_handler t u zt ++ [Spawn u (instrument li u)] 
  | Wait u     => [ins] ++ wait_handler t u zt
  (* the wait_handler should be called after the wait returns*)
  | _          => [ins]
@@ -1749,8 +1754,8 @@ Proof.
   inversion H; intro; clarify.
 Qed.
 
-Lemma mops_set_vc_meta_cc: forall vs n u t c (Hx : u < zt) (Ht : t < zt)
-  (Hin : In c (mops_set_vc (C + t) (C + u) n t vs )), meta_loc (loc_of c).
+Lemma mops_set_vc_meta_cl: forall vs n u t c (Hx : u < zl) (Ht : t < zt)
+  (Hin : In c (mops_set_vc (C + t) (L + u) n t vs )), meta_loc (loc_of c).
 Proof.
   induction vs; clarify.
   induction n; clarify.
@@ -1862,6 +1867,33 @@ Proof.
     apply can_read_thread; auto.
 Qed.
 
+Lemma mops_max_vc_con_cc' : forall m s (Hs : clocks_sim m s) u t0 n
+  (Hn : n <= zt) (Hu : u < zt) (Ht : t0 < zt) (Hcon : consistent m),
+  consistent (m ++ 
+    (mops_max_vc (C + u) (C + t0) (map (clock_of s u) (rev (interval 0 n)))
+       (map (clock_of s t0) (rev (interval 0 n))) u n)).
+
+Proof.
+  induction n; clarify.
+  { rewrite app_nil_r; auto. }
+  rewrite rev_app_distr; clarify.
+  unfold clocks_sim in Hs; clarify.
+  do 2 rewrite read_noop_SC.
+  - rewrite loc_valid_ops2_SC; clarify; try split.
+    + apply IHn; auto; omega.
+    + specialize (Hs1 _ Ht n); clarify.
+      apply can_write_thread; auto.
+    + simpl.
+      eapply Forall_impl; [|apply mops_max_vc_off]; clarify.
+      destruct (loc_of a); intro; clarify; omega.
+  - specialize (Hs1 _ Ht n); clarify.
+    apply can_read_thread; auto.
+  - clarsimp.
+  -
+    specialize (Hs1 _ Hu); clarify.
+    specialize (Hs1 n); clarify.
+    apply can_read_thread; auto.
+Qed.
 
 Lemma mops_set_vc_off : forall src tgt f t n,
   Forall (fun c' => match loc_of c' with (x, o) => o < n end)
@@ -1882,10 +1914,10 @@ Proof.
 Qed.
 Hint Resolve set_vc_prog.
 
-Lemma mops_set_vc_con_cc : forall m s (Hs : clocks_sim m s) u t0 n
-  (Hn : n <= zt) (Hu : u < zt) (Ht : t0 < zt) (Hcon : consistent m),
+Lemma mops_set_vc_con_cl : forall m s (Hs : clocks_sim m s) u t0 n
+  (Hn : n <= zt) (Hu : u < zl) (Ht : t0 < zt) (Hcon : consistent m),
   consistent (m ++ 
-    (mops_set_vc (C + t0) (C + u) n t0 (map (clock_of s t0) (rev (interval 0 n))))).
+    (mops_set_vc (C + t0) (L + u) n t0 (map (clock_of s t0) (rev (interval 0 n))))).
 Proof.
   induction n; clarify.
   { rewrite app_nil_r; auto. }
@@ -1895,7 +1927,7 @@ Proof.
   rewrite read_noop_SC.
   - rewrite loc_valid_ops2_SC; clarify; try split.
     + apply IHn; auto; omega.
-    + specialize (Hs1 _ Hu n); clarify.
+    + specialize (Hs21 _ Hu n); clarify.
       apply can_write_thread; auto.
     + simpl.
       eapply Forall_impl; [|apply mops_set_vc_off]; clarify.
@@ -1970,24 +2002,24 @@ Inductive iexec P G t :
                    mops_max_vc (L + m) (C + t) vs1 vs2 t zt)
         (P1 ++ (t, rest) :: P2) (upd_env (upd_env G t tmp1 (last vs1 0)) 
           t tmp2 (Peano.max (last vs1 0) (last vs2 0)))
-  | iexec_unlock P1 P2 m rest vs1 vs2 v
-      (Hunlock : P = P1 ++ (t, unlock_handler t m zt ++
+  | iexec_unlock P1 P2 m rest vs v
+      (Hunlock : P = P1 ++ (t, unlock_handler t m zt tmp1 ++
                                Unlock m :: rest) :: P2)
-      (Hlen1 : length vs1 = zt) (Hlen2 : length vs2 = zt) :
-      iexec P G t (events_max_vc (C + t) (L + m) t zt ++
+      (Hlen : length vs = zt) :
+      iexec P G t (events_set_vc (C + t) (L + m) zt t ++
                    events_inc_vc (C + t) t ++ [rel t m])
-                  (mops_max_vc (C + t) (L + m) vs1 vs2 t zt ++
+                  (mops_set_vc (C + t) (L + m) zt t vs ++
                    mops_inc_vc (C + t) v t ++ [ARW t (m, 0) (S t) 0])
-        (P1 ++ (t, rest) :: P2) (upd_env (upd_env G t tmp2 (Peano.max (last vs1 0) (last vs2 0))) t tmp1 (v + 1))
-  | iexec_spawn P1 P2 u li rest vs v
-      (Hspawn : P = P1 ++ (t, spawn_handler t u zt tmp1 ++
+        (P1 ++ (t, rest) :: P2) (upd_env G t tmp1 (v + 1))
+  | iexec_spawn P1 P2 u li rest vs1 vs2 v
+      (Hspawn : P = P1 ++ (t, spawn_handler t u zt ++
                               Spawn u li :: rest) :: P2)
-      (Hnew : ~In u (map fst P)) (Hlen : length vs = zt) :
-      iexec P G t (events_set_vc (C + t) (C + u) zt t ++
+      (Hnew : ~In u (map fst P))  (Hlen1 : length vs1 = zt) (Hlen2 : length vs2 = zt) :
+      iexec P G t (events_max_vc (C + t) (C + u) t zt ++
                    events_inc_vc (C + t) t ++ [fork t u])
-                  (mops_set_vc (C + t) (C + u) zt t vs ++
+                  (mops_max_vc (C + t) (C + u) vs1 vs2 t zt ++
                    mops_inc_vc (C + t) v t)
-        (P1 ++ (t, rest) :: (u, li) :: P2) (upd_env G t tmp1 (v + 1))
+        (P1 ++ (t, rest) :: (u, li) :: P2) (upd_env (upd_env G t tmp2 (Peano.max (last vs1 0) (last vs2 0))) t tmp1 (v + 1)) 
   | iexec_wait P1 P2 u rest vs1 vs2
       (Hwait : P = P1 ++ (t, Wait u :: wait_handler t u zt ++ rest) 
                    :: P2) (Hdone : In (u, []) P)
@@ -2057,32 +2089,35 @@ Proof.
     + auto.
     + auto.
   - destruct zt; clarify.
+    destruct (length vs) eqn: Hlen1; [clarify|].
+    inversion Hlen; clarify.
+    destruct (nil_dec vs); [clarify|].
+    eapply exec_step_inv.
+    + eapply unlock_handler_spec_n with (v := last vs 0).
+      { eauto. }
+      { rewrite (app_removelast_last 0 n0), app_length, Nat.add_1_r in Hlen1;
+          inversion Hlen1; eauto. }
+    + apply exec_unlock; eauto.
+    + clarsimp.
+    + rewrite <- app_removelast_last; clarsimp.
+
+  - destruct zt; clarify.
     destruct (nil_dec vs1); [clarify|].
     destruct (nil_dec vs2); [clarify|].
     eapply exec_step_inv.
-    + eapply unlock_handler_spec_n.
+    + eapply spawn_handler_spec_n.
       { simpl; eauto. }
       { rewrite (app_removelast_last 0 n0), app_length, Nat.add_1_r in Hlen1;
           inversion Hlen1; eauto. }
       { rewrite (app_removelast_last 0 n1), app_length, Nat.add_1_r in Hlen2;
           inversion Hlen2; eauto. }
       { auto. }
-    + apply exec_unlock; eauto.
+    + apply exec_spawn; eauto.
+      intro Hin. contradiction Hnew.
+      rewrite map_app in *. simpl in *. auto.
     + clarsimp.
     + repeat rewrite <- app_removelast_last; clarsimp.
-  - destruct zt; clarify.
-    destruct (length vs) eqn: Hlen1; [clarify|].
-    inversion Hlen; clarify.
-    destruct (nil_dec vs); [clarify|].
-    eapply exec_step_inv.
-    + eapply spawn_handler_spec_n with (v := last vs 0).
-      { eauto. }
-      { rewrite (app_removelast_last 0 n0), app_length, Nat.add_1_r in Hlen1;
-          inversion Hlen1; eauto. }
-    + apply exec_spawn; eauto.
-      rewrite map_app, in_app_iff in *; clarify.
-    + clarsimp.
-    + rewrite <- app_removelast_last; clarsimp.
+    
   - destruct zt; clarify.
     destruct (nil_dec vs1); [clarify|].
     destruct (nil_dec vs2); [clarify|].
@@ -2135,10 +2170,10 @@ Proof.
 Qed.
 Opaque move.
 
-Lemma spawn_handler_len : forall t u z tmp,
-  length (spawn_handler t u z tmp) = 2 * z + 3.
+Lemma unlock_handler_len : forall t u z tmp,
+  length (unlock_handler t u z tmp) = 2 * z + 3.
 Proof.
-  unfold spawn_handler; clarify.
+  unfold unlock_handler; clarify.
   rewrite app_length, set_vc_len; simpl; omega.
 Qed.
 
@@ -2176,20 +2211,21 @@ Lemma iexec_inv : forall i P P1 t rest P2 G lo lc P' G'
       P' = P1 ++ (t, rest) :: P2 /\
       G' = upd_env (upd_env G t tmp1 (last vs1 0)) t tmp2
                    (Peano.max (last vs1 0) (last vs2 0))
-  | Unlock m => exists vs1 vs2 v, length vs1 = zt /\ length vs2 = zt /\
-      lo = events_max_vc (C + t) (L + m) t zt ++
+  | Unlock m => exists vs v,  length vs = zt  /\
+      lo = events_set_vc (C + t) (L + m) zt t ++
            events_inc_vc (C + t) t ++ [rel t m] /\
-      lc = mops_max_vc (C + t) (L + m) vs1 vs2 t zt ++
+      lc = mops_set_vc (C + t) (L + m) zt t vs ++
            mops_inc_vc (C + t) v t ++ [ARW t (m, 0) (S t) 0] /\
       P' = P1 ++ (t, rest) :: P2 /\
-      G' = upd_env (upd_env G t tmp2 (Peano.max (last vs1 0) (last vs2 0)))
-                   t tmp1 (v + 1)
-  | Spawn u li => exists vs v, ~In u (map fst P) /\ length vs = zt /\
-      lo = events_set_vc (C + t) (C + u) zt t ++
+      G' = upd_env G t tmp1 (v + 1)
+  | Spawn u li => exists vs1 vs2 v, ~In u (map fst P) /\length vs1 = zt /\ length vs2 = zt/\
+      lo = events_max_vc (C + t) (C + u) t zt ++
            events_inc_vc (C + t) t ++ [fork t u] /\
-      lc = mops_set_vc (C + t) (C + u) zt t vs ++ mops_inc_vc (C + t) v t /\
+      lc = mops_max_vc (C + t) (C + u) vs1 vs2 t zt ++
+           mops_inc_vc (C + t) v t/\
       P' = P1 ++ (t, rest) :: (u, instrument li u)
-           :: P2 /\ G' = upd_env G t tmp1 (v + 1)
+           :: P2 /\ G' = upd_env (upd_env G t tmp2 (Peano.max (last vs1 0) (last vs2 0)))
+                   t tmp1 (v + 1)
   | Wait u => exists vs1 vs2, In (u, []) P /\ length vs1 = zt /\
       length vs2 = zt /\
       lo = join t u :: events_max_vc (C + u) (C + t) t zt /\
@@ -2224,16 +2260,17 @@ Proof.
     exploit app_eq_inv; eauto; clarify.
     repeat eexists; eauto.
   - destruct i; clarify; try (destruct x); destruct zt; clarify.
+    repeat rewrite <- app_assoc in *; simpl in *.
+    exploit app_eq_inv.
+    { do 2 rewrite unlock_handler_len; eauto. }
+    { eauto. }
+    clarify.
+    repeat eexists; eauto.
+    
+  - destruct i; clarify; try (destruct x); destruct zt; clarify.
     rewrite Nat.add_cancel_l in *; subst.
     repeat rewrite <- app_assoc in *; simpl in *.
     exploit app_eq_inv; eauto; clarify.
-    repeat eexists; eauto.
-  - destruct i; clarify; try (destruct x); destruct zt; clarify.
-    repeat rewrite <- app_assoc in *; simpl in *.
-    exploit app_eq_inv.
-    { do 2 rewrite spawn_handler_len; eauto. }
-    { eauto. }
-    clarify.
     repeat eexists; eauto.
   - destruct i; clarify; try (destruct x); destruct zt; clarify.
     exploit app_eq_inv; eauto; clarify.
@@ -2332,9 +2369,10 @@ Proof.
     repeat rewrite upd_old; eauto.
   - exploit (iexec_inv (Unlock m)); simpl; eauto; clarify.
     unfold env_sim in *; unfold upd_env, upd; clarify.
-    destruct (eq_dec tmp1 v); clarify.
+    
   - exploit (iexec_inv (Spawn u li)); simpl; eauto; clarify.
     unfold env_sim in *; unfold upd_env, upd; clarify.
+    destruct (eq_dec tmp1 v); clarify.
   - exploit (iexec_inv (Wait u)); simpl; eauto; clarify.
     unfold env_sim in *; unfold upd_env, upd; clarify.
     destruct (eq_dec tmp2 v); clarify.

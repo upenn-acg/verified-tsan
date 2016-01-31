@@ -156,7 +156,7 @@ Section VectorClocks.
      step (C, L, R, W) (wr t x) (C, L, R, W')
   | acquire : forall C L R W t m C' (HC' : C' = upd C t (vc_join (C t) (L m))),
      step (C, L, R, W) (acq t m) (C', L, R, W)
-  | release : forall C L R W t m L' C' (HL' : L' = upd L m (vc_join (L m) (C t)))
+  | release : forall C L R W t m L' C' (HL' : L' = upd L m (C t))
       (HC' : C' = upd C t (vc_inc t (C t))),
      step (C, L, R, W) (rel t m) (C', L', R, W)
   | fork_step : forall C L R W t u C'
