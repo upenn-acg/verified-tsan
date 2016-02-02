@@ -1065,7 +1065,7 @@ Proof.
     -destruct s as (((vc, vl), vr), vw); exploit Hrace; [|clarify].
       econstructor; [constructor; auto | apply ss_refl].
     -specialize(Hrace s). contradiction Hrace; apply ss_refl.
-Qed.*)
+Qed.
 
 
 (* There's no escape from fine-grained interleaving. We can either:
@@ -2281,15 +2281,15 @@ Proof.
     exploit max_vc_no_wait; eauto; clarify.
   - unfold unlock_handler in Hnth.
     rewrite <- app_assoc, nth_error_app in Hnth;
-      destruct (lt_dec j (length (max_vc (C + t) (L + m) zt tmp1 tmp2)));
-      [exploit max_vc_no_wait; eauto; clarify|].
-    destruct (j - length (max_vc (C + t) (L + m) zt tmp1 tmp2)); clarify.
+      destruct (lt_dec j (length (set_vc (C + t) (L + m) zt tmp1)));
+      [exploit set_vc_no_wait; eauto; clarify|].
+    destruct (j - length (set_vc (C + t) (L + m) zt tmp1)); clarify.
     do 4 (destruct n0; clarify).
   - unfold spawn_handler in Hnth.
     rewrite <- app_assoc, nth_error_app in Hnth;
-      destruct (lt_dec j (length (set_vc (C + t0) (C + t) zt tmp1)));
-      [exploit set_vc_no_wait; eauto; clarify|].
-    destruct (j - length (set_vc (C + t0) (C + t) zt tmp1)); clarify.
+      destruct (lt_dec j (length (max_vc (C + t0) (C + t) zt tmp1 tmp2)));
+      [exploit max_vc_no_wait; eauto; clarify|].
+    destruct (j - length (max_vc (C + t0) (C + t) zt tmp1 tmp2)); clarify.
     do 4 (destruct n0; clarify).
   - destruct j; clarify.
     exploit max_vc_no_wait; eauto; clarify.
@@ -2798,7 +2798,7 @@ Proof.
     eapply Forall_inv. eauto.
 Qed.
 
-(*
+
 Lemma t_steps_store : forall P G t lo lc P1 G1 x o e li
   (Hdistinct : distinct P)
   (Hfresh1 : expr_fresh tmp1 e) (Hfresh2 : expr_fresh tmp2 e)
@@ -2946,17 +2946,17 @@ Proof.
   intros; apply max_vc_len.
 Qed.
 
-Lemma unlock_handler_len : forall t l z,
-  length (unlock_handler t l z) = 4 * z + 3.
+Lemma spawn_handler_len : forall t l z,
+  length (spawn_handler t l z) = 4 * z + 3.
 Proof.
-  unfold unlock_handler; clarify.
+  unfold spawn_handler; clarify.
   rewrite app_length, max_vc_len; simpl; omega.
 Qed.
 
-Lemma spawn_handler_len : forall t u z tmp,
-  length (spawn_handler t u z tmp) = 2 * z + 3.
+Lemma unlock_handler_len : forall t u z tmp,
+  length (unlock_handler t u z tmp) = 2 * z + 3.
 Proof.
-  unfold spawn_handler; clarify.
+  unfold unlock_handler; clarify.
   rewrite app_length, set_vc_len; simpl; omega.
 Qed.
 
@@ -3114,44 +3114,6 @@ Proof.
   rewrite (exec_minus_env Hminus0); unfold upd_env, upd; clarify.
 Qed.  
 
-Lemma t_steps_unlock : forall P G t lo lc P1 G1 m li
-  (Hdistinct : distinct P)
-  (Hin : In (t, instrument_instr (Unlock m) t ++ li) P)
-  (Hsteps : t_steps P G t (length (instrument_instr (Unlock m) t) - 1) lo
-                    lc (Some P1) G1) o' c' P2 G2
-  (Hend : exec P1 G1 t o' c' (Some P2) G2) (Hin' : In (t, li) P2),
-  exists vs1 vs2 v,
-    filter (fun c => beq (thread_of c) t) (lc ++ opt_to_list c') =
-    mops_max_vc (C' + t) (L' + m) vs1 vs2 t zt ++
-    mops_inc_vc (C' + t) v t ++ [Rel t m].
-Proof.
-  intros.
-  unfold instrument_instr in Hsteps.
-  rewrite app_length in Hsteps; simpl in Hsteps.
-  rewrite Nat.add_sub in Hsteps; unfold unlock_handler in Hsteps.
-  rewrite app_length in Hsteps; exploit t_steps_plus; eauto.
-  intros (lo1 & lc1 & P3 & G3 & lo2 & lc2 & Hmax & Hrest & ? & ?); subst.
-  exploit t_steps_max_vc; eauto.
-  { unfold instrument_instr, unlock_handler in Hin;
-      repeat rewrite <- app_assoc in Hin; eauto. }
-  intros (vs1 & vs2 & Hlc1); exists vs1, vs2.
-  exploit distinct_steps; eauto.
-  { eapply t_steps_exec, Hmax; eauto. }
-  intro; exploit t_steps_length'; try apply Hmax; auto.
-  { unfold instrument_instr, unlock_handler in Hin;
-      repeat rewrite <- app_assoc in Hin; eauto. }
-  intro; exploit in_split; eauto; intros (P3a & P3b & ?); subst.
-  exploit t_steps_inc_vc; eauto; intros (v & Hlc2); exists v.
-  repeat rewrite filter_app; rewrite Hlc1, Hlc2.
-  exploit t_steps_length'; try apply Hrest; auto.
-  { rewrite in_app; clarify. }
-  intro; exploit in_split; eauto; intros (P1a & P1b & ?); subst.
-  exploit distinct_steps; eauto.
-  { eapply t_steps_exec, Hrest; eauto. }
-  intro; inversion Hend; subst; exploit distinct_thread; eauto 2;
-    intros (? & ? & Hi); inversion Hi; subst; clear Hi.
-  rewrite <- app_assoc; clarify.
-Qed.  
 
 Lemma t_steps_set_vc : forall t P' G' src tgt z tmp P G lo lc li
   (Hdistinct : distinct P)
@@ -3197,32 +3159,72 @@ Proof.
   rewrite (filter_none _ Hall0), (filter_none _ Hall1); simpl.
   erewrite exec_minus_env; eauto.
   unfold upd_env, upd; clarify.
+Qed.
+
+Lemma t_steps_spawn : forall P G t lo lc P1 G1 m li' li
+  (Hdistinct : distinct P)
+  (Hin : In (t, instrument_instr (Spawn m li') t ++ li) P)
+  (Hsteps : t_steps P G t (length (instrument_instr (Spawn m li') t) - 1) lo
+                    lc (Some P1) G1) o' c' P2 G2
+  (Hend : exec P1 G1 t o' c' (Some P2) G2) (Hin' : In (t, li) P2),
+  exists vs1 vs2 v,
+    filter (fun c => beq (thread_of c) t) (lc ++ opt_to_list c') =
+    mops_max_vc (C' + t) (C' + m) vs1 vs2 t zt ++
+    mops_inc_vc (C' + t) v t .
+Proof.
+  intros.
+  unfold instrument_instr in Hsteps.
+  rewrite app_length in Hsteps; simpl in Hsteps.
+  rewrite Nat.add_sub in Hsteps; unfold spawn_handler in Hsteps.
+  rewrite app_length in Hsteps; exploit t_steps_plus; eauto.
+  intros (lo1 & lc1 & P3 & G3 & lo2 & lc2 & Hmax & Hrest & ? & ?); subst.
+  exploit t_steps_max_vc; eauto.
+  { unfold instrument_instr, spawn_handler in Hin;
+      repeat rewrite <- app_assoc in Hin; eauto. }
+  intros (vs1 & vs2 & Hlc1); exists vs1, vs2.
+  exploit distinct_steps; eauto.
+  { eapply t_steps_exec, Hmax; eauto. }
+  intro; exploit t_steps_length'; try apply Hmax; auto.
+  { unfold instrument_instr, spawn_handler in Hin;
+      repeat rewrite <- app_assoc in Hin; eauto. }
+  intro; exploit in_split; eauto; intros (P3a & P3b & ?); subst.
+  exploit t_steps_inc_vc; eauto; intros (v & Hlc2); exists v.
+  repeat rewrite filter_app; rewrite Hlc1, Hlc2.
+  exploit t_steps_length'; try apply Hrest; auto.
+  { rewrite in_app; clarify. }
+  intro; exploit in_split; eauto; intros (P1a & P1b & ?); subst.
+  exploit distinct_steps; eauto.
+  { eapply t_steps_exec, Hrest; eauto. }
+  intro; inversion Hend; subst; exploit distinct_thread; eauto 2;
+    intros (? & ? & Hi); inversion Hi; subst; clear Hi.
+  rewrite <- app_assoc; clarify. 
 Qed.  
 
-Lemma t_steps_spawn : forall P G t lo lc P1 G1 u li' li
+
+Lemma t_steps_unlock : forall P G t lo lc P1 G1 m li
   (Hdistinct : distinct P)
-  (Hin : In (t, instrument_instr (Spawn u li') t ++ li) P)
-  (Hsteps : t_steps P G t (length (instrument_instr (Spawn u li') t) - 1) lo
+  (Hin : In (t, instrument_instr (Unlock m) t ++ li) P)
+  (Hsteps : t_steps P G t (length (instrument_instr (Unlock m) t) - 1) lo
                     lc (Some P1) G1) o' c' P2 G2
   (Hend : exec P1 G1 t o' c' (Some P2) G2) (Hin' : In (t, li) P2),
   exists vs v,
     filter (fun c => beq (thread_of c) t) (lc ++ opt_to_list c') =
-    mops_set_vc (C' + t) (C' + u) zt t vs ++
-    mops_inc_vc (C' + t) v t.
+    mops_set_vc (C' + t) (L' + m) zt t vs ++
+    mops_inc_vc (C' + t) v t ++ [Rel t m].
 Proof.
   intros.
   simpl in *.
   rewrite app_length in Hsteps; simpl in Hsteps.
-  rewrite Nat.add_sub in Hsteps; unfold spawn_handler in Hsteps.
+  rewrite Nat.add_sub in Hsteps; unfold unlock_handler in Hsteps.
   rewrite app_length in Hsteps; exploit t_steps_plus; eauto.
   intros (lo1 & lc1 & P3 & G3 & lo2 & lc2 & Hset & Hrest & ? & ?); subst.
   exploit t_steps_set_vc; eauto.
-  { unfold spawn_handler in Hin; repeat rewrite <- app_assoc in Hin; eauto. }
+  { unfold unlock_handler in Hin; repeat rewrite <- app_assoc in Hin; eauto. }
   intros (vs & Hlc1); exists vs.
   exploit distinct_steps; eauto.
   { eapply t_steps_exec, Hset; eauto. }
   intro; exploit t_steps_length'; try apply Hset; auto.
-  { unfold spawn_handler in Hin; repeat rewrite <- app_assoc in Hin; eauto. }
+  { unfold unlock_handler in Hin; repeat rewrite <- app_assoc in Hin; eauto. }
   intro; exploit in_split; eauto; intros (P3a & P3b & ?); subst.
   exploit t_steps_inc_vc; eauto; intros (v & Hlc2); exists v.
   repeat rewrite filter_app; rewrite Hlc1, Hlc2.
@@ -3354,19 +3356,20 @@ Proof.
       * eapply plus_reg_l; eauto.
   - left; unfold unlock_handler in H; repeat rewrite in_app in H.
     destruct H as [[? | ?] | ?]; clarify.
-    + exploit max_vc_instr; eauto; intros (? & ? & [? | ?]); clarify.
+    + exploit set_vc_instr; eauto; intros (? & ? & [? | ?]); clarify.
       * eapply plus_reg_l; eauto.
       * exploit Hmetalocs_disjoint_CL; try (apply H4); eauto; clarify.
     + destruct H as [? | [? | ?]]; clarify; eapply plus_reg_l; eauto.
     + contradiction Hsafe'1; left; simpl; omega.
   - unfold spawn_handler in H; repeat rewrite in_app in H.
     destruct H as [[? | ?] | ?]; clarify.
-    + exploit set_vc_instr; eauto; intros (? & ? & [? | ?]); clarify.
-      * left; eapply plus_reg_l; eauto.
+    +exploit max_vc_instr; eauto; intros (? & ? & [? | ?]); clarify.
+      * left. eapply plus_reg_l; eauto.
       * right; eexists; split; eauto; simpl.
         split; [|eapply plus_reg_l; eauto].
         unfold spawn_handler; repeat rewrite in_app; auto.
     + left; destruct H as [? | [? | ?]]; clarify; eapply plus_reg_l; eauto.
+   
   - unfold wait_handler in H.
     exploit max_vc_instr; eauto; intros (? & ? & [? | ?]); clarify.
     + right; eexists; split; eauto; clarify.
@@ -3486,10 +3489,10 @@ Proof.
   - exploit max_vc_instrs; eauto; clarify.
   - repeat setoid_rewrite in_app in H.
     destruct H as [[? | ?] | ?]; clarify.
-    exploit max_vc_instrs; eauto; clarify.
+    exploit set_vc_instrs; eauto; clarify.
   - repeat setoid_rewrite in_app in H.
     destruct H as [[? | ?] | ?]; clarify.
-    + exploit set_vc_instrs; eauto; clarify.
+    + exploit max_vc_instrs; eauto; clarify.
     + inversion H.
       do 2 eexists; eauto.
   - exploit max_vc_instrs; eauto; clarify.
@@ -3813,7 +3816,7 @@ Proof.
       rewrite H4, spawn_count_app; simpl.
       rewrite skipn_app; repeat rewrite spawns_list_app.
       rewrite app_length in *; simpl in *.
-      destruct (n' - length (spawn_handler t' t0 zt tmp1)) eqn: Hminus;
+      destruct (n' - length (spawn_handler t' t0 zt )) eqn: Hminus;
         [clarify|]; omega.
     + destruct n'; clarify.
       rewrite <- skipn_app' in Ht'; [|omega].
@@ -3995,7 +3998,7 @@ Proof.
     destruct P'; [|inversion Hsteps; clarify].
     exploit good_lock_step; eauto.
 Qed.
-
+(*
 Lemma init_steps : forall m p ops (Hinit : initialized m p)
   (Hops : Forall prog_op ops), initialized (m ++ ops) p.
 Proof.
@@ -4004,7 +4007,7 @@ Proof.
   inversion Hops2; clarify.
   rewrite app_assoc; apply init_step; auto.
 Qed.
-
+*)
 Lemma lock_hold : forall m l t ops (Hinit : initialized m (l, 0))
   (Hheld : can_read m (l, 0) (S t)) (Hcon : consistent (m ++ ops))
   (Hprog : Forall prog_op ops) (Hlock : Forall (fun a => loc_of a = (l, 0) ->
@@ -4273,26 +4276,26 @@ Proof.
     exploit max_vc_instrs; eauto; clarify.
   - unfold unlock_handler in *; rewrite <- app_assoc in *.
     repeat rewrite nth_error_app in *;
-      destruct (lt_dec n (length (max_vc (C' + t) (L' + m) zt tmp1 tmp2)));
-      [|destruct (lt_dec (n - length (max_vc (C' + t) (L' + m) zt tmp1 tmp2))
+      destruct (lt_dec n (length (set_vc (C' + t) (L' + m) zt tmp1 )));
+      [|destruct (lt_dec (n - length (set_vc (C' + t) (L' + m) zt tmp1 ))
              (length (inc_vc t (C' + t) tmp1)))].
     + exploit nth_error_in; eauto; intro.
-      exploit max_vc_instrs; eauto; clarify.
-    + destruct (n - length (max_vc (C' + t) (L' + m) zt tmp1 tmp2)); clarify.
+      exploit set_vc_instrs; eauto; clarify.
+    + destruct (n - length (set_vc (C' + t) (L' + m) zt tmp1)); clarify.
       destruct n1; clarsimp.
     + clarsimp.
       rewrite skipn_all in H; clarify; [|omega].
       rewrite skipn_all in H; clarify; [|omega].
-      destruct (n - (length (max_vc (C' + t) (L' + l) zt tmp1 tmp2) + 3));
+      destruct (n - (length (set_vc (C' + t) (L' + l) zt tmp1) + 3));
         clarsimp.
   - unfold spawn_handler in *; rewrite <- app_assoc in *.
     repeat rewrite nth_error_app in *;
-      destruct (lt_dec n (length (set_vc (C' + t) (C' + t0) zt tmp1)));
-      [|destruct (lt_dec (n - length (set_vc (C' + t) (C' + t0) zt tmp1))
+      destruct (lt_dec n (length (max_vc (C' + t) (C' + t0) zt tmp1 tmp2)));
+      [|destruct (lt_dec (n - length (max_vc (C' + t) (C' + t0) zt tmp1 tmp2))
              (length (inc_vc t (C' + t) tmp1)))].
     + exploit nth_error_in; eauto; intro.
-      exploit set_vc_instrs; eauto; clarify.
-    + destruct (n - length (set_vc (C' + t) (C' + t0) zt tmp1)); clarify.
+      exploit max_vc_instrs; eauto; clarify.
+    + destruct (n - length (max_vc (C' + t) (C' + t0) zt tmp1 tmp2)); clarify.
       destruct n1; clarsimp.
     + clarsimp.
   - destruct n; clarify.
@@ -4335,22 +4338,22 @@ Proof.
     exploit max_vc_instrs; eauto; clarify.
   - unfold unlock_handler in *; rewrite <- app_assoc in *.
     repeat rewrite nth_error_app in *;
-      destruct (lt_dec n (length (max_vc (C' + t) (L' + m) zt tmp1 tmp2)));
-      [|destruct (lt_dec (n - length (max_vc (C' + t) (L' + m) zt tmp1 tmp2))
+      destruct (lt_dec n (length (set_vc (C' + t) (L' + m) zt tmp1 )));
+      [|destruct (lt_dec (n - length (set_vc (C' + t) (L' + m) zt tmp1))
              (length (inc_vc t (C' + t) tmp1)))].
     + exploit nth_error_in; eauto; intro.
-      exploit max_vc_instrs; eauto; clarify.
-    + destruct (n - length (max_vc (C' + t) (L' + m) zt tmp1 tmp2)); clarify.
+      exploit set_vc_instrs; eauto; clarify.
+    + destruct (n - length (set_vc (C' + t) (L' + m) zt tmp1)); clarify.
       destruct n1; clarsimp.
     + clarsimp.
   - unfold spawn_handler in *; rewrite <- app_assoc in *.
     repeat rewrite nth_error_app in *;
-      destruct (lt_dec n (length (set_vc (C' + t) (C' + t0) zt tmp1)));
-      [|destruct (lt_dec (n - length (set_vc (C' + t) (C' + t0) zt tmp1))
+      destruct (lt_dec n (length (max_vc (C' + t) (C' + t0) zt tmp1 tmp2)));
+      [|destruct (lt_dec (n - length (max_vc (C' + t) (C' + t0) zt tmp1 tmp2))
              (length (inc_vc t (C' + t) tmp1)))].
     + exploit nth_error_in; eauto; intro.
-      exploit set_vc_instrs; eauto; clarify.
-    + destruct (n - length (set_vc (C' + t) (C' + t0) zt tmp1)); clarify.
+      exploit max_vc_instrs; eauto; clarify.
+    + destruct (n - length (max_vc (C' + t) (C' + t0) zt tmp1 tmp2)); clarify.
       destruct n1; clarsimp.
     + clarsimp.
   - destruct n; clarify.
@@ -4411,12 +4414,12 @@ Proof.
     + exploit v_not_C; try apply Haccess; clarify.
     + exploit v_not_C; try apply Haccess; clarify.
   - unfold unlock_handler in His.
-    assert (In i2 (max_vc (C' + t) (L' + m) zt tmp1 tmp2 ++
+    assert (In i2 (set_vc (C' + t) (L' + m) zt tmp1 ++
       inc_vc t (C' + t) tmp1)) as Hin.
-    { assert (nth_error (skipn n ((max_vc (C' + t) (L' + m) zt tmp1 tmp2 ++
+    { assert (nth_error (skipn n ((set_vc (C' + t) (L' + m) zt tmp1 ++
         inc_vc t (C' + t) tmp1) ++ [Unlock m])) 1 = Some i2) by clarsimp.
       rewrite skipn_nth, nth_error_app in *.
-      destruct (lt_dec (1 + n) (length (max_vc (C' + t) (L' + m) zt tmp1 tmp2 ++
+      destruct (lt_dec (1 + n) (length (set_vc (C' + t) (L' + m) zt tmp1 ++
         inc_vc t (C' + t) tmp1))).
       + eapply nth_error_in; eauto.
       + rewrite nth_error_single in *; clarify.
@@ -4424,25 +4427,24 @@ Proof.
         * contradiction Hsafe1; apply R_meta; auto.
         * contradiction Hsafe1; apply W_meta; auto. }
     rewrite in_app in Hin; destruct Hin as [Hin | Hin].
-    + exploit max_vc_instrs; eauto; intros [[? [? Hcases]] | ?]; clarify.
-      destruct Hcases as [? | [? | ?]]; clarify.
+    + exploit set_vc_instrs; eauto. intros [? Hcases]; clarify.
+      destruct Hcases2 as [? | ?]; clarify.
       * exploit v_not_C; try apply Haccess; clarify.
-      * exploit v_not_L; try apply Haccess; clarify.
       * exploit v_not_L; try apply Haccess; clarify.
     + unfold inc_vc in Hin; simpl in Hin;
         destruct Hin as [? | [? | ?]]; clarify;
         exploit v_not_C; try apply Haccess; clarify.
   - unfold spawn_handler in His.
-    assert (In i2 (set_vc (C' + t0) (C' + t) zt tmp1 ++
+    assert (In i2 (max_vc (C' + t0) (C' + t) zt tmp1 tmp2 ++
       inc_vc t0 (C' + t0) tmp1)) as Hin.
     { assert (nth_error (i1 :: i2 :: rest) 1 = Some i2) as Hnth by auto.
       rewrite <- His, skipn_nth, nth_error_app in Hnth.
-      destruct (lt_dec (1 + n) (length (set_vc (C' + t0) (C' + t) zt tmp1 ++
+      destruct (lt_dec (1 + n) (length (max_vc (C' + t0) (C' + t) zt tmp1 tmp2++
         inc_vc t0 (C' + t0) tmp1))).
       + eapply nth_error_in; eauto.
       + rewrite nth_error_single in *; clarify. }
     rewrite in_app in Hin; destruct Hin as [Hin | Hin].
-    + exploit set_vc_instrs; eauto; intros [? [? [? | ?]]]; clarify;
+    + exploit max_vc_instrs; eauto. intros [[? [? [? | [? | ?]]]]| ?]; clarify;
         exploit v_not_C; try apply Haccess; clarify.
     + unfold inc_vc in Hin; simpl in Hin;
         destruct Hin as [? | [? | ?]]; clarify;
@@ -4540,7 +4542,7 @@ Proof.
     + apply no_spawn_bounded; rewrite Forall_forall; intros ? Hin.
       destruct x; auto.
       setoid_rewrite in_app in Hin; destruct Hin; clarify.
-      exploit set_vc_instrs; eauto; clarify.
+      exploit max_vc_instrs; eauto; clarify.
     + constructor; clarify.
       rewrite bounded_list, safe_instrs in *; auto.
   - inversion H; rewrite Forall_app; clarify.
@@ -4936,11 +4938,11 @@ Proof.
     repeat rewrite <- app_assoc; rewrite app_assoc.
     eapply loc_split; try (rewrite partition_filter; eauto).
     rewrite <- app_assoc; auto.
-    (* As above. *) admit.
+    (* As above. *) admit. admit. admit.
   - eapply component_decr; eauto.
     { eapply exec_t_exec; eauto. }
     rewrite app_length, Hinstr; simpl; omega.
-Qed.*)
+Qed.
 
 
 Lemma list_part_diff : forall (X:Type) (l1 l2 l3 l4: list X)
@@ -5094,6 +5096,67 @@ Corollary max_vc_vals : forall m C1 C2 vs1 vs2 t V1 V2
   vs1 = map V1 (rev (interval 0 zt)) /\ vs2 = map V2 (rev (interval 0 zt)).
 Proof.
   intros; eapply max_vc_vals1 with (C1 := C1); eauto.
+Qed.
+
+
+Lemma mops_set_vc_off':
+  forall (src tgt : var) (vs: list nat) (t : tid) (n : nat),
+  length vs = n ->
+  Forall (fun c' : conc_op => let (_, o) := loc_of c' in o < n)
+         (mops_set_vc src tgt n t vs).
+Proof.
+  clarify.
+  rewrite Forall_forall. induction vs; clarify.
+  destruct H as [Hx|[Hx|Hin]]; clarify.
+  apply IHvs in Hin. destruct (loc_of x); clarify.
+Qed.
+   
+Lemma set_vc_vals1: forall m C1 C2 z vs t V1
+  (Hinit1: forall z, z < zt -> initialized m (C1, z))
+  (Hcon: consistent (m ++mops_set_vc C1 C2 z t vs ))
+  (Hvs: length vs =z) (Hz : z <= zt)
+  (Hmatch1 : clock_match m V1 C1) ,
+  vs = map V1 (rev (interval 0 z)) .
+Proof.
+  induction z; destruct vs; clarify.
+  rewrite rev_app_distr; clarify.
+  assert ( consistent (m++ [Read t (C1, z) n])) as Hn.
+  { eapply consistent_app_SC; rewrite <- app_assoc; simpl; eauto. }
+
+  exploit (IHz vs); eauto.
+  {rewrite read_noop_SC in Hcon; eauto.
+   rewrite loc_valid_ops2_SC in Hcon; eauto.
+   -clarify. eauto.
+   -rewrite Forall_forall. intros c Hin. simpl.
+    inversion Hvs.  
+    exploit mops_set_vc_off'.
+    instantiate(1:= z). instantiate (1:= vs). auto. 
+    intro Hcltz. rewrite Forall_forall in Hcltz. apply Hcltz in Hin.
+    intro Heq. destruct (loc_of c); clarify.
+    eapply lt_irrefl. eauto.
+   -clarify.
+  }
+  { apply le_Sn_le. auto. }
+  { 
+    intros IH1; rewrite IH1.
+    destruct (lt_dec z zt); [| omega ].
+    generalize (can_read_thread' _ _ _ _ Hn); clarify.
+    generalize ( consistent_app_SC _ _ Hn); intro.
+    generalize (can_read_unique(m:=m) (p:= (C1, z)) n (V1 z)); clarify.
+    specialize (Hmatch1 z); clarify.
+  }
+Qed.
+
+
+
+Corollary set_vc_vals : forall m C1 C2 vs t V1
+  (Hinit1 : forall z, z < zt -> initialized m (C1, z))
+  (Hcon : consistent (m ++ mops_set_vc C1 C2 zt t vs))
+  (Hvs : length vs = zt)
+  (Hmatch1 : clock_match m V1 C1) ,
+  vs = map V1 (rev (interval 0 zt)).
+Proof.
+  intros; eapply set_vc_vals1 with (C1 := C1); eauto.
 Qed.
 
 Lemma hb_check_vals1 : forall m C1 C2 z vs1 vs2 t V1 V2
@@ -5479,14 +5542,82 @@ Proof.
     destruct Hin as [Hin | [Hin|[Hin|Hin]]]; clarify.
     apply in_mops_max_vc in Hin. destruct c; clarify. auto.
 Qed.
-(*
-Lemma clock_match_max_vc : forall m VC1 VC2 vc1 vc2 t1 t2 t z
-  (Hmatch1: clock_match m (vc1 t1) (VC1+ t1) )
-  (Hmatch2: clock_match m (vc2 t2) (VC2 + t2) )
-  (Hdistinct:  VC1 + t1 <> VC2 + t2)
-  (Hcon: consistent (m ++ mops_max_vc (VC1+t1) (VC2 + t2) (map (vc1 t1) (rev (interval 0 z))) (map (vc2 t2) (rev (interval 0 z ))) t z )) (* (Hz: z <> 0)  (Ht2: t2 < z)*),
-                             clock_match (m ++ mops_max_vc (VC1+t1) (VC2+t2) (map (vc1 t1) (rev (interval 0 z))) (map (vc2 t2) (rev (interval 0 z))) t z) (upd vc2 t2 (vc_join (vc2 t2) (vc1 t1)) t2) (VC2+t2).
-Proof.*)
+
+
+Lemma in_mops_set_vc': forall n c vc1 vc2 vs t
+  (Hin: In c (mops_set_vc vc1 vc2 n t vs)) ,
+match c with
+    | Read _ _ _ => True
+    | Write _ (x,o) _ => x=vc2 /\ o < n 
+    | _ => False
+  end.
+Proof.
+  induction n; intros; destruct vs; clarify; destruct c; clarify;
+    try solve [exploit IHn; eauto].
+  exploit IHn; eauto.
+  destruct x; clarify.
+Qed.
+
+Lemma clock_match_z_set_vc : forall m VC1 VC2 vc1 vc2 t1 t2 t z
+  (Hmatch1: clock_match_z m (vc1 t1) (VC1+ t1) z)
+  (Hmatch2: clock_match_z m (vc2 t2) (VC2+ t2) z)
+  (Hcon: consistent (m ++ mops_set_vc (VC1+t1) (VC2 + t2) z t (map (vc1 t1) (rev (interval 0 z))) )) (Hdistinct: VC1 + t1 <> VC2 + t2),  
+                             clock_match_z (m ++ mops_set_vc (VC1+t1) (VC2+t2) z t (map (vc1 t1) (rev (interval 0 z)))) (upd vc2 t2 (vc1 t1) t2) (VC2+t2) z.
+Proof.
+  intros. generalize dependent m. generalize dependent vc1. generalize dependent vc2. 
+  induction z; clarify.
+  rewrite rev_unit in *. clarify.
+  do 2 rewrite split_app in *.
+  assert( consistent (m ++ Read t (VC1 + t1, z) (vc1 t1 z)
+            :: [Write t (VC2 + t2, z) (vc1 t1 z)])) as Hcon1.
+    apply consistent_app_SC in Hcon.
+    rewrite <- app_assoc in Hcon. clarify.
+  assert(  clock_match_z
+     ((m ++ [Read t (VC1 + t1, z) (vc1 t1 z)]) ++
+      [Write t (VC2 + t2, z) (vc1 t1 z)] )
+     (vc1 t1) (VC1 + t1) 
+     (S z)) as Hm1.
+  {
+    rewrite <-app_assoc.  simpl.
+    eapply clock_match_nomod_z; eauto.
+    rewrite Forall_forall. intros c Hin. destruct Hin as [?|[?|?]]; clarify.
+  }
+  assert(  clock_match_z
+     ((m ++ [Read t (VC1 + t1, z) (vc1 t1 z)]) ++
+      [Write t (VC2 + t2, z) (vc1 t1 z) ] )
+     (upd vc2 t2 (upd (vc2 t2) z (vc1 t1 z) ) t2) (VC2 + t2) 
+     (S z)) as Hm2.
+  {
+    eapply clock_match_mods_z; eauto.
+    -apply clock_match_nomod_z; eauto.
+     +eapply consistent_app_SC; eauto.
+      instantiate(1:=[Write t (VC2 + t2, z) (vc1 t1 z) ]).
+      rewrite <- app_assoc. clarify.
+     +rewrite Forall_forall. intros c Hin. inversion Hin; clarify.
+    -rewrite <- app_assoc. clarify.
+    
+  }
+  assert(Hm2z:=Hm2). assert(Hm1z:=Hm1).
+  apply clock_match_Sz_z in Hm2z. apply clock_match_Sz_z in Hm1z.
+  specialize(IHz _ _ _ Hm1z Hm2z Hcon). unfold upd in *; clarify.
+
+  apply clock_match_z_Sz; auto.
+  -apply can_read_SC; auto.
+   +apply can_read_written_SC; auto.
+    rewrite <- split_app. auto.
+   +rewrite Forall_forall. clarify. apply in_mops_set_vc' in H.
+    destruct x; clarify.
+    destruct x; clarify.
+    intro Heq. inversion Heq; clarify. apply (lt_irrefl n). auto.
+  -do 2 rewrite <- split_app.  
+   apply can_write_SC; auto.
+   +unfold clock_match_z in Hmatch2. specialize(Hmatch2 z). clarify.
+    contradiction n. omega.
+   +do 2 rewrite split_app.   auto.
+   +rewrite Forall_forall. intros c Hin. 
+    destruct Hin as [Hin | [Hin|Hin]]; clarify.
+    apply in_mops_set_vc' in Hin. destruct c; clarify. 
+Qed.
 
 Lemma instrument_sim_safe2 : forall (*P*) P1 P2 G1 G2 t (*h*)
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1)
@@ -6144,7 +6275,7 @@ Proof.
        {rewrite in_app. simpl. auto. }
        {left. rewrite Forall_app in Ht. clarify. inversion Ht2; clarify.
         rewrite in_app in H0. simpl in H0. destruct H0 as [? | [? | [?|?]]]; clarify.
-        -contradiction H3. eapply mops_max_vc_meta; eauto.
+        -contradiction H3. eapply mops_set_vc_meta_cl; eauto.
         -contradiction H3. unfold meta_loc. left. simpl. omega.
         -contradiction H3. unfold meta_loc. left. simpl. omega.
        }
@@ -6160,7 +6291,7 @@ Proof.
         inversion H1; clarify.
         rewrite Forall_app in Ht. clarify. inversion Ht2; clarify.
         repeat rewrite in_app in Hin. destruct Hin as [[?|?]|?]; clarify; intro Heq.
-        -contradiction H31. setoid_rewrite Heq. eapply mops_max_vc_meta; eauto.
+        -contradiction H31. setoid_rewrite Heq. eapply mops_set_vc_meta_cl; eauto.
         -contradiction H31. setoid_rewrite Heq. unfold meta_loc. left. simpl. omega.
         -contradiction H31. setoid_rewrite Heq. unfold meta_loc. left. simpl. omega.
        }
@@ -6170,15 +6301,14 @@ Proof.
        inversion Hlocs2 as [| ?? Hloci ?]. clarify. inversion Hloci; clarify.
        rewrite Forall_app in Ht; destruct Ht as (_ & Ht).
        inversion Ht; clarify.
-       assert(Hs_rw':= Hs_rw).
-       assert(Hhb:  consistent (m ++ mops_max_vc (C' + t) (L' + m0) vs1 vs2 t zt)).
+       assert(Hs_rw':= Hs_rw). 
+       assert(Hhb:  consistent (m ++ mops_set_vc (C' + t) (L' + m0) zt t vs)).
        {
          rewrite app_assoc in Hcon.
          eapply consistent_app_SC; eauto.
          
        }
-       exploit max_vc_vals; try apply Hhb; eauto.
-       { intros; apply Hinit; unfold meta_loc; simpl; omega. }
+       exploit set_vc_vals; try apply Hhb; eauto.
        { intros; apply Hinit; unfold meta_loc; simpl; omega. }
        clarify; eexists; simpl; split. 
        * eapply ss_step; eauto.
@@ -6189,8 +6319,8 @@ Proof.
            apply clock_match_nomod; auto.
            assert(forall t', t'< zt ->clock_match
                     (m ++
-                       mops_max_vc (C' + t) (L' + m0) (map (vc t) (rev (interval 0 zt)))
-                                    (map (vl m0) (rev (interval 0 zt))) t zt ++ 
+                       mops_set_vc (C' + t) (L' + m0) zt t (map (vc t) (rev (interval 0 zt)))
+                                     ++ 
                                     [Read t (C' + t, t) v]) (vc t') (C' + t') ) as Hcm1.
            {
              clarify.
@@ -6201,14 +6331,14 @@ Proof.
               rewrite Forall_forall. clarify.
              -rewrite Forall_app. split; clarify.
               rewrite Forall_forall. intros c Hin; clarify.
-              apply in_mops_max_vc' in Hin. destruct c; clarify.
-              destruct x; clarify.
+              apply in_mops_set_vc' in Hin. destruct c; clarify.
+              destruct x; clarify. 
            }
            assert( v= vc t t) as Hv.
            {
              apply clock_match_value with (m:=m ++
-            mops_max_vc (C' + t) (L' + m0) (map (vc t) (rev (interval 0 zt)))
-              (map (vl m0) (rev (interval 0 zt))) t zt) (ct:=C'+t) (t:=t).
+            mops_set_vc (C' + t) (L' + m0) zt t (map (vc t) (rev (interval 0 zt)))
+     ) (ct:=C'+t) (t:=t).
              - rewrite <- app_assoc. auto.
              -apply init_steps; clarify.
               apply Hinit.
@@ -6251,21 +6381,52 @@ Proof.
          {
            rewrite app_assoc.
            apply clock_match_nomod; auto.
+           assert(Hs_l':=Hs_l).
+           specialize(Hs_c t H2).
+           rewrite clock_match_iff_z in Hs_c. 
+           specialize(Hs_l m0 H22).
+           rewrite clock_match_iff_z in Hs_l. 
            -destruct (eq_dec l1 m0); clarify.
             +apply clock_match_iff_z; auto.
              split; clarify.
-             *apply clock_match_z_max_vc.
-           
+             *apply clock_match_z_set_vc; clarify.
+             *unfold bounded,upd in *. clarify.
+            +unfold upd; clarify. simpl. apply not_eq_sym in n. clarify.
+             apply clock_match_nomod; auto.
+             *specialize(Hs_l' l1 H).
+              clarify.
+             *rewrite Forall_forall. intros c Hin. apply in_mops_set_vc' in Hin.
+              destruct c; clarify. destruct x; clarify.
+              intros Heq. apply plus_minus in Heq. rewrite minus_plus in Heq.
+              clarify.
+           -rewrite <- app_assoc. auto.
+           -rewrite Forall_forall. intros c Hin.  destruct Hin as [Hin |[Hin|Hin]]; clarify.
+           -rewrite Forall_forall. intros c Hin. destruct Hin as [Hin | [Hin | Hin]]; destruct c; clarify.
+            +inversion Hin; destruct x; clarify. apply not_eq_sym. apply Hmetalocs_disjoint_CL; auto.
+            +inversion H1; clarify. intro Heq. contradiction H21. rewrite <- Heq. unfold meta_loc. simpl. omega.
          }  
         {
-          specialize (Hs_rw' v0 H). 
+          specialize (Hs_rw v0 H). 
           apply clock_match_nomod; clarify;
-          rewrite Forall_forall; intros c Hin; inversion Hin; clarify.
-          -rewrite in_app in H2; destruct H2 as [Hin2 | Hin2 ]; clarify.
-           +apply in_mops_hb_check in Hin2. destruct c; clarify.
-           + destruct Hin2 as [? | [?|[?|[?|?]]]]; clarify.
-          -rewrite in_app in Hin; destruct Hin as [Hin | Hin]; clarify.
-           apply in_mops_hb_check in Hin. destruct c; clarify.
+          rewrite Forall_forall; intros c Hin; rewrite in_app in Hin; destruct Hin as [Hin | Hin]; clarify.
+          -apply in_mops_set_vc in Hin. destruct c; clarify. apply Hmetalocs_disjoint_CL; auto.
+          -destruct Hin as [?|[?|[?|?]]]; clarify.
+          -apply in_mops_set_vc' in Hin. destruct c; clarify. destruct x; clarify. apply not_eq_sym. apply Hmetalocs_disjoint_LR; auto.
+          -destruct Hin as [?|?]; clarify.
+           +apply not_eq_sym. apply Hmetalocs_disjoint_CR; auto.
+           +intro Heq. contradiction H21. rewrite <- Heq. unfold meta_loc. simpl. omega.
+          
+        }
+        {
+          specialize (Hs_rw v0 H). 
+          apply clock_match_nomod; clarify;
+          rewrite Forall_forall; intros c Hin; rewrite in_app in Hin; destruct Hin as [Hin | Hin]; clarify.
+          -apply in_mops_set_vc in Hin. destruct c; clarify. apply Hmetalocs_disjoint_CL; auto.
+          -destruct Hin as [?|[?|[?|?]]]; clarify.
+          -apply in_mops_set_vc' in Hin. destruct c; clarify. destruct x; clarify. apply not_eq_sym. apply Hmetalocs_disjoint_LW; auto.
+          -destruct Hin as [?|?]; clarify.
+           +apply not_eq_sym. apply Hmetalocs_disjoint_CW; auto.
+           +intro Heq. contradiction H21. rewrite <- Heq. unfold meta_loc. simpl. omega.
           
         }
     -(*spawn-nil*) symmetry in Hi. apply app_cons_not_nil in Hi. clarify.
