@@ -6122,7 +6122,7 @@ Proof.
                          Write t (x, o) (eval (G2 t) e); Rel t (X' + x)]) = (
                                                                 [Read t (C' + t, t) v; Write t (W' + x, t) v;
                                                                  Write t (x, o) (eval (G2 t) e)])++ [Rel t (X' + x)] ).
-      erewrite app_removelast_last ; clarify.
+      { clarify. }
       
       assert(Hhbs : consistent (m ++ mops_hb_check (W' + x) (C' + t) vs1 vs2 zt t ++ mops_hb_check (R' + x) (C' + t) vs3 vs2 zt t )).
       {
