@@ -208,8 +208,41 @@ Definition events_inc_vc (tgt:var) (t:tid): list operation:=
   [rd t tgt; wr t tgt]. 
 Definition mops_inc_vc (tgt:var) (v:nat) (t:tid): list conc_op:=
   [Read t (tgt,t) v; Write t (tgt,t) (v+1) ].
+Definition mops_inc_vc' (tgt: var) (v: nat) (t t' :tid): list conc_op:=
+  [Read t (tgt,t') v; Write t (tgt, t') (v+1)].
+Lemma inc_vc_spec' : forall  tgt tmp P G P1 P2 rest v t t'
+  (Hinc_vc: P=P1++((t,inc_vc t' tgt tmp++rest)::P2)),
+  exec_star (Some P) G 
+            (events_inc_vc tgt t) (mops_inc_vc' tgt v t t') 
+            (Some (P1++(t,rest)::P2)) (upd_env G t tmp (v+1)). 
+Proof.
+  intros.
+  eapply exec_step'.
+  -apply exec_load.
+   unfold inc_vc in Hinc_vc; eauto.
+  -simpl.
+   eapply exec_step'.
+   +apply exec_assign; eauto.
+   +simpl.
+    
+    eapply exec_step'.
+    *apply exec_store; eauto.
+    *rewrite upd_same.
+     rewrite upd_overwrite.
+     apply exec_refl.
+    *auto.
+    *auto.
+   +auto.
+   +auto.
+  -auto. 
+  -simpl.
+   unfold mops_inc_vc'.
+   repeat rewrite upd_same.
+   auto.
+Qed.
 
-Lemma inc_vc_spec : forall  tgt tmp P G P1 P2 t rest v 
+
+Lemma inc_vc_spec : forall  tgt tmp P G P1 P2 rest v t 
   (Hinc_vc: P=P1++((t,inc_vc t tgt tmp++rest)::P2)),
   exec_star (Some P) G 
             (events_inc_vc tgt t) (mops_inc_vc tgt v t) 
@@ -1069,17 +1102,23 @@ Qed.
     
 
 Definition wait_handler t u z :=
-  max_vc (C + u) (C + t) z tmp1 tmp2.
+  max_vc (C + u) (C + t) z tmp1 tmp2
+         ++inc_vc u (C + u) tmp1.
+
 (* The instrumentation pass is provided locations to store each of the
    race detection state components. *)
-Lemma wait_handler_spec_n : forall n t u P G P1 P2 rest v1 v2 vss1 vss2
+Lemma wait_handler_spec_n : forall n t u P G P1 P2 rest v1 v2 vss1 vss2 v
 
 (Hmax_vc: P=P1++(t, wait_handler t u (S n) ++ rest)::P2) (Hvs1: length vss1=n) (Hvs2: length vss2=n),
  exec_star (Some P) G
-          (events_max_vc (C+u) (C+t) t (S n)) (mops_max_vc (C+u) (C+t) (vss1++[v1]) (vss2++[v2]) t (S n)) (Some (P1++(t,rest)::P2)) (upd_env (upd_env G t tmp1 v1) t tmp2 (Peano.max v1 v2)).  
+          (events_max_vc (C+u) (C+t) t (S n)++ events_inc_vc (C+u) t) (mops_max_vc (C+u) (C+t) (vss1++[v1]) (vss2++[v2]) t (S n) ++ mops_inc_vc' (C+u) v t u) (Some (P1++(t,rest)::P2)) (upd_env (upd_env G t tmp2 (Peano.max v1 v2)) t tmp1 (v+1)).  
 Proof.
   intros.
-  apply max_vc_spec_n; eauto.
+  eapply exec_star_trans; eauto. 
+  -eapply max_vc_spec_n; eauto. unfold wait_handler in Hmax_vc. rewrite <- app_assoc in Hmax_vc. eauto.
+  -assert(Hoverwrite: upd_env (upd_env G t tmp2 (Peano.max v1 v2)) t tmp1 (v+1) = upd_env (upd_env (upd_env G t tmp1 v1) t tmp2 (Peano.max v1 v2)) t tmp1 (v+1)).
+   { symmetry. rewrite upd_assoc; auto. rewrite upd_overwrite. rewrite upd_assoc; auto. }
+   rewrite Hoverwrite.  apply inc_vc_spec'. auto.
 Qed.
 
 (* Note that for now, we assign metadata to a block, rather than to
@@ -2020,14 +2059,13 @@ Inductive iexec P G t :
                   (mops_max_vc (C + t) (C + u) vs1 vs2 t zt ++
                    mops_inc_vc (C + t) v t)
         (P1 ++ (t, rest) :: (u, li) :: P2) (upd_env (upd_env G t tmp2 (Peano.max (last vs1 0) (last vs2 0))) t tmp1 (v + 1)) 
-  | iexec_wait P1 P2 u rest vs1 vs2
+  | iexec_wait P1 P2 u rest vs1 vs2 v
       (Hwait : P = P1 ++ (t, Wait u :: wait_handler t u zt ++ rest) 
                    :: P2) (Hdone : In (u, []) P)
       (Hlen1 : length vs1 = zt) (Hlen2 : length vs2 = zt) :
-      iexec P G t (join t u :: events_max_vc (C + u) (C + t) t zt)
-                 (mops_max_vc (C + u) (C + t) vs1 vs2 t zt)
-        (P1 ++ (t, rest) :: P2) (upd_env (upd_env G t tmp1 (last vs1 0))
-                                 t tmp2 (Peano.max (last vs1 0) (last vs2 0)))
+      iexec P G t (join t u :: events_max_vc (C + u) (C + t) t zt ++ events_inc_vc (C+u) t)
+                 (mops_max_vc (C + u) (C + t) vs1 vs2 t zt ++ mops_inc_vc' (C+u) v t u)
+        (P1 ++ (t, rest) :: P2) (upd_env (upd_env G t tmp2 (Peano.max (last vs1 0) (last vs2 0))) t tmp1 (v + 1)) 
   | iexec_assert P1 P2 e1 e2 rest
       (Hassert : P = P1 ++ (t, Assert_le e1 e2 :: rest) :: P2)
       (Hpass : eval (G t) e1 <= eval (G t) e2) :
@@ -2123,13 +2161,14 @@ Proof.
     destruct (nil_dec vs2); [clarify|].
     eapply exec_step'.
     + apply exec_wait; auto.
-    + apply wait_handler_spec_n.
+    +
+      apply wait_handler_spec_n.
       { simpl; eauto. }
       { rewrite (app_removelast_last 0 n0), app_length, Nat.add_1_r in Hlen1;
           inversion Hlen1; simpl; eauto. }
       { rewrite (app_removelast_last 0 n1), app_length, Nat.add_1_r in Hlen2;
           inversion Hlen2; eauto. }
-    + clarsimp.
+    + clarsimp. 
     + repeat rewrite <- app_removelast_last; clarsimp.
   - eapply exec_step'.
     + eapply exec_assert_pass; eauto.
@@ -2226,13 +2265,13 @@ Lemma iexec_inv : forall i P P1 t rest P2 G lo lc P' G'
       P' = P1 ++ (t, rest) :: (u, instrument li u)
            :: P2 /\ G' = upd_env (upd_env G t tmp2 (Peano.max (last vs1 0) (last vs2 0)))
                    t tmp1 (v + 1)
-  | Wait u => exists vs1 vs2, In (u, []) P /\ length vs1 = zt /\
+  | Wait u => exists vs1 vs2 v, In (u, []) P /\ length vs1 = zt /\
       length vs2 = zt /\
-      lo = join t u :: events_max_vc (C + u) (C + t) t zt /\
-      lc = mops_max_vc (C + u) (C + t) vs1 vs2 t zt /\
+      lo = join t u :: events_max_vc (C + u) (C + t) t zt ++ events_inc_vc (C+u) t/\
+      lc = mops_max_vc (C + u) (C + t) vs1 vs2 t zt ++ mops_inc_vc' (C+u) v t u/\
       P' = P1 ++ (t, rest) :: P2 /\
-      G' = upd_env (upd_env G t tmp1 (last vs1 0)) t tmp2
-                   (Peano.max (last vs1 0) (last vs2 0))
+      G' =upd_env (upd_env G t tmp2 (Peano.max (last vs1 0) (last vs2 0)))
+                   t tmp1 (v + 1)
   | Assert_le e1 e2 => eval (G t) e1 <= eval (G t) e2 /\ lo = [] /\ lc = [] /\
       P' = P1 ++ (t, rest) :: P2 /\ G' = G
   end.
