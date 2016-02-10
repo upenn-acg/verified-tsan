@@ -2570,6 +2570,42 @@ Proof.
 
 (* Do we want a failing iexec as well? *)
 
+Inductive fail_iexec P G t :
+  list operation -> list conc_op -> state -> env -> Prop :=
+  | fail_raw P1 P2 a x o v1 v2 rest vs1 vs2
+    (Hload: P=P1++(t, load_handler t x zt ++
+                                   Load a (x, o) :: Unlock (X + x) :: rest) :: P2)
+      (Hgt : first_gt vs1 vs2 = Some (v1,v2) )  :
+      fail_iexec P G t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t )
+                  (Acq t (X + x) ::
+                   mops_hb_check (W + x) (C + t) vs1 vs2 zt t)
+        []
+        (upd_env (upd_env G t tmp1 v1) t tmp2 v2)
+  | fail_waw P1 P2 x o e v1 v2 rest vs1 vs2
+      (Hstore : P = P1 ++ (t, store_handler t x zt ++
+                              Store (x, o) e :: Unlock (X + x) :: rest) :: P2)
+      (Hgt : first_gt vs1 vs2 = Some (v1,v2) )  :
+      fail_iexec P G t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t )
+                  (Acq t (X + x) ::
+                   mops_hb_check (W + x) (C + t) vs1 vs2 zt t )
+        []
+        (upd_env (upd_env G t tmp1 v1) t tmp2 v2)
+  | fail_war P1 P2 x o e v1 v2 rest vs1 vs2 vs3
+      (Hstore : P = P1 ++ (t, store_handler t x zt ++
+                              Store (x, o) e :: Unlock (X + x) :: rest) :: P2)
+      (Hle : first_gt vs1 vs2 = None ) (Hgt: first_gt vs3 vs2 = Some (v1, v2) ) :
+      fail_iexec P G t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t ++
+                       events_hb_check (R + x) (C + t) vs3 vs2 t)
+                  (Acq t (X + x) ::
+                       mops_hb_check (W + x) (C + t) vs1 vs2 zt t ++
+                  mops_hb_check (R+x) (C + t) vs3 vs2 zt t )
+        []
+        (upd_env (upd_env G t tmp1 v1) t tmp2 v2) 
+  | fail_assert P1 P2 e1 e2 rest
+      (Hassert : P = P1 ++ (t, Assert_le e1 e2 :: rest) :: P2)
+      (Hfail : eval (G t) e1 > eval (G t) e2) :
+      fail_iexec P G t [] [] [] G.
+
 Lemma t_steps_length' : forall t P' G' li1 P G lo lc (Hdistinct : distinct P)
   (Ht_steps : t_steps P G t (length li1) lo lc (Some P') G')
   li2 (Hin : In (t, li1 ++ li2) P), In (t, li2) P'.
