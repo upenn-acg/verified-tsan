@@ -180,7 +180,7 @@ Proof.
    rewrite Forall_forall. intros c Hin. inversion Hin; clarify.
 Qed.   
   
-  
+(*  
 Lemma instrument_sim_safe : forall P P1 P2 G1 G2 t h
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1) (Hdistinct : distinct P2)
   (Ht : Forall (fun e => fst e < zt) P1) 
@@ -796,7 +796,7 @@ Proof.
 
    exploit sim_step; eauto; clarify.
 Qed.
-
+*)
 Definition bounded V z := forall t, ~t < z -> V t = 0.
 
 Lemma clock_match_bounded : forall m V x, clock_match m V x -> bounded V zt.
@@ -853,7 +853,7 @@ Proof.
       exploit H0222; auto; omega.
 Qed.
 
-
+(*
 Lemma instrument_sim_race : forall P P1 P2 G1 G2 t h
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1)
   (Ht : Forall (fun e => fst e < zt) P1)  (Hdistinct : distinct P2)
@@ -1087,7 +1087,7 @@ Proof.
       econstructor; [constructor; auto | apply ss_refl].
     -specialize(Hrace s). contradiction Hrace; apply ss_refl.
 Qed.
-
+*)
 
 (* There's no escape from fine-grained interleaving. We can either:
    - use a messy simulation relation with cases for intermediate states; or
@@ -2570,41 +2570,6 @@ Proof.
 
 (* Do we want a failing iexec as well? *)
 
-Inductive fail_iexec P G t :
-  list operation -> list conc_op -> (*state -> env -> *)Prop :=
-  | fail_raw P1 P2 a x o v1 v2 rest vs1 vs2
-    (Hload: P=P1++(t, load_handler t x zt ++
-                                   Load a (x, o) :: Unlock (X + x) :: rest) :: P2)
-      (Hgt : first_gt vs1 vs2 = Some (v1,v2) )  :
-      fail_iexec P G t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t )
-                  (Acq t (X + x) ::
-                   mops_hb_check (W + x) (C + t) vs1 vs2 zt t)
-        (*[]
-        (upd_env (upd_env G t tmp1 v1) t tmp2 v2)*)
-  | fail_waw P1 P2 x o e v1 v2 rest vs1 vs2
-      (Hstore : P = P1 ++ (t, store_handler t x zt ++
-                              Store (x, o) e :: Unlock (X + x) :: rest) :: P2)
-      (Hgt : first_gt vs1 vs2 = Some (v1,v2) )  :
-      fail_iexec P G t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t )
-                  (Acq t (X + x) ::
-                   mops_hb_check (W + x) (C + t) vs1 vs2 zt t )
-        (*[]
-        (upd_env (upd_env G t tmp1 v1) t tmp2 v2)*)
-  | fail_war P1 P2 x o e v1 v2 rest vs1 vs2 vs3
-      (Hstore : P = P1 ++ (t, store_handler t x zt ++
-                              Store (x, o) e :: Unlock (X + x) :: rest) :: P2)
-      (Hle : first_gt vs1 vs2 = None ) (Hgt: first_gt vs3 vs2 = Some (v1, v2) ) :
-      fail_iexec P G t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t ++
-                       events_hb_check (R + x) (C + t) vs3 vs2 t)
-                  (Acq t (X + x) ::
-                       mops_hb_check (W + x) (C + t) vs1 vs2 zt t ++
-                  mops_hb_check (R+x) (C + t) vs3 vs2 zt t )
-        (*[]
-        (upd_env (upd_env G t tmp1 v1) t tmp2 v2) *)
-  | fail_assert P1 P2 e1 e2 rest
-      (Hassert : P = P1 ++ (t, Assert_le e1 e2 :: rest) :: P2)
-      (Hfail : eval (G t) e1 > eval (G t) e2) :
-      fail_iexec P G t [] [] (*[] G*).
 
 Lemma t_steps_length' : forall t P' G' li1 P G lo lc (Hdistinct : distinct P)
   (Ht_steps : t_steps P G t (length li1) lo lc (Some P') G')
@@ -4978,7 +4943,7 @@ Proof.
     split; [|eauto].
     assert (length l <> 0) by (destruct l; clarify); omega.
 Qed.    
-  
+ (* 
 Lemma instrument_indep : forall P0 G0 t o c P G lo lc P1 G1 o' c' P2 G2 i rest
   (Hdistinct : distinct P0) P0' (Hsim : state_sim P0' P0)
   (Hin : In (t, instrument_instr i t ++ rest) P0)
@@ -5046,7 +5011,7 @@ Proof.
        C for t, because they aren't t. *)
     
     *)
-Abort.
+Abort.*)
 
 
 Lemma exec_t_maintain : forall P G lo lc P' G' t li (Hdistinct : distinct P)
@@ -5982,7 +5947,7 @@ Proof.
   -apply clock_match_z_set_vc; auto.
   -unfold bounded, upd in *; clarify.
 Qed.
-
+(*
 Lemma instrument_sim_safe2 : forall (*P*) P1 P2 G1 G2 t (*h*)
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1)
   (Ht : Forall (fun e => fst e < zt) P1) (Hdistinct: distinct P2)
@@ -7066,7 +7031,101 @@ Proof.
      clarify; do 5 eexists; [eauto|];
      exploit sim_step; eauto; clarify.
      eexists. split; eauto. 
+Qed. 
+*)
+
+
+
+Lemma hb_check_vals1' : forall m C1 C2 z vs1 vs2 t V1 V2 v1 v2
+  (Hinit1 : forall z, z < zt -> initialized m (C1, z))
+  (Hinit2 : forall z, z < zt -> initialized m (C2, z))
+  (Hcon : consistent (m ++ mops_hb_check C1 C2 vs1 vs2 z t))
+  (Hvs1 : length vs1 <= z) (Hvs2 : length vs2 <= z) (*(Hlens: length vs1 = length vs2)*) (Hz : z <= zt)
+  (Hmatch1 : clock_match m V1 C1) (Hmatch2 : clock_match m V2 C2)
+  (Hgt : first_gt  vs1 vs2 = Some (v1, v2)),
+   ~ vc_le V1 V2         
+  (*vs1 = map V1 (rev (interval 0 z)) /\ vs2 = map V2 (rev (interval 0 z))*).
+Proof.
+  induction z; destruct vs1, vs2; clarify.
+  inversion Hvs1.
+  assert (consistent (m ++ [Read t (C1, z) n])) as Hn.
+  { eapply consistent_app_SC; rewrite <- app_assoc; simpl; eauto. }
+  assert (consistent (m ++ [Read t (C2, z) n0])) as Hn0.
+  { rewrite read_noop_SC in Hcon; auto.
+    eapply consistent_app_SC; rewrite <- app_assoc; simpl; eauto. } 
+  destruct (leb n n0) eqn:Hle; clarify.
+  -eapply (IHz vs1 vs2); eauto.
+   { do 2 (rewrite read_noop_SC in Hcon; eauto). }
+   { omega. }
+   { omega. }
+   { omega. }
+  -assert(v2 = V2 z) as Hv2.
+   {
+     apply clock_match_value with (m:=m) (ct:=C2) (t:=t); auto.
+     apply clock_match_nomod; auto.
+     rewrite Forall_forall. clarify.
+   }
+   assert(v1 = V1 z) as Hv1.
+   {
+     apply clock_match_value with (m:=m) (ct:=C1) (t:=t); auto.
+     apply clock_match_nomod; auto.
+     rewrite Forall_forall. clarify.
+   }
+   intro Hvc_le. clarify.
+   unfold vc_le in Hvc_le. specialize (Hvc_le z); clarify. rewrite <- leb_le in Hvc_le. clarify.
 Qed.
+     
+
+Corollary hb_check_vals' : forall m C1 C2 vs1 vs2 t V1 V2 v1 v2
+  (Hinit1 : forall z, z < zt -> initialized m (C1, z))
+  (Hinit2 : forall z, z < zt -> initialized m (C2, z))
+  (Hcon : consistent (m ++ mops_hb_check C1 C2 vs1 vs2 zt t))
+  (Hvs1 : length vs1 <= zt) (Hvs2 : length vs2 <= zt)
+  (Hmatch1 : clock_match m V1 C1) (Hmatch2 : clock_match m V2 C2)
+  (Hle : first_gt vs1 vs2 = Some (v1, v2)),
+  ~ vc_le V1 V2.
+Proof.
+  intros; eapply hb_check_vals1' with (C1 := C1); eauto.
+Qed.
+
+
+
+Inductive fail_iexec P G t :
+  list operation -> list conc_op -> (*state -> env -> *)Prop :=
+  | fail_raw P1 P2 a x o v1 v2 rest vs1 vs2
+    (Hload: P=P1++(t, load_handler t x zt ++
+                                   Load a (x, o) :: Unlock (X + x) :: rest) :: P2)
+      (Hgt : first_gt vs1 vs2 = Some (v1,v2) )  (Hlen1: length vs1 <=zt) (Hlen2: length vs2 <=zt):
+      fail_iexec P G t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t )
+                  (Acq t (X + x) ::
+                   mops_hb_check (W + x) (C + t) vs1 vs2 zt t)
+        (*[]
+        (upd_env (upd_env G t tmp1 v1) t tmp2 v2)*)
+  | fail_waw P1 P2 x o e v1 v2 rest vs1 vs2
+      (Hstore : P = P1 ++ (t, store_handler t x zt ++
+                              Store (x, o) e :: Unlock (X + x) :: rest) :: P2)
+      (Hgt : first_gt vs1 vs2 = Some (v1,v2) ) (Hlen1: length vs1 <=zt) (Hlen2: length vs2 <=zt)  :
+      fail_iexec P G t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t )
+                  (Acq t (X + x) ::
+                   mops_hb_check (W + x) (C + t) vs1 vs2 zt t )
+        (*[]
+        (upd_env (upd_env G t tmp1 v1) t tmp2 v2)*)
+  | fail_war P1 P2 x o e v1 v2 rest vs1 vs2 vs3
+      (Hstore : P = P1 ++ (t, store_handler t x zt ++
+                              Store (x, o) e :: Unlock (X + x) :: rest) :: P2)
+      (Hle : first_gt vs1 vs2 = None ) (Hgt: first_gt vs3 vs2 = Some (v1, v2) )
+      (Hlen3: length vs3 <=zt) (Hlen2: length vs2 <=zt):
+      fail_iexec P G t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t ++
+                       events_hb_check (R + x) (C + t) vs3 vs2 t)
+                  (Acq t (X + x) ::
+                       mops_hb_check (W + x) (C + t) vs1 vs2 zt t ++
+                  mops_hb_check (R+x) (C + t) vs3 vs2 zt t )
+        (*[]
+        (upd_env (upd_env G t tmp1 v1) t tmp2 v2) *)
+  | fail_assert P1 P2 e1 e2 rest
+      (Hassert : P = P1 ++ (t, Assert_le e1 e2 :: rest) :: P2)
+      (Hfail : eval (G t) e1 > eval (G t) e2) :
+      fail_iexec P G t [] [] (*[] G*).
 
 Lemma instrument_sim_race2 : forall (*P*) P1 P2 G1 G2 t (*h*)
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1)
@@ -7079,6 +7138,143 @@ Lemma instrument_sim_race2 : forall (*P*) P1 P2 G1 G2 t (*h*)
   exists o c P1' G1', exec P1 G1 t o c (Some P1') G1' /\
     forall s', ~step_star s (opt_to_list o) s'.
 Proof.
+  clarify.
+  inversion Hstep; clarify; exploit Forall2_app_inv_r; eauto;
+  intros (P0' & P3' & HP0 & Hrest & HP1);
+  inversion Hrest as [|(tx, [|i ?]) ? ? ? [? Hi] HP3]; clarify.
+  -exploit (instrument_incom (Load a (x,o))).
+   { instantiate(1:= instrument l t). instantiate (1:= t). instantiate (1:= i). instantiate (1:=rest).  simpl. rewrite <- app_assoc. clarify. }
+   clarify.
+   do 4 eexists. split; clarify.
+   +eapply exec_load; eauto.
+   +clarify. intro Hss. inversion Hss; 
+    setoid_rewrite Forall_app in Hlocs; clarify.
+    inversion Hlocs2 as [|?? Hi ?]; clarify.
+    inversion Hi; clarify.
+    setoid_rewrite Forall_app in Ht; clarify.
+    inversion Ht2; clarify.
+    inversion Hstep0; clarify. unfold clocks_sim in Hs; clarify.
+    specialize (Hs22 x H32). clarify.
+    exploit hb_check_vals'.
+    { clarify. specialize (Hinit (W'+x, z)).  apply Hinit.
+      unfold meta_loc. simpl. omega. }
+    { clarify. specialize (Hinit (C'+t, z)).  apply Hinit.
+      unfold meta_loc. simpl. omega. }
+    {
+      exploit loc_valid_ops_SC.
+      {instantiate (1:=[Acq t (X'+x)]). instantiate(1:=mops_hb_check (W'+x ) (C'+t) vs1 vs2 zt t).
+       rewrite Forall_forall. clarify. rewrite Forall_forall. intros c Hin.
+       apply in_mops_hb_check in Hin. intro Heq; destruct c; clarify.
+       destruct Hin as [Hin | Hin]; clarify.
+       +specialize(Hmetalocs_disjoint_WX H32 H32); clarify.
+       +specialize(Hmetalocs_disjoint_CX H3 H32); clarify.
+      }
+      {rewrite Forall_forall. clarify. }
+      {clarify. }
+      intro Hcon_iff.
+      instantiate (1:=m) in Hcon_iff. clarify. rewrite Hcon_iff in Hcon.
+      clarify. eapply Hcon2.
+    }
+    { eauto. }
+    { eauto.  }
+    { apply Hs222. }
+    { specialize (Hs1 t H3). apply Hs1. }
+    { eauto. }
+    { auto. }
+    clarify.
+   -exploit (instrument_incom (Store (x,o) e)).
+   { instantiate(1:= instrument l t). instantiate (1:= t). instantiate (1:= i). instantiate (1:=rest).  simpl. rewrite <- app_assoc. clarify. }
+   clarify.
+   do 4 eexists. split; clarify.
+   +eapply exec_store; eauto.
+   +clarify. intro Hss. inversion Hss; 
+    setoid_rewrite Forall_app in Hlocs; clarify.
+    inversion Hlocs2 as [|?? Hi ?]; clarify.
+    inversion Hi; clarify.
+    setoid_rewrite Forall_app in Ht; clarify.
+    inversion Ht2; clarify.
+    inversion Hstep0; clarify. unfold clocks_sim in Hs; clarify.
+    specialize (Hs22 x H32). clarify.
+    exploit hb_check_vals'.
+    { clarify. specialize (Hinit (W'+x, z)).  apply Hinit.
+      unfold meta_loc. simpl. omega. }
+    { clarify. specialize (Hinit (C'+t, z)).  apply Hinit.
+      unfold meta_loc. simpl. omega. }
+    {
+      exploit loc_valid_ops_SC.
+      {instantiate (1:=[Acq t (X'+x)]). instantiate(1:=mops_hb_check (W'+x ) (C'+t) vs1 vs2 zt t).
+       rewrite Forall_forall. clarify. rewrite Forall_forall. intros c Hin.
+       apply in_mops_hb_check in Hin. intro Heq; destruct c; clarify.
+       destruct Hin as [Hin | Hin]; clarify.
+       +specialize(Hmetalocs_disjoint_WX H32 H32); clarify.
+       +specialize(Hmetalocs_disjoint_CX H3 H32); clarify.
+      }
+      {rewrite Forall_forall. clarify. }
+      {clarify. }
+      intro Hcon_iff.
+      instantiate (1:=m) in Hcon_iff. clarify. rewrite Hcon_iff in Hcon.
+      clarify. eapply Hcon2.
+    }
+    { eauto. }
+    { eauto.  }
+    { apply Hs222. }
+    { specialize (Hs1 t H3). apply Hs1. }
+    { eauto. }
+    { auto. }
+    clarify.
+   -exploit (instrument_incom (Store (x,o) e)).
+   { instantiate(1:= instrument l t). instantiate (1:= t). instantiate (1:= i). instantiate (1:=rest).  simpl. rewrite <- app_assoc. clarify. }
+   clarify.
+   do 4 eexists. split; clarify.
+   +eapply exec_store; eauto.
+   +clarify. intro Hss. inversion Hss; 
+    setoid_rewrite Forall_app in Hlocs; clarify.
+    inversion Hlocs2 as [|?? Hi ?]; clarify.
+    inversion Hi; clarify.
+    setoid_rewrite Forall_app in Ht; clarify.
+    inversion Ht2; clarify.
+    inversion Hstep0; clarify. unfold clocks_sim in Hs; clarify.
+    specialize (Hs22 x H32). clarify.
+    exploit hb_check_vals'.
+    { clarify. specialize (Hinit (R'+x, z)).  apply Hinit.
+      unfold meta_loc. simpl. omega. }
+    { clarify. specialize (Hinit (C'+t, z)).  apply Hinit.
+      unfold meta_loc. simpl. omega. }
+    {
+      (*
+      assert(Hcon_acq: consistent (m ++ [Acq t (X' +x)])).
+      {
+        eapply consistent_app_SC.
+        instantiate(1:= mops_hb_check (W'+x ) (C'+t) vs1 vs2 zt t ++ mops_hb_check (R'+x ) (C'+t) vs3 vs2 zt t). rewrite <-app_assoc. clarify.
+      }*)
+      rewrite split_app, <- app_assoc in Hcon.
+      apply loc_valid_ops_SC in Hcon; clarify.
+      -eapply reads_noops_SC.
+       { instantiate (1:=mops_hb_check (W'+x ) (C'+t) vs1 vs2 zt t).
+         eapply consistent_app_SC;rewrite <- app_assoc; eauto. }
+       { rewrite Forall_forall. intros c Hin. apply in_mops_hb_check in Hin.
+         destruct c; clarify. }
+       { eauto. }
+      -rewrite Forall_forall. intros c Hin. inversion Hin. clarify.
+       rewrite Forall_forall. intros c Hin. rewrite in_app in Hin.
+       intro Heq. destruct Hin as [Hin | Hin]; apply in_mops_hb_check in Hin; destruct c; clarify;
+       destruct Hin as [Hin | Hin]; clarify.
+       +specialize(Hmetalocs_disjoint_WX H32 H32). clarify.
+       +specialize(Hmetalocs_disjoint_CX H3 H32). clarify.
+       +specialize(Hmetalocs_disjoint_RX H32 H32). clarify.
+       +specialize(Hmetalocs_disjoint_CX H3 H32). clarify.
+       +inversion H; clarify.
+      -rewrite Forall_forall. clarify.
+      -rewrite Forall_app. clarify.
+    } 
+    { auto. }
+    { auto. }
+    { apply Hs221. }
+    { specialize (Hs1 t H3). apply Hs1. }
+    { eauto. }
+    { auto. }
+    clarify.
+   - 
 Abort.
 
 Theorem instrument_correct : forall P h m P' G'
