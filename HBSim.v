@@ -7090,50 +7090,44 @@ Qed.
 
 
 
-Inductive fail_iexec P G t :
+Inductive fail_iexec P (*G*) t :
   list operation -> list conc_op -> (*state -> env -> *)Prop :=
   | fail_raw P1 P2 a x o v1 v2 rest vs1 vs2
     (Hload: P=P1++(t, load_handler t x zt ++
                                    Load a (x, o) :: Unlock (X + x) :: rest) :: P2)
       (Hgt : first_gt vs1 vs2 = Some (v1,v2) )  (Hlen1: length vs1 <=zt) (Hlen2: length vs2 <=zt):
-      fail_iexec P G t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t )
+      fail_iexec P (*G*) t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t )
                   (Acq t (X + x) ::
                    mops_hb_check (W + x) (C + t) vs1 vs2 zt t)
-        (*[]
-        (upd_env (upd_env G t tmp1 v1) t tmp2 v2)*)
   | fail_waw P1 P2 x o e v1 v2 rest vs1 vs2
       (Hstore : P = P1 ++ (t, store_handler t x zt ++
                               Store (x, o) e :: Unlock (X + x) :: rest) :: P2)
       (Hgt : first_gt vs1 vs2 = Some (v1,v2) ) (Hlen1: length vs1 <=zt) (Hlen2: length vs2 <=zt)  :
-      fail_iexec P G t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t )
+      fail_iexec P (*G*) t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t )
                   (Acq t (X + x) ::
                    mops_hb_check (W + x) (C + t) vs1 vs2 zt t )
-        (*[]
-        (upd_env (upd_env G t tmp1 v1) t tmp2 v2)*)
   | fail_war P1 P2 x o e v1 v2 rest vs1 vs2 vs3
       (Hstore : P = P1 ++ (t, store_handler t x zt ++
                               Store (x, o) e :: Unlock (X + x) :: rest) :: P2)
       (Hle : first_gt vs1 vs2 = None ) (Hgt: first_gt vs3 vs2 = Some (v1, v2) )
       (Hlen3: length vs3 <=zt) (Hlen2: length vs2 <=zt):
-      fail_iexec P G t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t ++
+      fail_iexec P (*G*) t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t ++
                        events_hb_check (R + x) (C + t) vs3 vs2 t)
                   (Acq t (X + x) ::
                        mops_hb_check (W + x) (C + t) vs1 vs2 zt t ++
                   mops_hb_check (R+x) (C + t) vs3 vs2 zt t )
-        (*[]
-        (upd_env (upd_env G t tmp1 v1) t tmp2 v2) *)
-  | fail_assert P1 P2 e1 e2 rest
+  (*| fail_assert P1 P2 e1 e2 rest
       (Hassert : P = P1 ++ (t, Assert_le e1 e2 :: rest) :: P2)
       (Hfail : eval (G t) e1 > eval (G t) e2) :
-      fail_iexec P G t [] [] (*[] G*).
+      fail_iexec P G t [] [] (*[] G*) *).
 
-Lemma instrument_sim_race2 : forall (*P*) P1 P2 G1 G2 t (*h*)
+Lemma instrument_sim_race2 : forall (*P*) P1 P2 G1 (*G2*) t (*h*)
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1)
   (Ht : Forall (fun e => fst e < zt) P1) (Hdistinct: distinct P2)
-  (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2)
+  (HPsim : state_sim P1 P2) (* (HGsim : env_sim G1 G2) *)
   m (*(Hroot : exec_star (Some (init_state P)) init_env h m (Some P1) G1)*)
   (Hinit : forall p, meta_loc p -> initialized m p)
-  o2 c2 (Hstep : fail_iexec P2 G2 t o2 c2)
+  o2 c2 (Hstep : fail_iexec P2 (*G2*) t o2 c2)
   (Hcon : consistent (m ++ c2)) s (Hs : clocks_sim m s),
   exists o c P1' G1', exec P1 G1 t o c (Some P1') G1' /\
     forall s', ~step_star s (opt_to_list o) s'.
@@ -7145,8 +7139,8 @@ Proof.
   -exploit (instrument_incom (Load a (x,o))).
    { instantiate(1:= instrument l t). instantiate (1:= t). instantiate (1:= i). instantiate (1:=rest).  simpl. rewrite <- app_assoc. clarify. }
    clarify.
-   do 4 eexists. split; clarify.
-   +eapply exec_load; eauto.
+   do 4 eexists.  split. 
+   +apply exec_load with (v:=1)(*can be any value*); auto. 
    +clarify. intro Hss. inversion Hss; 
     setoid_rewrite Forall_app in Hlocs; clarify.
     inversion Hlocs2 as [|?? Hi ?]; clarify.
@@ -7186,7 +7180,7 @@ Proof.
    { instantiate(1:= instrument l t). instantiate (1:= t). instantiate (1:= i). instantiate (1:=rest).  simpl. rewrite <- app_assoc. clarify. }
    clarify.
    do 4 eexists. split; clarify.
-   +eapply exec_store; eauto.
+   +apply exec_store; eauto.
    +clarify. intro Hss. inversion Hss; 
     setoid_rewrite Forall_app in Hlocs; clarify.
     inversion Hlocs2 as [|?? Hi ?]; clarify.
@@ -7241,12 +7235,6 @@ Proof.
     { clarify. specialize (Hinit (C'+t, z)).  apply Hinit.
       unfold meta_loc. simpl. omega. }
     {
-      (*
-      assert(Hcon_acq: consistent (m ++ [Acq t (X' +x)])).
-      {
-        eapply consistent_app_SC.
-        instantiate(1:= mops_hb_check (W'+x ) (C'+t) vs1 vs2 zt t ++ mops_hb_check (R'+x ) (C'+t) vs3 vs2 zt t). rewrite <-app_assoc. clarify.
-      }*)
       rewrite split_app, <- app_assoc in Hcon.
       apply loc_valid_ops_SC in Hcon; clarify.
       -eapply reads_noops_SC.
@@ -7274,8 +7262,7 @@ Proof.
     { eauto. }
     { auto. }
     clarify.
-   - 
-Abort.
+Qed.
 
 Theorem instrument_correct : forall P h m P' G'
   (HP : exec_star (Some (init_state P)) init_env h m (Some P') G'),
