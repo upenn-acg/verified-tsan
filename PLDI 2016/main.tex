@@ -18,7 +18,7 @@
 \newcommand{\mwrite}[2]{\ensuremath{\mathsf{write}(#1, #2)}}
 \newcommand{\malloc}[2]{\ensuremath{\mathsf{alloc}(#1, #2)}}
 \newcommand{\mfree}[1]{\ensuremath{\mathsf{free}(#1)}}
-\newcommand{\cccando}[2]{\ensuremath{\mathsf{can\_do_{CC}}(#1, #2)}}
+%\newcommand{\cccando}[2]{\ensuremath{\mathsf{can\_do_{CC}}(#1, #2)}}
 \newcommand{\hb}[0]{<_{\mathrm{hb}}}
 \newcommand{\po}[0]{<_{\mathrm{po}}}
 \newcommand{\sw}[0]{<_{\mathrm{sw}}}
@@ -72,7 +72,7 @@
 \titlebanner{banner above paper title}        % These are ignored unless
 \preprintfooter{short description of paper}   % 'preprint' option specified.
 
-\title{Verified Instrumentation for Dynamic Race Detection}
+\title{Verifying Dynamic Race Detection}
 \ignore{\authorinfo{William Mansky \and Yuanfeng Peng \and Steve Zdancewic \and Joseph Devietti}
            {University of Pennsylvania}
            {wmansky@seas.upenn.edu, yuanfeng@cis.upenn.edu, stevez@cis.upenn.edu, devietti@cis.upenn.edu}}
@@ -149,6 +149,8 @@ We verify the correctness of the instrumentation by showing that instrumentation
 lemmas relating each instrumentation segment to vector clock operations
 
 simulation relation and clear statements of two directions
+
+wait-wait races
 
 \section{Related Work}
 
