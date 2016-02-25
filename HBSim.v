@@ -9448,15 +9448,15 @@ Proof.
 Qed.
 
 Print instrument.
-
-Theorem instrument_correct : forall P h m P' G'
-  (HP : exec_star (Some (init_state P)) init_env h m (Some P') G')
+Print iexec.
+Theorem instrument_correct : forall P ops m P' G'
+  (HP : exec_star (Some (init_state P)) init_env ops m (Some P') G')
   (Hsafe_locs: safe_locs (init_state P))
-  (Hinit: forall p : ptr, meta_loc p -> initialized m p)
-  (Hfresh: fresh_tmps (init_state P)),
-  (exists h2 m2 P2' G2', exec_star
-     (Some (init_state (instrument P 0))) init_env h2 m2
-     (Some P2') G2') <-> exists s, step_star s0 h s.
+  (Hinit: forall p : ptr, meta_loc p -> initialized [] p)
+  (Hfresh: fresh_tmps (init_state P)) (Hclocks_sim: clocks_sim [] s0),
+  (exists m2 os P2' G2' (Hcon: consistent m2), iexec_star
+     (init_state (instrument P 0)) init_env ops os
+     P2' G2') <-> exists s, step_star s0 ops s. 
 Proof.
   intros. split.
   -(*completeness*)
@@ -9465,12 +9465,11 @@ Proof.
     clear H0. clarify.
     exploit instrument_sim_safe2; eauto. Check instrument_sim_safe2.
     { rewrite Forall_forall. clarify. destruct zt; clarify. }
-    { instantiate (1:=(init_state (instrument P 0))). unfold distinct, init_state. clarify.
+    { instantiate(1:=init_state (instrument P 0)). unfold distinct, init_state. clarify. 
       constructor; auto. }
-    {unfold state_sim, init_state. clarify. }
-    { 
-      instantiate(1:=init_env). instantiate(1:=init_env). unfold env_sim. clarify. }
-    { unfold initialized. clarify.
+    { unfold state_sim, init_state. clarify. }
+    { instantiate(1:=init_env). unfold env_sim. clarify. }
+    clarify. 
     exploit instrument_sim_safe2.
     
 End Sim_Proofs.
