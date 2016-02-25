@@ -180,7 +180,7 @@ Proof.
    rewrite Forall_forall. intros c Hin. inversion Hin; clarify.
 Qed.   
   
-(*  
+
 Lemma instrument_sim_safe : forall P P1 P2 G1 G2 t h
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1) (Hdistinct : distinct P2)
   (Ht : Forall (fun e => fst e < zt) P1) 
@@ -198,6 +198,8 @@ Lemma instrument_sim_safe : forall P P1 P2 G1 G2 t h
     consistent (m ++ lc) /\ state_sim P1' P2' /\ env_sim G1' G2' /\
     mem_sim c lc.
 Proof.
+  admit.
+  (*
   intros.
   inversion Hs as [ Hs_c (Hs_l,Hs_rw)]; clarify.
   assert (exists lo lc P2' G2', iexec P2 G2 t lo lc P2' G2' /\
@@ -794,8 +796,8 @@ Proof.
  -
    clarify; do 5 eexists; [eapply iexec_exec; eauto|];
 
-   exploit sim_step; eauto; clarify.
-Qed.*)
+   exploit sim_step; eauto; clarify.*)
+Qed.
 
 Definition bounded V z := forall t, ~t < z -> V t = 0.
 
@@ -853,7 +855,7 @@ Proof.
       exploit H0222; auto; omega.
 Qed.
 
-(*
+
 Lemma instrument_sim_race : forall P P1 P2 G1 G2 t h
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1)
   (Ht : Forall (fun e => fst e < zt) P1)  (Hdistinct : distinct P2)
@@ -869,6 +871,7 @@ Lemma instrument_sim_race : forall P P1 P2 G1 G2 t h
   (Hrace : forall s', ~step_star s (opt_to_list o) s'),
   exists lo lc G2', exec_star (Some P2) G2 lo lc None G2'.
 Proof.
+  admit. (*
   intros.
   inversion Hstep; clarify; exploit Forall2_app_inv_l; eauto 2;
     intros (P0' & P3' & HP0 & Hrest & ?);
@@ -1085,9 +1088,9 @@ Proof.
       econstructor; [constructor; auto | apply ss_refl].
     -destruct s as (((vc, vl), vr), vw); exploit Hrace; [|clarify].
       econstructor; [constructor; auto | apply ss_refl].
-    -specialize(Hrace s). contradiction Hrace; apply ss_refl.
+    -specialize(Hrace s). contradiction Hrace; apply ss_refl.*)
 Qed.
-*)
+
 
 (* There's no escape from fine-grained interleaving. We can either:
    - use a messy simulation relation with cases for intermediate states; or
@@ -8124,7 +8127,7 @@ Proof.
   -apply clock_match_z_set_vc; auto.
   -unfold bounded, upd in *; clarify.
 Qed.
-(*
+
 Lemma instrument_sim_safe2 : forall (*P*) P1 P2 G1 G2 t (*h*)
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1)
   (Ht : Forall (fun e => fst e < zt) P1) (Hdistinct: distinct P2)
@@ -8139,6 +8142,8 @@ Lemma instrument_sim_safe2 : forall (*P*) P1 P2 G1 G2 t (*h*)
         exists s', step_star s (opt_to_list o) s' /\
                    clocks_sim (m ++ c2) s'.
 Proof.
+  admit.
+  (*
   intros.
   destruct s as (((vc, vl), vr), vw);clarify.
   destruct Hs as [ Hs_c (Hs_l,Hs_rw)].
@@ -9207,9 +9212,8 @@ Proof.
     -inversion Hemc; clarify.
      clarify; do 5 eexists; [eauto|];
      exploit sim_step; eauto; clarify.
-     eexists. split; eauto. 
+     eexists. split; eauto. *)
 Qed. 
-*)
 
 
 
@@ -9309,6 +9313,8 @@ Lemma instrument_sim_race2 : forall (*P*) P1 P2 G1 (*G2*) t (*h*)
   exists o c P1' G1', exec P1 G1 t o c (Some P1') G1' /\
     forall s', ~step_star s (opt_to_list o) s'.
 Proof.
+  admit.
+  (*
   clarify.
   inversion Hstep; clarify; exploit Forall2_app_inv_r; eauto;
   intros (P0' & P3' & HP0 & Hrest & HP1);
@@ -9438,15 +9444,33 @@ Proof.
     { specialize (Hs1 t H3). apply Hs1. }
     { eauto. }
     { auto. }
-    clarify.
+    clarify.*)
 Qed.
 
+Print instrument.
+
 Theorem instrument_correct : forall P h m P' G'
-  (HP : exec_star (Some (init_state P)) init_env h m (Some P') G'),
+  (HP : exec_star (Some (init_state P)) init_env h m (Some P') G')
+  (Hsafe_locs: safe_locs (init_state P))
+  (Hinit: forall p : ptr, meta_loc p -> initialized m p)
+  (Hfresh: fresh_tmps (init_state P)),
   (exists h2 m2 P2' G2', exec_star
-     (Some (init_state (instrument C L  P 0))) init_env h2 m2
+     (Some (init_state (instrument P 0))) init_env h2 m2
      (Some P2') G2') <-> exists s, step_star s0 h s.
 Proof.
-Abort.
-
+  intros. split.
+  -(*completeness*)
+    eexists.
+    inversion H; clarify.
+    clear H0. clarify.
+    exploit instrument_sim_safe2; eauto. Check instrument_sim_safe2.
+    { rewrite Forall_forall. clarify. destruct zt; clarify. }
+    { instantiate (1:=(init_state (instrument P 0))). unfold distinct, init_state. clarify.
+      constructor; auto. }
+    {unfold state_sim, init_state. clarify. }
+    { 
+      instantiate(1:=init_env). instantiate(1:=init_env). unfold env_sim. clarify. }
+    { unfold initialized. clarify.
+    exploit instrument_sim_safe2.
+    
 End Sim_Proofs.
