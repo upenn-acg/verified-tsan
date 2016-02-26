@@ -6751,7 +6751,7 @@ Proof.
 
 
   
-
+(*
 Lemma exec_iexec1 : forall P P' G' G lo lc
   (Hexec : exec_star (Some P) G lo lc (Some P') G')
   P1 (HP : state_sim P1 P) (Hsafe : safe_locs P1) (Hfresh : fresh_tmps P1)
@@ -6935,6 +6935,7 @@ Proof.
     { eapply exec_t_exec; eauto. }
     rewrite app_length, Hinstr; simpl; omega.
 Qed.
+ *)
 
 Lemma exec_iexec : forall P P' (Hfinal : final_state (Some P')) G' G lo lc
   (Hexec : exec_star (Some P) G lo lc (Some P') G')
@@ -7166,7 +7167,7 @@ Definition no_assert := instr_forall
 
 Definition no_asserts (P : state) :=
   Forall (fun e => Forall no_assert (snd e)) P.
-
+(*
 Lemma exec_fail_iexec : forall P G' G lo lc
   (Hexec : exec_star (Some P) G lo lc None G')
   P1 (HP : state_sim P1 P) (Hsafe : safe_locs P1) (Hfresh : fresh_tmps P1)
@@ -7353,7 +7354,7 @@ Proof.
     exploit (instrument_incom (Assert_le e1 e2)); simpl; eauto; clarify.
     setoid_rewrite Forall_app in Hno_asserts; clarify.
     inversion Hno_asserts2 as [|?? Hi]; inversion Hi; clarify.
-Qed.
+Qed. *)
 
 Lemma list_part_diff : forall (X:Type) (l1 l2 l3 l4: list X)
  (Hlen: length l1 = length l2) (Hdiff: l3<>l4), l1++l3<> l2++l4.
@@ -9406,6 +9407,6 @@ Proof.
     { unfold state_sim, init_state. clarify. }
     { instantiate(1:=init_env). unfold env_sim. clarify. }
     clarify. 
-    exploit instrument_sim_safe2.
+    
     
 End Sim_Proofs.
