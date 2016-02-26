@@ -1326,6 +1326,8 @@ Proof.
     do 3 eexists; eauto; rewrite in_app; clarify.
 Qed.
 
+(* !!
+
 Lemma step_invariant : forall P G lo lc P' G' (I : state -> Prop)
   (Hsteps : exec_star (Some P) G lo lc (Some P') G') (HI : I P')
   t li1 li2 (Ht : In (t, li1 ++ li2) P) (Hdistinct : distinct P)
@@ -2470,6 +2472,7 @@ Proof.
   clear; clarsimp.
 Qed.
 
+!! *)
 Typeclasses eauto := 2.
 
 (* up *)
@@ -2559,7 +2562,7 @@ Proof.
     eapply Forall_inv. eauto.
 Qed.
 
-
+(* !!
 Lemma t_steps_store : forall P G t lo lc P1 G1 x o e li
   (Hdistinct : distinct P)
   (Hfresh1 : expr_fresh tmp1 e) (Hfresh2 : expr_fresh tmp2 e)
@@ -2995,10 +2998,11 @@ Proof.
   intros.
   exploit in_split; eauto; clarify.
   inversion Hexec; exploit distinct_thread; eauto; clarify; split; clarify.
-Qed.
+Qed. !! *)
 
 Typeclasses eauto := 5.
 
+(* !!
 Lemma hb_check_instr : forall C1 C2 z tmp1 tmp2 i
   (Hi : In i (hb_check C1 C2 z tmp1 tmp2)) l (Haccess : accesses i = Some l),
   exists n, n < z /\ (l = (C1, n) \/ l = (C2, n)).
@@ -3384,7 +3388,7 @@ Proof.
   - setoid_rewrite Hi'; rewrite in_app; clarify.
   - destruct (le_lt_dec (length (instrument_instr i1 t)) n'); auto.
     rewrite skipn_all in *; clarify.
-Qed.
+Qed. !! *)
 
 Definition spawns t := instr_rect'' _ _ (fun _ => 0)
   (fun u _ r => if eq_dec u t then S r else r) 0 (fun _ _ r1 r2 => r1 + r2).
@@ -3427,18 +3431,20 @@ Proof.
     rewrite spawn_count_app in *; clarify;
     try solve [generalize (Hspawns2 li); rewrite in_app in *; clarify;
     eapply Hspawns2; rewrite in_app; clarify].
+  generalize (Hspawns2 li).
   unfold spawns in *; simpl in *; rewrite (spawns_list_def t') in *.
   destruct (eq_dec u t'); [split; intros; omega|].
-  split; [omega | intros].
+  split; [omega | intros ? Hin].
   destruct (eq_dec t' t).
   - subst; exploit Hspawns2.
     { rewrite in_app; clarify. }
     omega.
   - rewrite <- (Hspawns2 li0); [omega|].
     rewrite in_app in *; simpl in *.
-    destruct H as [? | [? | [? | ?]]]; clarify.
+    destruct Hin as [? | [? | [? | ?]]]; clarify.
 Qed.
 
+(* !!
 Lemma step_instr : forall t i li P (Hin : In (t, i :: li) P)
   (Hdistinct : distinct P) G lo lc P' G'
   (Hsteps : exec_star (Some P) G lo lc (Some P') G')
@@ -3612,7 +3618,7 @@ Qed.
 
 (* up *)
 Lemma C_meta : forall t (Ht : t < zt) o, meta_loc (C + t, o).
-Proof. intros; unfold meta_loc; simpl; omega. Qed.
+Proof. intros; unfold meta_loc; simpl; omega. Qed. !! *)
 
 Definition good_lock x := state_forall (fun i =>
   match i with Load _ p | Store p _ => p <> x | _ => True end).
@@ -3636,6 +3642,7 @@ Proof.
     exploit forall_step; eauto.
 Qed.
 
+(* !!
 Lemma lock_hold : forall m l t ops (Hinit : initialized m (l, 0))
   (Hheld : can_read m (l, 0) (S t)) (Hcon : consistent (m ++ ops))
   (Hprog : Forall prog_op ops) (Hlock : Forall (fun a => loc_of a = (l, 0) ->
@@ -4454,7 +4461,7 @@ Proof.
       * unfold can_read; repeat rewrite <- app_assoc; auto.
   - simpl in Hheld; rewrite app_assoc, loc_valid_SC in Hheld; clarify.
     repeat rewrite <- app_assoc in *; clarify.
-Qed.
+Qed. !! *)
 
 (* Should we should use an instr_rec' for definitions of this shape? *)
 
@@ -4484,7 +4491,7 @@ Lemma not_lock_list_iff : forall x li,
     end) li <-> not_lock_list x li.
 Proof.
   induction li; split; clarify; rewrite IHli in *; auto.
-Qed.  
+Qed.
 
 Fixpoint good_var x (P : state) :=
   match P with
@@ -4516,6 +4523,7 @@ Proof.
   eapply good_var_step; eauto.
 Qed.
 
+(* !!
 Lemma protect_self : forall P0 (Hsafe : safe_locs P0)
   (Ht : Forall (fun e => fst e < zt) P0) P0' (Hsim : state_sim P0 P0')
   (Hdistinct : distinct P0') G0 lo0 lc0 P G
@@ -4745,34 +4753,11 @@ Lemma firstn_in : forall A n (l : list A) x, In x (firstn n l) -> In x l.
 Proof.
   induction n; clarify.
   destruct l; clarify.
-Qed.  
+Qed. !! *)
 
 Definition good_unlock l li := forall i, nth_error li i = Some (Unlock l) ->
   exists j, j < i /\ nth_error li j = Some (Lock l) /\
   forall k, j < k < i -> nth_error li k <> Some (Unlock l).
-
-(*Fixpoint good_unlocks l i :=
-  let fix good_unlocks_list li :=
-    match li with
-    | [] => True
-    | i :: rest => good_unlocks l i /\ good_unlocks_list rest
-    end in
-  match i with
-  | Spawn _ li => good_unlock l li /\ good_unlocks_list li
-  | _ => True
-  end.
-
-Lemma good_unlocks_list_iff : forall x li,
-  (fix good_unlocks_list l :=
-    match l with
-    | [] => True
-    | i :: rest => good_unlocks x i /\ good_unlocks_list rest
-    end) li <-> Forall (good_unlocks x) li.
-Proof.
-  induction li; split; clarify.
-  - constructor; auto.
-    apply IHli; clarify.
-  inversion H; clarify.*)
 
 Definition good_unlocks l := instr_rect'' (fun _ => Prop) _ (fun _ => True)
   (fun _ li r => good_unlock l li /\ r) True (fun _ _ r1 r2 => r1 /\ r2).
@@ -4785,11 +4770,12 @@ Proof.
   - constructor; auto.
     apply IHli; auto.
   - inversion H; clarify; apply IHli; auto.
-Qed.  
+Qed.
 
 Definition well_locked l (P : state) :=
   Forall (fun e => good_unlock l (snd e) /\ Forall (good_unlocks l) (snd e)) P.
 
+(* !!
 Lemma well_locked_spawn : forall l P G lo lc P' G'
   (Hwell_locked : well_locked l P)
   (Hsteps : exec_star (Some P) G lo lc (Some P') G') t li (Hin : In (t, li) P')
@@ -5651,7 +5637,7 @@ Proof.
       exploit has_spawn; eauto; intro.
       generalize (has_spawn_thread t1 _ _ Hin); simpl; omega.
       { clear Hin Hin2; rewrite in_app in *; clarify; rewrite in_app; clarify. }
-Qed.
+Qed. !! *)
 
 Definition waits t := instr_rect'' (fun _ => nat) _
   (fun i => match i with Wait u => if eq_dec u t then 1 else 0 | _ => 0 end)
@@ -5696,6 +5682,7 @@ Proof.
     rewrite (waits_list_def t') in *; omega.
 Qed.
 
+(* !!
 Definition waiter t u := instr_rect'' _ (fun _ => tid -> Prop)
   (fun i => match i with Wait u' => fun t' => u' = u /\ t' = t
    | _ => fun _ => False end)
@@ -6015,7 +6002,7 @@ Proof.
     * rewrite app_nil_r; auto. }
   { unfold instrument_instr; rewrite app_length, wait_handler_len; simpl; omega.
   }
-Qed.
+Qed. !! *)
 
 Definition lock_instr l := instr_rect'' (fun _ => Prop) _
   (fun i => match i with Lock m | Unlock m => m = l | _ => False end)
@@ -6034,6 +6021,7 @@ Qed.
 Definition locks x (P : state) := exists e, In e P /\
   Exists (lock_instr x) (snd e).
 
+(* !!
 (* up *)
 Lemma in_step_rev : forall P G t o c P' G'
   (Hstep : exec P G t o c (Some P') G') t' li (Hin : In (t', li) P'),
@@ -6484,7 +6472,7 @@ Proof.
   destruct i; clarify.
   constructor; auto.
   rewrite safe_instrs in *; auto.
-Qed.  
+Qed.  !! *)
 
 Fixpoint instrument_prog P :=
   match P with
@@ -6505,8 +6493,9 @@ Proof.
   split; clarify; [|apply instrumented; auto].
   induction H; clarify.
   destruct x, y; clarify.
-Qed.  
+Qed.
 
+(* !!
 Definition state_suffix := Forall2 (fun (t1 t2 : tid * list instr) =>
   let (t, li) := t1 in fst t2 = t /\ exists n,
     n < length (instrument_instr (hd (Assign 0 (I 0)) li) t) /\
@@ -6615,6 +6604,9 @@ Proof.
         { eapply exec_step; eauto. }
         repeat (split; eauto); rewrite <- app_assoc; auto.
 Qed.    
+(* I want a better version of this, that identifies the first spawn along the
+   path. *)
+
 
 (* up *)
 Lemma Forall2_in1 : forall A P (l1 l2 : list A) x1 (Hall : Forall2 P l1 l2)
@@ -6662,7 +6654,7 @@ Lemma suffix_spawn : forall P P1 P2 (Hsuffix : state_suffix P P1)
   exists t0 n i rest n', In (t0, skipn n (instrument_instr i t0) ++ rest) P1 /\
      n < length (instrument_instr i t) /\ In (t, skipn n' rest) P2.
 Proof.
-  intros until t.
+  intros until G2; intro.
   remember (Some P1) as Pa; remember (Some P2) as Pb; generalize dependent P2;
     rewrite exec_rev in Hsteps; induction Hsteps; clarify.
   { exploit Hout; eauto; contradiction. }
@@ -6681,6 +6673,7 @@ Proof.
     clarify; rewrite skipn_skipn in *.
     repeat eexists; eauto.
   - clarify.
+    
 Abort.
   
 Lemma suffix_thread : forall P P1 P2 (Hsuffix : state_suffix P P1)
@@ -7112,7 +7105,7 @@ Proof.
   - eapply component_decr; eauto.
     { eapply exec_t_exec; eauto. }
     rewrite app_length, Hinstr; simpl; omega.
-Qed.
+Qed. !! *)
 
 Corollary exec_iexec' : forall P P' (Hfinal : final_state (Some P')) G' G lo lc
   (Hexec : exec_star (Some P) G lo lc (Some P') G')
@@ -7128,7 +7121,8 @@ Corollary exec_iexec' : forall P P' (Hfinal : final_state (Some P')) G' G lo lc
   (Hinit_v : forall v, v < zv -> initialized m (X' + v, 0)),
   exists lo' lc', iexec_star P G lo' lc' P' G' /\ consistent (m ++ lc').
 Proof.
-  intros; eapply exec_iexec with (lc0 := []); eauto; apply exec_refl.
+  admit.
+(*  intros; eapply exec_iexec with (lc0 := []); eauto; apply exec_refl. *)
 Qed.
 
 Inductive fail_iexec P (*G*) t :
@@ -7167,7 +7161,8 @@ Definition no_assert := instr_forall
 
 Definition no_asserts (P : state) :=
   Forall (fun e => Forall no_assert (snd e)) P.
-(*
+
+(* !!
 Lemma exec_fail_iexec : forall P G' G lo lc
   (Hexec : exec_star (Some P) G lo lc None G')
   P1 (HP : state_sim P1 P) (Hsafe : safe_locs P1) (Hfresh : fresh_tmps P1)
@@ -7354,7 +7349,7 @@ Proof.
     exploit (instrument_incom (Assert_le e1 e2)); simpl; eauto; clarify.
     setoid_rewrite Forall_app in Hno_asserts; clarify.
     inversion Hno_asserts2 as [|?? Hi]; inversion Hi; clarify.
-Qed. *)
+Qed. !! *)
 
 Lemma list_part_diff : forall (X:Type) (l1 l2 l3 l4: list X)
  (Hlen: length l1 = length l2) (Hdiff: l3<>l4), l1++l3<> l2++l4.
@@ -9384,29 +9379,41 @@ Proof.
     clarify.*)
 Qed.
 
+(* !! *)
 Print instrument.
 Print iexec.
 Theorem instrument_correct : forall P ops m P' G'
   (HP : exec_star (Some (init_state P)) init_env ops m (Some P') G')
-  (Hsafe_locs: safe_locs (init_state P))
-  (Hinit: forall p : ptr, meta_loc p -> initialized [] p)
-  (Hfresh: fresh_tmps (init_state P)) (Hclocks_sim: clocks_sim [] s0),
-  (exists m2 os P2' G2' (Hcon: consistent m2), iexec_star
-     (init_state (instrument P 0)) init_env ops os
-     P2' G2') <-> exists s, step_star s0 ops s. 
+  (Hfinal : final_state (Some P'))
+  (Hsafe_locs: safe_locs (init_state P)) (Hfresh: fresh_tmps (init_state P))
+  m0 (Hcon0 : consistent m0)
+  (Hinit: forall p : ptr, meta_loc p -> initialized m0 p)
+  (Hclocks_sim: clocks_sim m0 s0),
+  (exists ops2 m2 P2' G2', exec_star (Some (init_state (instrument P 0)))
+     init_env ops2 m2 (Some P2') G2' /\ final_state (Some P2') /\
+     consistent (m0 ++ m2)) <-> exists s, step_star s0 ops s. 
 Proof.
   intros. split.
-  -(*completeness*)
-    eexists.
-    inversion H; clarify.
-    clear H0. clarify.
-    exploit instrument_sim_safe2; eauto. Check instrument_sim_safe2.
-    { rewrite Forall_forall. clarify. destruct zt; clarify. }
-    { instantiate(1:=init_state (instrument P 0)). unfold distinct, init_state. clarify. 
+  -(*completeness*) (* i.e., instrumented execution -> race-free *)
+    intros (ops2 & m2 & P2' & G2' & Hsteps & Hfinal' & Hcon).
+    exploit exec_iexec'; eauto.
+    { rewrite instrumented_iff; clarify. }
+    { unfold distinct; simpl.
       constructor; auto. }
-    { unfold state_sim, init_state. clarify. }
-    { instantiate(1:=init_env). unfold env_sim. clarify. }
-    clarify. 
-    
-    
+    { repeat constructor; simpl; omega. }
+    { admit. }
+    { admit. }
+    { admit. }
+    { admit. }
+    { admit. }
+    { admit. }
+    { admit. }
+    { admit. }
+    (* Some of these well-formedness conditions are provable; others must be
+       assumed on P, and then we should be able to prove that we can transfer
+       them to instrument P 0. *)
+    intros (? & lc' & Histeps & Hicon).
+    (* The next thing is to prove a corollary of instrument_sim_safe2 that holds
+       for iexec_star rather than iexec. I think this shouldn't be too hard? *)
+       
 End Sim_Proofs.
