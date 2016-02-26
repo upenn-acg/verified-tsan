@@ -6615,6 +6615,9 @@ Proof.
         { eapply exec_step; eauto. }
         repeat (split; eauto); rewrite <- app_assoc; auto.
 Qed.    
+(* I want a better version of this, that identifies the first spawn along the
+   path. *)
+
 
 (* up *)
 Lemma Forall2_in1 : forall A P (l1 l2 : list A) x1 (Hall : Forall2 P l1 l2)
@@ -6662,7 +6665,7 @@ Lemma suffix_spawn : forall P P1 P2 (Hsuffix : state_suffix P P1)
   exists t0 n i rest n', In (t0, skipn n (instrument_instr i t0) ++ rest) P1 /\
      n < length (instrument_instr i t) /\ In (t, skipn n' rest) P2.
 Proof.
-  intros until t.
+  intros until G2; intro.
   remember (Some P1) as Pa; remember (Some P2) as Pb; generalize dependent P2;
     rewrite exec_rev in Hsteps; induction Hsteps; clarify.
   { exploit Hout; eauto; contradiction. }
@@ -6681,6 +6684,7 @@ Proof.
     clarify; rewrite skipn_skipn in *.
     repeat eexists; eauto.
   - clarify.
+    
 Abort.
   
 Lemma suffix_thread : forall P P1 P2 (Hsuffix : state_suffix P P1)
