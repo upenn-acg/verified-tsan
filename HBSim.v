@@ -7330,7 +7330,7 @@ Proof.
     apply iexec_load; auto.
     exploit distinct_thread; try apply H2; clarify.
     rewrite <- app_assoc; auto.
-  - 
+  - (* etc. *)
 Admitted.
 
 (*
@@ -7564,6 +7564,8 @@ Proof.
       inversion Hsafei; inversion Hfreshi; clarify.
 Qed.
 
+  
+(*
 Lemma exec_iexec1 : forall P P' G' G lo lc
   (Hexec : exec_star (Some P) G lo lc (Some P') G')
   P1 (HP : state_sim P1 P) (Hsafe : safe_locs P1) (Hfresh : fresh_tmps P1)
@@ -7607,6 +7609,7 @@ Proof.
     + eapply iexec_step; eauto.
     + rewrite <- app_assoc in *; auto.
 Qed.
+ *)
 
 Lemma exec_iexec : forall P P' (Hfinal : final_state (Some P')) G' G lo lc
   (Hexec : exec_star (Some P) G lo lc (Some P') G')
@@ -10057,11 +10060,77 @@ Proof.
     clarify.*)
 Qed.
 
-Print instrument.
-Print iexec.
+(* !! *)
+Lemma ss_trans : forall s tr s' tr' s'' (Hsteps : step_star s tr s')
+    (Hsteps' : step_star s' tr' s''), step_star s (tr ++ tr') s''.
+  Proof.
+    intros; induction Hsteps; clarify.
+    econstructor; eauto.
+  Qed.
 
-Theorem instrument_correct : forall P (Hsafe_locs: safe_locs (init_state P))
-  (Hfresh: fresh_tmps (init_state P)) m0 (Hcon0 : consistent m0)
+Print mem_sim.
+Definition mem_sim' (m1 : list conc_op) (m2 : list conc_op) :=
+forall c : conc_op,
+  In c m1 <-> In c m2 /\ ~ meta_loc (loc_of c).
+                                         
+Corollary instrument_sim_safe2' : forall  P1 P2 G1 G2 
+  (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1)
+  (Ht : Forall (fun e => fst e < zt) P1) (Hdistinct: distinct P2)
+  (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2)
+  m 
+  (Hinit : forall p, meta_loc p -> initialized m p)
+  lo2 lc2 P2' G2' (Hstep : iexec_star P2 G2 lo2 lc2 P2' G2')
+  (Hcon : consistent (m ++ lc2)) s (Hs : clocks_sim m s),
+  exists lo lc P1' G1', exec_star (Some P1) G1 lo lc (Some P1') G1' /\
+    state_sim P1' P2' /\ env_sim G1' G2' /\ consistent (m ++ lc) /\
+    mem_sim' lc lc2 /\
+        exists s', step_star s lo s' /\
+                   clocks_sim (m ++ lc2) s'.
+Proof.
+  admit.
+  (*
+  intros.
+  generalize dependent m. generalize dependent P1. generalize dependent G1.
+  generalize dependent s.
+  induction Hstep; clarify.
+  -do 4 eexists.
+   split;[|split;[|split;[|split]]]; eauto.
+   eapply exec_refl.
+   eexists. split. eapply ss_refl. rewrite app_nil_r. auto. 
+  -exploit instrument_sim_safe2.
+   { eapply Hfresh. }
+   { eapply Hlocs. }
+   { apply Ht. }
+   { eapply Hdistinct. }
+   { apply HPsim. }
+   { eapply HGsim. }
+   { apply Hinit. }
+   { apply Hexec. }   
+   { eapply consistent_app_SC; rewrite <- app_assoc. eauto. }
+   { apply Hs. }
+   intro Heexec. clarify.
+   assert(distinct P') as HdP' by admit.
+   assert(consistent ((m ++ c)++ lc)) as Hcon_mlc by admit.
+   assert( forall p : ptr, meta_loc p -> initialized (m++c) p) as Hinit_mx0' by admit.
+   assert(fresh_tmps x1) as Hfresh_x1 by admit.
+   assert(safe_locs x1) as Hsafe_x1 by admit.
+   assert(Forall (fun e : nat * list instr => fst e < zt) x1) as Ht_x1 by admit.
+   specialize(IHHstep HdP' x3 x2 Heexec221 x1 Hfresh_x1 Hsafe_x1 Ht_x1 Heexec21 _ Hinit_mx0' Hcon_mlc Heexec222222).
+   clarify.
+   do 4 eexists. split;[|split;[|split;[|split]]].
+   +eapply exec_step. eapply Heexec1. eapply IHHstep1.
+   +auto. 
+   +auto.
+   +admit.
+   +admit.*)
+Qed.
+
+
+Theorem instrument_correct : forall P (*m ops P' G'
+  (HP : exec_star (Some (init_state P)) init_env ops m (Some P') G')
+  (Hfinal : final_state (Some P'))*)
+  (Hsafe_locs: safe_locs (init_state P)) (Hfresh: fresh_tmps (init_state P))
+  m0 (Hcon0 : consistent m0)
   (Hinit: forall p : ptr, meta_loc p -> initialized m0 p)
   (Hclocks_sim: clocks_sim m0 s0),
   (exists ops2 m2 P2' G2', exec_star (Some (init_state (instrument P 0)))
@@ -10090,8 +10159,13 @@ Proof.
        assumed on P, and then we should be able to prove that we can transfer
        them to instrument P 0. *)
     intros (? & lc' & Histeps & Hicon).
+    exploit instrument_sim_safe2'; eauto.
+    {admit. }
+    {admit. }
+    {admit. }
+    { instantiate(1:=init_env). unfold env_sim. clarify. }
+    intros He. Print state_sim.
     (* The next thing is to prove a corollary of instrument_sim_safe2 that holds
        for iexec_star rather than iexec. I think this shouldn't be too hard? *)
        
-    
 End Sim_Proofs.
