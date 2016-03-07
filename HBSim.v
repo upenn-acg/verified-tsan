@@ -6609,6 +6609,7 @@ Proof.
         repeat (split; eauto); rewrite <- app_assoc; auto.
 Qed.
 
+(* 
 Lemma in_steps_rev2 : forall P G lo lc P' G' (Hdistinct : distinct P)
   (Hsteps : exec_star (Some P) G lo lc (Some P') G')
   t li (Hin : In (t, li) P'),
@@ -7792,7 +7793,7 @@ Proof.
     [|unfold negb, beq in *; clarify].
   rewrite Forall_forall in Hindep; apply Hindep.
   rewrite filter_In; unfold beq; clarify.
-Qed.
+Qed.*)
 
 (*
 Lemma first_finished : forall P P0 (Hsim : state_sim P P0)
@@ -8097,7 +8098,7 @@ Lemma exec_iexec : forall P P' (Hfinal : final_state (Some P')) G' G lo lc
   (* And not just an arbitrary lc'; one that can read the same values? *)
 Proof.
 
-  admit.(*
+  admit. (*
   intros ????.
   remember (size P) as z; generalize dependent P;
     induction z using lt_wf_ind; clarify.
@@ -10507,14 +10508,6 @@ Proof.
     clarify.*)
 Qed.
 
-(* !! *)
-Lemma ss_trans : forall s tr s' tr' s'' (Hsteps : step_star s tr s')
-    (Hsteps' : step_star s' tr' s''), step_star s (tr ++ tr') s''.
-  Proof.
-    intros; induction Hsteps; clarify.
-    econstructor; eauto.
-  Qed.
-
 Print mem_sim.
 Definition mem_sim' (m1 : list conc_op) (m2 : list conc_op) :=
 forall c : conc_op,
@@ -10570,9 +10563,10 @@ Lemma legal_tids_steps : forall P G lo lc P' G'
                                 (Hsteps: exec_star (Some P) G lo lc (Some P') G'),
                            legal_tids P'.
 Proof.
-  intros. induction Hsteps.
-  -admit. (* lost information about P' here *)
-  -admit.
+  intros. remember (Some P) as Pa; remember (Some P') as Pb;
+    generalize dependent P; induction Hsteps; clarify.
+  (* base case discharged automatically *)
+  admit.
 Qed.
                               
 
@@ -10581,6 +10575,14 @@ Lemma consistent_mem_sim: forall m m1 c1 m2
                                             (Hmem_sim: mem_sim c1 m1),
                             consistent (m++ opt_to_list c1 ++ m2).
 Admitted.
+
+Lemma ss_trans : forall (s : @VectorClocks.state tid var lock) tr s' tr' s''
+  (Hsteps : step_star s tr s')
+  (Hsteps' : step_star s' tr' s''), step_star s (tr ++ tr') s''.
+  Proof.
+    intros; induction Hsteps; clarify.
+    econstructor; eauto.
+  Qed.
 
 Corollary instrument_sim_safe2' : forall  P1 P2 G1 G2 
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1)
@@ -10657,7 +10659,7 @@ Proof.
      { assert(Hin_lc2_notmeta: In c lc2 /\ ~ meta_loc (loc_of c)) by clarify.
        apply Hmem_sim'_lc1_lc2 in Hin_lc2_notmeta. rewrite in_app. clarify. }
    +exists s''. split.
-    *(* apply ss_trans with (s':=s'). *) admit.
+    * apply ss_trans with (s':=s'); auto.
     *rewrite app_assoc. auto.
 Qed.
 
