@@ -179,9 +179,23 @@ Proof.
   -rewrite Forall_app; split; clarify.
    rewrite Forall_forall. intros c Hin. inversion Hin; clarify.
 Qed.   
-  
 
-Lemma instrument_sim_safe : forall P P1 P2 G1 G2 t h
+
+Definition initialized m p :=
+  exists v, last_op (lower(MM_base := Base) m) (Ptr p) (MWrite p v).
+
+
+Definition mem_sim' (m1 : list conc_op) (m2 : list conc_op) :=
+forall c : conc_op,
+  In c m1 <-> In c m2 /\ ~ meta_loc (loc_of c).
+
+Lemma consistent_mem_sim: forall m m1 c1 m2
+                                            (Hcon: consistent (m ++ m1 ++ m2))
+                                            (Hmem_sim: mem_sim c1 m1),
+                            consistent (m++ opt_to_list c1 ++ m2).
+Admitted.
+
+Lemma instrument_sim_safe : forall (*P*) P1 P2 G1 G2 t (*h*)
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1) (Hdistinct : distinct P2)
   (Ht : Forall (fun e => fst e < zt) P1) 
   (Ht_spawn: Forall (fun p =>  match p with
@@ -189,13 +203,14 @@ Lemma instrument_sim_safe : forall P P1 P2 G1 G2 t h
                                  | (t0,Wait u ::rest) => u <> t0
                                  | _ => True
                                end) P1)
-  (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2)
-  m (Hroot : exec_star (Some (init_state P)) init_env h m (Some P1) G1)
+  (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2) m0
+  m1 m2 (*(Hroot : exec_star (Some (init_state P)) init_env h m (Some P1) G1)*)
+  (Hinit: forall p: ptr, meta_loc p -> initialized m0 p)
   o c P1' G1' (Hstep : exec P1 G1 t o c (Some P1') G1')
-  (Hcon : consistent (m ++ opt_to_list c))
-  s (Hs : clocks_sim m s) s' (Hsafe : step_star s (opt_to_list o) s'),
+  (Hcon1 : consistent (m0 ++ m1 ++ opt_to_list c)) (Hcon2 : consistent (m0 ++ m2))
+  s (Hs : clocks_sim (m0++m2) s) s' (Hsafe : step_star s (opt_to_list o) s'),
   exists lo lc P2' G2', exec_star (Some P2) G2 lo lc (Some P2') G2' /\
-    consistent (m ++ lc) /\ state_sim P1' P2' /\ env_sim G1' G2' /\
+    consistent (m0++m2 ++ lc) /\ state_sim P1' P2' /\ env_sim G1' G2' /\
     mem_sim c lc.
 Proof.
   admit.
@@ -2548,8 +2563,7 @@ Proof.
         { apply loc_valid; auto. }
 Qed.
 
-Definition initialized m p :=
-  exists v, last_op (lower(MM_base := Base) m) (Ptr p) (MWrite p v).
+
 
 Lemma can_read_unique : forall m p v v' (Hcon : consistent m)
   (Hinit : initialized m p) (Hv : can_read m p v) (Hv' : can_read m p v'),
@@ -10508,11 +10522,6 @@ Proof.
     clarify.*)
 Qed.
 
-Print mem_sim.
-Definition mem_sim' (m1 : list conc_op) (m2 : list conc_op) :=
-forall c : conc_op,
-  In c m1 <-> In c m2 /\ ~ meta_loc (loc_of c).
-
 Lemma iexec_star_exec_star : forall P G lo lc P' G' (Hiexec : iexec_star P G lo lc P' G'),
   exec_star (Some P) G lo lc (Some P') G'.
 Proof.
@@ -10564,17 +10573,16 @@ Lemma legal_tids_steps : forall P G lo lc P' G'
                            legal_tids P'.
 Proof.
   intros. remember (Some P) as Pa; remember (Some P') as Pb;
-    generalize dependent P; induction Hsteps; clarify.
+  generalize dependent P; induction Hsteps; clarify.
   (* base case discharged automatically *)
-  admit.
+  destruct P'0; clarify.
+  -specialize(IHHsteps s). apply IHHsteps; auto.
+   eapply legal_tids_step with (P:=P0); eauto.
+  -inversion Hsteps.
 Qed.
                               
 
-Lemma consistent_mem_sim: forall m m1 c1 m2
-                                            (Hcon: consistent (m ++ m1 ++ m2))
-                                            (Hmem_sim: mem_sim c1 m1),
-                            consistent (m++ opt_to_list c1 ++ m2).
-Admitted.
+
 
 Lemma ss_trans : forall (s : @VectorClocks.state tid var lock) tr s' tr' s''
   (Hsteps : step_star s tr s')
@@ -10663,7 +10671,7 @@ Proof.
     *rewrite app_assoc. auto.
 Qed.
 
-Corollary instrument_sim_safe' : forall P P1 P2 G1 G2 h
+Corollary instrument_sim_safe' : forall (* P*) P1 P2 G1 G2 (*h*)
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1) (Hdistinct : distinct P2)
   (Ht : legal_tids P1) 
   (Ht_spawn: Forall (fun p =>  match p with
@@ -10672,14 +10680,14 @@ Corollary instrument_sim_safe' : forall P P1 P2 G1 G2 h
                                  | _ => True
                                end) P1)
   (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2)
-  m (Hroot : exec_star (Some (init_state P)) init_env h m (Some P1) G1)
+  m0 m1 m2 (*(Hroot : exec_star (Some (init_state P)) init_env h m (Some P1) G1)*)
   lo lc P1' G1' (Hstep : exec_star (Some P1) G1  lo lc (Some P1') G1')
-  (Hcon : consistent (m ++ lc))
-  s (Hs : clocks_sim m s) s' (Hsafe : step_star s lo s'),
+  (Hcon : consistent (m0++m1 ++ lc))
+  s (Hs : clocks_sim (m0++m2) s) s' (Hsafe : step_star s lo s'),
   exists lo2 lc2 P2' G2', exec_star (Some P2) G2 lo2 lc2 (Some P2') G2' /\
-    consistent (m ++ lc2) /\ state_sim P1' P2' /\ env_sim G1' G2' /\
+    consistent (m0++m2 ++ lc2) /\ state_sim P1' P2' /\ env_sim G1' G2' /\
     mem_sim' lc lc2.
-Proof.
+Proof. Print instrument_sim_safe.
   intros.
   induction Hstep; clarify.
   -exists []. exists []. exists P2. exists G2. 
