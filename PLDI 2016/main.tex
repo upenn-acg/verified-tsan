@@ -176,13 +176,10 @@ Several systems exist for detecting data races in structured parallel programs s
 
 
 \section{Conclusions and Future Work}
-verified FastTrack instrumentation
 
-more faithful/detailed implementation
+We have presented the first verified proofs of correctness of the vector clock and FastTrack race detection algorithms, and a verified implementation of vector clock race detection for a simple multithreaded language. Our verification efforts have revealed an issue in the original paper proof of correctness for FastTrack, and an instance of unnecessary computation in the FastTrack implementation. Our work places dynamic data race detection on a formally-verified foundation for the first time.
 
-relaxed memory, if it matters
-
-other kinds of instrumentation, e.g. atomicity violation monitoring
+There are many natural avenues for extending our work: to verify new algorithms for race detection or other dynamic analyses, new implementations, and implementations in richer languages such as LLVM bytecode or C. The amount of effort expended to achieve our verified implementation suggests that richer verified abstractions are necessary to scale such efforts further and bring the benefits of verified dynamic analysis to a wider audience.
 
 \bibliographystyle{abbrvnat}
 \bibliography{sources}
