@@ -54,9 +54,9 @@
 \setlength{\pdfpageheight}{\paperheight}
 \setlength{\pdfpagewidth}{\paperwidth}
 
-\conferenceinfo{PLDI '16}{June 13--17, 2016, Santa Barbara, California, United States} 
-\copyrightyear{2016}
-\copyrightdata{978-1-nnnn-nnnn-n/yy/mm} 
+%\conferenceinfo{PLDI '16}{June 13--17, 2016, Santa Barbara, California, United States} 
+%\copyrightyear{2016}
+%\copyrightdata{978-1-nnnn-nnnn-n/yy/mm} 
 %\doi{nnnnnnn.nnnnnnn}
 
 % Uncomment one of the following two, if you are not going for the 
@@ -69,8 +69,8 @@
                                   % (paid open-access papers, 
                                   % short abstracts)
 
-\titlebanner{banner above paper title}        % These are ignored unless
-\preprintfooter{short description of paper}   % 'preprint' option specified.
+\titlebanner{}        % These are ignored unless
+\preprintfooter{}   % 'preprint' option specified.
 
 \title{Verifying Dynamic Race Detection}
 \ignore{\authorinfo{William Mansky \and Yuanfeng Peng \and Steve Zdancewic \and Joseph Devietti}
@@ -83,29 +83,37 @@
 Writing race-free concurrent code is notoriously difficult, and races can result in bugs that are difficult to isolate and reproduce. Dynamic race detection is often used to catch races that cannot (easily) be detected statically. One approach to dynamic race detection is to instrument the potentially racy code with operations that store and compare metadata, where the metadata implements some known race detection algorithm (e.g. vector clock race detection). In this paper, we lay out an instrumentation pass for race detection in a simple language, and present a mechanized formal proof of its correctness: all races in a program will be caught by the instrumentation, and all races detected by the instrumentation are possible in the original program.
 \end{abstract}
 
-\category{CR-number}{subcategory}{third-level}
+%\category{CR-number}{subcategory}{third-level}
 
-\keywords
-dynamic race detection, interactive theorem proving
+%\keywords
+%dynamic race detection, interactive theorem proving
 
 \section{Introduction}
 
-Multicore processors have steadily invaded a broad swathe of the computing ecosystem in everything from datacenters to smart watches. Writing multithreaded code for such platforms can bring good performance but also a host of programmability challenges. One of the key challenges is dealing with data races, as the presence of a data race introduces non-sequentially-consistent \cite{manson_java_2005} and in some cases undefined \cite{boehm_foundations_2008} behavior into programs, making program semantics very difficult to understand. There are many systems that provide sound and complete data race detection via dynamic analysis \cite{djit+,fasttrack,slimstate} to help programmers detect and remove data races from their programs. 
+Multicore processors have steadily invaded a broad swathe of the computing ecosystem in everything from datacenters to smart watches. Writing multithreaded code for such platforms can bring good performance but also a host of programmability challenges. One of the key challenges is dealing with data races, as the presence of a data race introduces non-sequentially-consistent \cite{manson_java_2005} and in some cases undefined \cite{boehm_foundations_2008} behavior into programs, making program semantics very difficult to understand. Races are not detected by default in current language runtimes, though there are many systems that provide sound and complete data race detection via dynamic analysis \cite{djit+,fasttrack,slimstate,slimfast} to help programmers detect and remove data races from their programs. 
 
-While these analyses have been proven correct, such proofs have two main shortcomings: they are proofs of the algorithms, instead of the implementations, and they are paper proofs instead of machine-checked proofs. Because of these shortcomings, it is possible that a race detector does not faithfully implement its algorithm, or that the algorithm itself is not fully correct. Indeed, our verified approach reveals a small issue in the paper proof from \cite{fasttrack} that, while fixable, illustrates the potential dangers that stem from best-effort proofs and implementations.
+While these analyses have been proven correct, such proofs have two main shortcomings: they are proofs of the algorithms, instead of the implementations, and they are paper proofs instead of machine-checked proofs. Because of these shortcomings, it is possible that a race detector does not faithfully implement its algorithm, or that the algorithm itself is not fully correct. 
 
-Our approach seeks to rectify these concerns and place dynamic race detection on a provably-correct foundation by providing the first fully-verified implementation of vector clock race detection. We adopt a two-level approach, first verifying the high-level algorithm and then verifying that an instrumentation pass for a simple language faithfully implements the algorithm and preserves the semantics of the original, uninstrumented program. We believe that our approach is useful for verifying race detection algorithms and implementations, which we show by verifying the correctness of the FastTrack \cite{fasttrack} algorithm. Crucially, our verification of FastTrack is achieved by proving it equivalent to the simpler vector clock race detection algorithm, which is more efficient than proving FastTrack's correctness directly. To the best of our knowledge, ours is the first scheme to adopt formal verification for either race detection algorithms \emph{or} their implementation. Moreover, we believe our general approach may be useful for verifying a broad range of dynamic analyses, helping to ensure that debugging tools are themselves free from bugs.
+In this paper, we seek to rectify these concerns and place dynamic race detection on a provably-correct foundation for the first time. We have begun by formalizing the proof of the classic vector clock race detection algorithm \cite{fidge,friedmann_mattern} using the Coq interactive theorem prover \cite{coq}. Having established the correctness of this base algorithm, we extend our work along two dimensions. 
 
-\TODO{need more technical nuggets here, and/or a figure?}
+\TODO{figure showing these two dimensions?}
+
+We first explore the \textbf{algorithmic dimension}, by formally establishing the correctness of the FastTrack algorithm \cite{fasttrack}. FastTrack includes several significant optimizations over the base vector clock algorithm. We find that the correctness of FastTrack can be demonstrated by proving its equivalence to the vector clock algorithm, which is a more straightforward process than demonstrating correctness in isolation, and likely lends itself to formalizing additional algorithms with reduced effort. Our verification efforts have revealed a small issue in the paper proof from \cite{fasttrack} that, while fixable, illustrates the potential dangers that stem from best-effort proofs. We have repaired this issue in our proof of FastTrack, establishing that the algorithm is correct.
+
+We next explore the \textbf{implementation dimension}, by formally establishing in Coq the correctness of an implementation of vector clock race detection on a simple imperative language with threads. Given a program written in our language, our race detector adds instrumentation, written in the same language, to the program to perform vector clock race detection. We demonstrate that this instrumentation correctly implements the vector clock algorithm, again leveraging our previous verification effort. We also prove that our implementation preserves the program's semantics in the absence of races. While constructing our implementation, we consulted the existing implementation of FastTrack for guidance and our verification process brought to light an example of extraneous work performed by the current FastTrack implementation. This issue is unlikely to have come to light otherwise, but when proving our implementation equivalent to the abstract algorithm such discrepancies were quickly revealed. This again demonstrates the value of formal verification over best-effort implementation, ensuring that an implementation does no less, and no more, than is necessary for correctness.
+
+To the best of our knowledge, ours is the first work to adopt formal verification for either race detection algorithms \emph{or} their implementations. Moreover, we believe our general approach may be useful as a template for verifying a broad range of dynamic analyses, especially in the challenging domain of analyses for parallel programs. Verification is critical to help ensure that debugging tools are themselves free from bugs.
 
 This paper makes the following contributions:
 
 \begin{itemize}
-\item We give the first mechanized proofs of correctness of vector clock race detection and the FastTrack algorithm
-\item We discovered an issue in the paper proof of correctness for FastTrack that we repair in our mechanized proof
-\item We describe an instrumentation pass that has been proved to implement vector clock race detection for a simple language
-\item We present a method for verifying race detection instrumentation (the deep spec approach)
+\item We present a method for verifying a dynamic data race detector from the algorithmic level through to its implementation
+\item We give the first verified proofs of correctness of the vector clock and FastTrack data race detection algorithms
+\item We give the first verified implementation of vector clock race detection on a simple, imperative multithreaded language
+\item We uncover issues in the paper proof of correctness for FastTrack and in its current implementation, that are unlikely to have been revealed without our verification efforts. We repair these issues in our own proofs and implementation.
 \end{itemize}
+
+The remainder of this paper is organized as follows \TODO{...}
 
 \section{Proof Strategy}
 Our approach involves two levels: verifying the high-level algorithm, and proving that an instrumentation pass implements the algorithm.
@@ -154,7 +162,7 @@ wait-wait races
 
 \section{Related Work}
 
-\TODO{discuss verified instrumentation like SoftBound}
+\TODO{discuss verified instrumentation like SoftBound, RockSalt SFI? I don't think either of these support multithreading.}
 
 There is a rich history of systems that provide dynamic data race detection, dating back to the original proposals of the vector clock algorithm \cite{friedmann,mattern,lamportvc}. Subsequent systems have implemented vector clocks, with various optimizations, using dynamic analysis to provide race detection for C/C++ \cite{pozniansky_efficient_2003,serebryany_threadsanitizer:_2009} and Java \cite{christiaens_trade:_2001,elmas_goldilocks:_2007,flanagan_fasttrack:_2009,flanagan_fasttrack:_2010,slimstate} programs. These systems have relied on paper proofs to demonstrate correctness, but these proofs have not been mechanically verified until our work. Furthermore, these paper proofs operate at a high level of abstraction, using an operational semantics that elides important details such as the synchronization used within the race detector itself. Thus, the implementations of these algorithms are far removed from the algorithms themselves, leaving the door open for bugs.
 
