@@ -184,11 +184,26 @@ Qed.
 Definition initialized m p :=
   exists v, last_op (lower(MM_base := Base) m) (Ptr p) (MWrite p v).
 
+Definition in_range_dec i a b : {a <= i < b} + {~a <= i < b}.
+Proof.
+  destruct (le_dec a i); [|right; omega].
+  destruct (lt_dec i b); [left; auto | right; omega].
+Qed.
 
-Definition mem_sim' (m1 : list conc_op) (m2 : list conc_op) :=
-forall c : conc_op,
-  In c m1 <-> In c m2 /\ ~ meta_loc (loc_of c).
+Definition meta_loc_dec x : {meta_loc x} + {~meta_loc x}.
+Proof.
+  unfold meta_loc.
+  destruct (in_range_dec (fst x) C (C + zt)); [left; auto|].
+  destruct (in_range_dec (fst x) L (L + zl)); [left; auto|].
+  destruct (in_range_dec (fst x) R (R + zv)); [left; auto|].
+  destruct (in_range_dec (fst x) W (W + zv)); [left; auto|].
+  destruct (in_range_dec (fst x) X (X + zv)); [left; auto|].
+  right; intro; clarify.
+Qed.
 
+Definition mem_sim' (m1 m2 : list conc_op) :=
+  filter (fun c => if meta_loc_dec (loc_of c) then false else true) m2 = m1.
+  
 Lemma consistent_mem_sim: forall m m1 c1 m2
                                             (Hcon: consistent (m ++ m1 ++ m2))
                                             (Hmem_sim: mem_sim c1 m1),
@@ -13622,10 +13637,10 @@ Theorem instrument_correct : forall P (Hsafe_locs: safe_locs (init_state P))
       | Assert_le _ _ :: _ => True
       end) (init_state P))
   (Hinit: forall p : ptr, meta_loc p -> initialized m0 p)
-  (Hclocks_sim: clocks_sim m0 s0),
+  (Hclocks_sim: clocks_sim m0 s0) m1,
   (exists ops2 m2 P2' G2', exec_star (Some (init_state (instrument P 0)))
      init_env ops2 m2 (Some P2') G2' /\ final_state (Some P2') /\
-     consistent (m0 ++ m2)) <-> (exists ops m1 P' G',
+     consistent (m0 ++ m2) /\ mem_sim' m1 m2) <-> (exists ops P' G',
    exec_star (Some (init_state P)) init_env ops m1 (Some P') G' /\
    final_state (Some P') /\ consistent (m0 ++ m1) /\ exists s, step_star s0 ops s).
 Proof.
@@ -13672,6 +13687,47 @@ Proof.
    intros (lo2 & lc2 & P2' & G2' & Hexec_star_instr & Hcon2 & Hstate_sim_P'_P2' & Henv_sim_G'_G2' & Hmem_sim'_m_lc2).
    do 4 eexists. split;[|split]; eauto.
    apply state_sim_final with (P1:=P'); auto.
+Qed.
+
+Theorem instrument_correct_race : forall P
+  (Hsafe_locs: safe_locs (init_state P))
+  (Hfresh: fresh_tmps (init_state P)) m0 (Hcon0 : consistent m0)
+  (Ht: legal_tids (init_state P))
+  (Hvinit : forall v : nat, v < zv -> initialized m0 (X' + v, 0) )
+(Hlinit :    forall l : nat, l < zl -> initialized m0 (l, 0))
+(Hsafe_waits:    safe_waits (init_state (instrument P 0)))
+(Hsafe_spawns:    safe_spawns (init_state (instrument P 0)) )
+(Hgood_var: forall v : nat, v < zv -> good_var v (init_state (instrument P 0)))
+(Hgood_lock: forall v : nat,
+   v < zv -> good_lock (X' + v, 0) (init_state (instrument P 0)))
+(Hwell_locked: forall l : nat, l < zl -> well_locked l (init_state (instrument P 0)))
+(Hlgood_lock:  forall l : lock,
+   locks l (init_state (instrument P 0)) ->
+   good_lock (l, 0) (init_state (instrument P 0)))
+  (Hspawn_wait:  Forall
+     (fun p : tid * list instr =>
+      let (t0, y) := p in
+      match y with
+      | [] => True
+      | Assign _ _ :: _ => True
+      | Load _ _ :: _ => True
+      | Store _ _ :: _ => True
+      | Lock _ :: _ => True
+      | Unlock _ :: _ => True
+      | Spawn u _ :: _ => u <> t0
+      | Wait u :: _ => u <> t0
+      | Assert_le _ _ :: _ => True
+      end) (init_state P))
+  (Hinit: forall p : ptr, meta_loc p -> initialized m0 p)
+  (Hclocks_sim: clocks_sim m0 s0),
+  (exists ops2 m2 G2', exec_star (Some (init_state (instrument P 0)))
+    init_env ops2 m2 None G2' /\ consistent (m0 ++ m2)) <->
+  (exists ops m1 P' G',
+    exec_star (Some (init_state P)) init_env ops m1 (Some P') G' /\
+    final_state (Some P') /\ consistent (m0 ++ m1) /\
+    forall s, ~step_star s0 ops s).
+Proof.
+  admit.
 Qed.
 
 End Sim_Proofs.
