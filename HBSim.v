@@ -189,11 +189,35 @@ Definition mem_sim' (m1 : list conc_op) (m2 : list conc_op) :=
 forall c : conc_op,
   In c m1 <-> In c m2 /\ ~ meta_loc (loc_of c).
 
+Lemma mem_sim_iff_mem_sim' : forall m c ,
+    mem_sim c m <-> mem_sim' (opt_to_list c) m.
+Proof.
+  split;
+  unfold mem_sim', mem_sim; clarify.
+Qed.
+
+Lemma mem_sim'_app : forall m1 m2 m3 m4
+  (Hmem_sim'12: mem_sim' m1 m2) (Hmem_sim'34: mem_sim' m3 m4),
+                       mem_sim' (m1++m3) (m2++m4).
+Proof.
+  unfold mem_sim'.
+  clarify.
+  split;clarify;
+  rewrite in_app in *.
+  -destruct H as [Hinm1 | Hinm3].
+   +apply Hmem_sim'12 in Hinm1. split; clarify.
+   +apply Hmem_sim'34 in Hinm3. split; clarify.
+  -destruct H1 as [Hinm2 | Hinm4].
+   +left. rewrite Hmem_sim'12. clarify.
+   +right. rewrite Hmem_sim'34. clarify.
+Qed.
+
+(*
 Lemma consistent_mem_sim: forall m m1 c1 m2
                                             (Hcon: consistent (m ++ m1 ++ m2))
                                             (Hmem_sim: mem_sim c1 m1),
                             consistent (m++ opt_to_list c1 ++ m2).
-Admitted.
+Admitted.*)
 
 Lemma instrument_sim_safe : forall (*P*) P1 P2 G1 G2 t (*h*)
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1) (Hdistinct : distinct P2)
@@ -219,7 +243,7 @@ Proof.
   intros.
   inversion Hs as [ Hs_c (Hs_l,Hs_rw)]; clarify.
   assert (exists lo lc P2' G2', iexec P2 G2 t lo lc P2' G2' /\
-    consistent (m ++ lc) /\ mem_sim c lc).
+    consistent (m0 ++ m2 ++ lc) /\ mem_sim c lc /\ clocks_sim (m0++m2++lc) s').
   inversion Hstep; clarify; exploit Forall2_app_inv_l; eauto 2;
   intros (P0' & P3' & HP0 & Hrest & ?);
   inversion Hrest as [|? (?, ?) ? ? ? HP3]; clarify.
@@ -13455,28 +13479,7 @@ Proof.
    eapply ss_step; eauto.
 Qed.
 
-Lemma mem_sim_iff_mem_sim' : forall m c ,
-    mem_sim c m <-> mem_sim' (opt_to_list c) m.
-Proof.
-  split;
-  unfold mem_sim', mem_sim; clarify.
-Qed.
 
-Lemma mem_sim'_app : forall m1 m2 m3 m4
-  (Hmem_sim'12: mem_sim' m1 m2) (Hmem_sim'34: mem_sim' m3 m4),
-                       mem_sim' (m1++m3) (m2++m4).
-Proof.
-  unfold mem_sim'.
-  clarify.
-  split;clarify;
-  rewrite in_app in *.
-  -destruct H as [Hinm1 | Hinm3].
-   +apply Hmem_sim'12 in Hinm1. split; clarify.
-   +apply Hmem_sim'34 in Hinm3. split; clarify.
-  -destruct H1 as [Hinm2 | Hinm4].
-   +left. rewrite Hmem_sim'12. clarify.
-   +right. rewrite Hmem_sim'34. clarify.
-Qed.
 
 Corollary instrument_sim_safe' : forall (* P*) P1 P2 G1 G2 (*h*)
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1) (Hdistinct : distinct P2)
