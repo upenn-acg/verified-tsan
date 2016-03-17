@@ -32,6 +32,14 @@
 \newcommand{\spawn}[2]{\texttt{spawn}\ #1\ #2}
 \newcommand{\wait}[1]{\texttt{wait}\ #1}
 \newcommand{\assert}[2]{\texttt{assert(}#1\ \texttt{<=}\ #2\texttt{)}}
+\newcommand{\move}[2]{\ensuremath{\mathsf{move}(#1, #2)}}
+\newcommand{\setvc}[2]{\ensuremath{\mathsf{set}(#1, #2)}}
+\newcommand{\incvc}[2]{\ensuremath{\mathsf{inc}(#1, #2)}}
+\newcommand{\maxa}[2]{\ensuremath{\mathsf{max}(#1, #2)}}
+\newcommand{\maxvc}[2]{\ensuremath{\mathsf{join}(#1, #2)}}
+\newcommand{\lea}[2]{\ensuremath{\mathsf{lea}(#1, #2)}}
+\newcommand{\vcle}[2]{\ensuremath{\mathsf{hb\_check}(#1, #2)}}
+\newcommand{\instr}[2]{\ensuremath{\mathsf{instrument}(#1, #2)}}
 
 %from StackExchange, a better xrightarrow^*
 \newcommand{\tto}[1]{\mathrel{
@@ -131,7 +139,7 @@ We define a simple multithreaded language that is just complicated enough to hav
 A \emph{program} is simply a list of instructions. The dynamic state of a program contains a collection of threads, where a thread is a pair $(t, \mathit{li})$ of a tid and a list of instructions, and a family of local environments $G_t$, one for each thread, assigning values to local variables. We give semantics to the language via a transition system of the form $(P, G) \xrightarrow{o, c} (P', G')$, where $P, P'$ are collections of threads, $G, G'$ are environments, $o$ is a race detection operation (if one is produced by the step), and $c$ is a concurrent memory operation (likewise). We define a function $\mathsf{eval}$ that takes a local environment and an expression and yields the value of the expression. The semantics of the language are shown in Figure~\ref{semantics}.
 
 \begin{figure}[htb]
-$$\inference[assign]{}{(e_1\ ...\ (t, \assign{a}{e}\ \mathit{li})\ ...\ e_k, G) \rightarrow (e_1\ ...\ (t, \mathit{li})\ ...\ e_2, G[G_t[a \mapsto \mathsf{eval}(G_t, e)]])}$$
+$$\inference[assign]{}{(e_1\ ...\ (t, \assign{a}{e}\ \mathit{li})\ ...\ e_k, G) \rightarrow \\(e_1\ ...\ (t, \mathit{li})\ ...\ e_2, G[G_t[a \mapsto \mathsf{eval}(G_t, e)]])}$$
 
 \caption{Semantics of the simple language}
 \label{semantics}
@@ -139,9 +147,50 @@ $$\inference[assign]{}{(e_1\ ...\ (t, \assign{a}{e}\ \mathit{li})\ ...\ e_k, G) 
 
 
 \subsection{Instrumentation}
+For each rule of the vector clock algorithm, we provide a code snippet that can be added to the associated instruction to implement the rule. We begin by defining macros for the basic mathematical operations of the algorithm, as shown in Figure~\ref{helper}. We designate two local variables unused in the base program (\texttt{tmp1} and \texttt{tmp2}) as temporaries for use by the instrumentation. Let $z$ be the number of threads generated over the lifetime of the program. (Note that in our simple language, $z$ can be determined statically; in real-world implementations, the vector clock data would need to be dynamically resized in memory if more threads were created.)
+
+\begin{figure}[htb]
+\move{p}{q} $\triangleq$ \load{\texttt{tmp1}}{$p$}\texttt{;} \store{$q$}{\texttt{tmp1}}
+
+\setvc{a}{b} $\triangleq$ \move{(a, 0)}{(b, 0)}\texttt{;} ...\texttt{;} \move{(a, z - 1)}{(b, z - 1)}
+$(V = V')$
+
+\incvc{a}{b} $\triangleq$ \load{\texttt{tmp1}}{$(a, t)$}\texttt{;} \assign{\texttt{tmp1}}{\texttt{tmp1 + 1}}\texttt{;} \store{$(a, t)$}{\texttt{tmp1}}
+$(C = C[t := \mathit{inc}_t(C_t)])$
+
+\maxa{p}{q} $\triangleq$ \load{\texttt{tmp1}}{$p$}\texttt{;} \load{\texttt{tmp2}}{$q$}\texttt{;} \assign{\texttt{tmp2}}{\texttt{max\ tmp1\ tmp2}}\texttt{;} \store{$p$}{\texttt{tmp2}}
+
+\maxvc{a}{b} $\triangleq$ \maxa{(a, 0)}{(b, 0)}\texttt{;} ...\texttt{;} \maxa{(a, z - 1)}{(b, z - 1)}
+$(C' = C \sqcup C')$
+
+\lea{p}{q} $\triangleq$ \load{\texttt{tmp1}}{$p$}\texttt{;} \load{\texttt{tmp2}}{$q$}\texttt{;} \assert{\texttt{tmp1}}{\texttt{tmp2}}
+
+\vcle{a}{b} $\triangleq$ \lea{(a, 0)}{(b, 0)}\texttt{;} ...\texttt{;} \lea{(a, z - 1)}{(b, z - 1)}
+$(C \sqsubseteq C')$
+\caption{Helper macros}
+\label{helper}
+\end{figure}
+
+With these macros as building blocks, we can straightforwardly translate the rules of vector clock race detection (cite figure) into code. We set aside dedicated areas of memory for each of the components of the vector clock state, labeled $C$, $L$, $R$, and $W$ accordingly, and index into them by assigning a unique numeric identifier to each thread, local variable, and lock, so that the block at $L + m$ in memory contains the vector clock $L_m$. Note that the timing of the associated vector clock operations depends on the instruction being instrumented; in particular, the blocking operations \texttt{lock} and \texttt{wait} must not change the vector clock state until after they successfully complete.
+
+\begin{figure}[htb]
+\instr{t}{\load{a}{(b, o)}} $\triangleq$ \vcle{W + b}{C + t}\texttt{;} \move{(C + t, t)}{(R + b, t)}\texttt{;} \load{$a$}{$(b, o)$}
+
+\instr{t}{\store{(b, o)}{e}} $\triangleq$ \vcle{W + b}{C + t}\texttt{;} \vcle{R + b}{C + t}\texttt{;} \move{(C + t, t)}{(W + b, t)}\texttt{;} \store{$(b, o)$}{$e$}
+
+\instr{t}{\lock{m}} $\triangleq$ \lock{$m$}\texttt{;} \maxvc{L + m}{C + t}
+
+\instr{t}{\unlock{m}} $\triangleq$ \setvc{C + t}{L + m}\texttt{;} \incvc{t}{C + t}\texttt{;} \unlock{$m$}
+
+\instr{t}{\spawn{u}{\mathit{li}}} $\triangleq$ \maxvc{C + t}{C + u}\texttt{;} \incvc{t}{C + t}\texttt{;} \spawn{$u$}{$\mathit{li}$}
+
+\instr{t}{\wait{u}} $\triangleq$ \wait{$u$}\texttt{;} \maxvc{C + u}{C + t}\texttt{;} \incvc{u}{C + u}
+\caption{Instrumentation}
+\label{instrumentation}
+\end{figure}
 
 \subsection{Necessary Synchronization}
-Completely unsynchronized instrumentation cannot be sound and complete. (example) At the same time, adding too much synchronization could significantly hurt performance.
+The instrumentation of the previous section cannot implement sound and complete race detection for one important reason: when a race does occur, the corresponding instrumentation also races. (example) Poorly synchronized race detection instrumentation cannot hope to successfully detect all races. At the same time, adding too much synchronization could significantly hurt performance.
 
 \section{Verifying Instrumentation}
 We verify the correctness of the instrumentation by showing that instrumentation records the same information and performs the same checks as the algorithm would perform on any program.

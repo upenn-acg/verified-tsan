@@ -15,3 +15,5 @@ PLDI 2016/main.synctex.gz
 PLDI 2016/main.pdf
 *.log
 PLDI 2016/main.blg
+PLDI 2016/main.pdf
+*.fls
