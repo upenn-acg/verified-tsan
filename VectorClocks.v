@@ -1382,10 +1382,6 @@ Section VectorClocks.
       apply IHHsteps; eapply FT_wf_preservation; eauto.
     Qed.
 
-    Definition epoch_rep (C : tid -> vector_clock) (L : lock -> vector_clock)
-      t V :=  (forall u, C u t >= V t -> vc_le V (C u)) /\
-        (forall m, L m t >= V t -> vc_le V (L m)).
-
     Definition eorv_join r V :=
       match r with
       | VC V' => vc_join V' V
@@ -1556,14 +1552,18 @@ Section VectorClocks.
       repeat intro; etransitivity; eauto.
     Qed.
 
+    Definition epoch_rep (C : tid -> vector_clock) (L : lock -> vector_clock)
+      (e : epoch) V := (forall u, e_le e (C u) -> vc_le V (C u)) /\
+        (forall m, e_le e (L m) -> vc_le V (L m)).
+
     Definition FT_sim (s1 : state) (s2 : FT_state) := match s1, s2 with
       (C1, L1, R1, W1), (C2, L2, R2, W2) => C1 = C2 /\ L1 = L2 /\
-      forall x, match W2 x with (c, t) => W1 x t = c /\ epoch_rep C1 L1 t (W1 x)
+      forall x, match W2 x with (c, t) =>
+                  W1 x t = c /\ epoch_rep C1 L1 (W2 x) (W1 x)
                 end /\ (forall t, app (R2 x) t <= R1 x t) /\
        match R2 x with
-       | E (O, _) => (forall u, e_le (W2 x) (C1 u) -> vc_le (R1 x) (C1 u)) /\
-                     (forall m, e_le (W2 x) (L1 m) -> vc_le (R1 x) (L1 m))
-       | E (c, t) => R1 x t = c /\ epoch_rep C1 L1 t (R1 x)
+       | E (O, _) => epoch_rep C1 L1 (W2 x) (R1 x)
+       | E (c, t) => R1 x t = c /\ epoch_rep C1 L1 (c, t) (R1 x)
        | VC V => (exists t', V t' <> 0 /\ forall t, V t = 0 ->
            (forall u, V t' <= C1 u t' -> R1 x t <= C1 u t) /\
            (forall m, V t' <= L1 m t' -> R1 x t <= L1 m t)) /\
@@ -1705,7 +1705,7 @@ Section VectorClocks.
             split; clarify; rewrite <- cond in *; wf_check.
             intro; clarify.
             destruct n; clarify.
-            { apply Hr21; auto. }
+            { apply Hr2; clarsimp. }
             { apply Hr22.
               specialize (Hwf221 x t); clarsimp. }
           * eapply FT_read_share; eauto; clarsimp.
@@ -1720,7 +1720,7 @@ Section VectorClocks.
               { exists t; unfold upd; clarify.
                 destruct (eq_dec t1 t); clarify.
                 split; intros; wf_check.
-                apply Hr21; auto. }
+                apply Hr2; clarify. }
               { exists t1; unfold upd; clarify.
                 split; intros; apply Hr22; clarsimp. } }
             { intros t' ?; unfold upd in *; clarify.
@@ -1786,9 +1786,9 @@ Section VectorClocks.
                 unfold vc_join in *; rewrite Nat.max_le_iff in *;
                   clarify. } }
             { destruct e as (c, ?); destruct c; clarify.
-              { intro; unfold vc_join in *; rewrite Nat.max_le_iff in *.
-                destruct H; [left; apply Hsim22221 | right; apply Hsim22222];
-                  auto. }
+              { destruct Hsim2222 as [HC HL]; split; intros ? Hle; clarify.
+                intro; unfold vc_join in *; rewrite Nat.max_le_iff in *.
+                destruct Hle; [left; apply HC | right; apply HL]; auto. }
               { split; repeat intro; clarify.
                 { destruct (eq_dec t u); clarify; [|apply Hsim22222; auto].
                   unfold ge, vc_join in *; rewrite Nat.max_le_iff in *;
@@ -1818,14 +1818,13 @@ Section VectorClocks.
                 specialize (Hsim22222 t1); clarify.
                 unfold vc_inc in *; split; clarify. } }
             { destruct e as (c, ?); destruct c; clarify.
-              { split; repeat intro; unfold vc_inc in *; clarify.
-                { destruct (eq_dec t u); clarify; [|apply Hsim22221; auto].
-                  destruct (eq_dec t0 u); clarify; apply Hsim22221; auto. }
-                { destruct (eq_dec m m0); clarify; [apply Hsim22221 | 
-                    apply Hsim22222]; auto. } }
+              { destruct Hsim2222 as [HC HL]; split; clarify.
+                intro; unfold vc_inc in *; clarify.
+                destruct (eq_dec t0 u); clarify; apply HC; auto. }
               { split; unfold vc_inc; repeat intro.
                 { destruct (eq_dec t u); [clarify | apply Hsim22222; auto].
-                  destruct (eq_dec t1 u); clarify; apply Hsim22222; auto. }
+                  rewrite <- Hsim22221 in *.
+                  destruct (eq_dec t1 u); clarify; apply Hsim22222; clarify. }
                 { destruct (eq_dec m m0); clarify; apply Hsim22222; auto. } } }
       - do 2 eexists.
         + econstructor; eauto.
@@ -1862,15 +1861,18 @@ Section VectorClocks.
                 unfold vc_join, vc_inc in *; destruct (eq_dec t u0); clarify;
                   rewrite Nat.max_le_iff in *; clarify. } }
             { destruct e as (c, ?); destruct c; clarify.
-              { intro; unfold vc_join, vc_inc in *.
+              { destruct Hsim2222 as [HC HL]; split; clarify.
+                intro; unfold vc_join, vc_inc in *.
                 destruct (eq_dec t u0); clarify.
-                { destruct (eq_dec t0 u0); clarify; apply Hsim22221; auto. }
-                { destruct (eq_dec u u0); clarify; [|apply Hsim22221; auto].
+                { destruct (eq_dec t0 u0); clarify; apply HC; auto. }
+                { destruct (eq_dec u u0); clarify; [|apply HC; auto].
                   rewrite Nat.max_le_iff in *.
-                  destruct H; [left | right]; apply Hsim22221; auto. } }
+                  destruct H; [left | right]; apply HC; auto. } }
               { split; repeat intro; unfold vc_join, vc_inc in *; clarify.
-                { destruct (eq_dec t u0); clarify.
-                  { destruct (eq_dec t1 u0); clarify; apply Hsim22222; auto. }
+                { rewrite <- Hsim22221 in *.
+                  destruct (eq_dec t u0); clarify.
+                  { destruct (eq_dec t1 u0); clarify; apply Hsim22222; clarify. 
+                  }
                   { destruct (eq_dec u u0); clarify; [|apply Hsim22222; auto].
                     unfold ge in *; rewrite Nat.max_le_iff in *.
                     destruct H; [left | right]; apply Hsim22222; auto. } }
@@ -1910,15 +1912,18 @@ Section VectorClocks.
                 unfold vc_join, vc_inc in *; destruct (eq_dec u u0); clarify;
                   rewrite Nat.max_le_iff in *; clarify. } }
             { destruct e as (n, ?); destruct n; clarify.
-              { intro; unfold vc_join, vc_inc in *.
+              { destruct Hsim2222 as [HC HL]; split; clarify.
+                intro; unfold vc_join, vc_inc in *.
                 destruct (eq_dec u u0); clarify.
-                { destruct (eq_dec t0 u0); clarify; apply Hsim22221; auto. }
-                { destruct (eq_dec t u0); clarify; [|apply Hsim22221; auto].
+                { destruct (eq_dec t0 u0); clarify; apply HC; auto. }
+                { destruct (eq_dec t u0); clarify; [|apply HC; auto].
                   rewrite Nat.max_le_iff in *.
-                  destruct H; [left | right]; apply Hsim22221; auto. } }
+                  destruct H; [left | right]; apply HC; auto. } }
               { split; repeat intro; unfold vc_join, vc_inc in *; clarify.
-                { destruct (eq_dec u u0); clarify.
-                  { destruct (eq_dec t1 u0); clarify; apply Hsim22222; auto. }
+                { rewrite <- Hsim22221 in *.
+                  destruct (eq_dec u u0); clarify.
+                  { destruct (eq_dec t1 u0); clarify; apply Hsim22222; clarify. 
+                  }
                   { destruct (eq_dec t u0); clarify; [|apply Hsim22222; auto].
                     unfold ge in *; rewrite Nat.max_le_iff in *.
                     destruct H; [left | right]; apply Hsim22222; auto. } }
@@ -1989,7 +1994,7 @@ Section VectorClocks.
           unfold upd; split; repeat intro; clarify; rewrite <- cond in *;
             wf_check.
           destruct c; clarify.
-          { apply Hr21; auto. }
+          { apply Hr2; auto. }
           { apply Hr22; clarsimp. }
       - generalize (Hsim22 x); intros [Hw Hr].
         destruct (W x) eqn: HW2; clarify.
@@ -2007,7 +2012,7 @@ Section VectorClocks.
           * destruct c; clarify.
             { exists t; unfold upd; destruct (eq_dec u t); clarify.
               split; intros; wf_check.
-              apply Hr21; auto. }
+              apply Hr2; auto. }
             { exists u; unfold upd; clarify.
               split; intros; apply Hr22; clarsimp. }
           * unfold upd; intros.
@@ -2030,8 +2035,7 @@ Section VectorClocks.
         do 2 eexists.
         + apply write_upd; eauto.
           * apply Hw2; auto.
-          * destruct n; clarify.
-            apply Hr22; omega.
+          * destruct n; apply Hr2; clarify.
         + clarify.
           destruct (eq_dec x0 x); subst; [rewrite upd_new |
             rewrite upd_old; unfold upd]; clarify; clear Hsim22.
@@ -2039,8 +2043,8 @@ Section VectorClocks.
           split; clarsimp.
           * unfold upd; split; repeat intro; clarify; wf_check.
             apply Hw2; auto.
-          * split; repeat intro; wf_check.
-            apply Hr21; auto.
+          * split; repeat intro; clarify; wf_check.
+            apply Hr2; auto.
       - generalize (Hsim22 x); intros [Hw Hr].
         destruct (W x) eqn: HW2; clarsimp.
         do 2 eexists.
@@ -2056,7 +2060,7 @@ Section VectorClocks.
           * unfold upd; split; repeat intro; clarify; wf_check.
             apply Hw2; auto.
           * split; clarify.
-            split; repeat intro; wf_check.
+            split; repeat intro; clarify; wf_check.
             destruct (eq_dec (V t2) 0); [apply Hr212 | apply Hr22]; auto.
       - do 2 eexists.
         + econstructor; eauto.
@@ -2077,9 +2081,9 @@ Section VectorClocks.
                 unfold vc_join in *; rewrite Nat.max_le_iff in *;
                   clarify. } }
             { destruct e as (c, ?); destruct c; clarify.
-              { intro; unfold vc_join in *; rewrite Nat.max_le_iff in *.
-                destruct H; [left; apply Hsim22221 | right; apply Hsim22222];
-                  auto. }
+              { destruct Hsim2222 as [HC HL]; split; clarify.
+                intro; unfold vc_join in *; rewrite Nat.max_le_iff in *.
+                destruct H; [left; apply HC | right; apply HL]; auto. }
               { split; repeat intro; [|apply Hsim22222; auto].
                 destruct (eq_dec t u); clarify; [|apply Hsim22222; auto].
                 unfold vc_join, ge in *; rewrite Nat.max_le_iff in *.
@@ -2105,10 +2109,11 @@ Section VectorClocks.
               { intros t' ?; specialize (Hsim22222 t'); clarify.
                 unfold vc_inc; split; clarify. } }
             { destruct e as (c, ?); destruct c; clarify.
-              { unfold vc_inc; split; clarify.
-                intro; clarify.
-                destruct (eq_dec t1 u); clarify; apply Hsim22221; auto. }
-              { split; repeat intro.
+              { destruct Hsim2222 as [HC HL]; split; clarify.
+                unfold vc_inc in *; intro; clarify.
+                destruct (eq_dec t1 u); clarify; apply HC; auto. }
+              { rewrite <- Hsim22221 in *.
+                split; repeat intro.
                 { destruct (eq_dec t u); clarify; [|apply Hsim22222; auto].
                   unfold vc_inc in *; clarify.
                   apply Hsim22222; clarify. }
@@ -2139,12 +2144,14 @@ Section VectorClocks.
                 unfold vc_join, ge in *; rewrite Nat.max_le_iff in *;
                   clarify. } }
             { destruct e as (c, ?); destruct c; clarify.
-              { destruct (eq_dec t u0); unfold vc_inc in *; intro; clarify.
-                { destruct (eq_dec t1 u0); clarify; apply Hsim22221; auto. }
-                { destruct (eq_dec u u0); clarify; [|apply Hsim22221; auto].
+              { destruct Hsim2222 as [HC HL]; split; clarify.
+                destruct (eq_dec t u0); unfold vc_inc in *; intro; clarify.
+                { destruct (eq_dec t1 u0); clarify; apply HC; auto. }
+                { destruct (eq_dec u u0); clarify; [|apply HC; auto].
                   unfold vc_join, ge in *; rewrite Nat.max_le_iff in *.
-                  destruct H; [left | right]; apply Hsim22221; auto. } }
-              { split; repeat intro; [|apply Hsim22222; auto].
+                  destruct H; [left | right]; apply HC; auto. } }
+              { rewrite <- Hsim22221 in *.
+                split; repeat intro; [|apply Hsim22222; auto].
                 destruct (eq_dec t u0); unfold vc_inc in *; clarify.
                 { apply Hsim22222; clarify. }
                 { destruct (eq_dec u u0); clarify; [|apply Hsim22222; auto].
@@ -2176,12 +2183,14 @@ Section VectorClocks.
                 unfold vc_join, ge in *; rewrite Nat.max_le_iff in *;
                   clarify. } }
             { destruct e as (c, ?); destruct c; clarify.
-              { destruct (eq_dec u u0); unfold vc_inc in *; intro; clarify.
-                { destruct (eq_dec t1 u0); clarify; apply Hsim22221; auto. }
-                { destruct (eq_dec t u0); clarify; [|apply Hsim22221; auto].
+              { destruct Hsim2222 as [HC HL]; split; clarify.
+                destruct (eq_dec u u0); unfold vc_inc in *; intro; clarify.
+                { destruct (eq_dec t1 u0); clarify; apply HC; auto. }
+                { destruct (eq_dec t u0); clarify; [|apply HC; auto].
                   unfold vc_join, ge in *; rewrite Nat.max_le_iff in *.
-                  destruct H; [left | right]; apply Hsim22221; auto. } }
-              { split; repeat intro; [|apply Hsim22222; auto].
+                  destruct H; [left | right]; apply HC; auto. } }
+              { rewrite <- Hsim22221 in *.
+                split; repeat intro; [|apply Hsim22222; auto].
                 destruct (eq_dec u u0); unfold vc_inc in *; clarify.
                 { apply Hsim22222; clarify. }
                 { destruct (eq_dec t u0); clarify; [|apply Hsim22222; auto].
