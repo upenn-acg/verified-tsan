@@ -41,6 +41,7 @@
 \newcommand{\lea}[2]{\ensuremath{\mathsf{lea}(#1, #2)}}
 \newcommand{\vcle}[2]{\ensuremath{\mathsf{hb\_check}(#1, #2)}}
 \newcommand{\instr}[2]{\ensuremath{\mathsf{instrument}(#1, #2)}}
+\newcommand{\instrp}[1]{\ensuremath{\mathsf{instrument}(#1)}}
 
 %from StackExchange, a better xrightarrow^*
 \newcommand{\tto}[1]{\mathrel{
@@ -139,50 +140,68 @@ Our approach to verifying instrumentation has three major steps. First, we descr
 \label{algorithms}
 
 \subsection{Defining Races}
-
+\TODO{We need to start by defining races.}
 
 \subsection{Vector Clock Race Detection}
 definition
 
 \subsubsection{Correctness}
-The correctness of vector clock race detection follows from the fact that the $\sqsubseteq$ relation between vector clocks precisely models the happens-before relation. Our formalization follows the proof outline for FastTrack~\cite{fasttrack} (with the change described in the following section). \TODO{Should we mention the bug here or in the FastTrack section?}
+The correctness of vector clock race detection follows from the fact that the $\sqsubseteq$ relation between vector clocks precisely models the happens-before relation. Our formalization follows the proof outline given in the presentation of FastTrack~\cite{fasttrack} (with the change described in Section~\ref{bug}), which can be straightforwardly translated into Coq. The main invariant of the algorithm is that $C_t(t) > C_u(t)$, that is, each thread always has a higher timestamp for itself than any other thread has for it.
 
 \subsection{FastTrack}
 definition
 
-\subsubsection{Correctness}
-\TODO{We want to evaluate proof by simulation at an approach. This means we needed two kinds of proofs.} We prove correctness of this algorithm by relating it to the base vector clock algorithm. Intuitively, the metadata optimizations of FastTrack are safe to perform because the reduced metadata still captures the same happens-before relationships, which means that the same $\sqsubseteq$ relationships hold between corresponding state components. Thus, we need only present a relation between FastTrack states and full vector clock states that captures this correspondence in order to prove a bisimulation between the two systems. The $C$ and $L$ components should remain unchanged. To characterize the expected semantics of epochs, we define the following \emph{representation} relation: \TODO{emulates... for...? summarizes... for...?}
-\begin{definition}An epoch $e$ \emph{represents} a vector clock $V$ to another vector clock $V'$ if $e \preceq V'$ implies that $V \sqsubseteq V'$. An epoch $e$ represents $V$ in a state $(C, L, R, W)$ if it represents $V$ to $C_u$ for all $u$ and $L_m$ for all $m$.\end{definition}
+\subsubsection{Proof by Simulation}
+Beyond guaranteeing the correctness of FastTrack, we want to test the simulation approach described in Section~\ref{strategy} as a tool for verifying refinements of the vector clock algorithm. In this section, we describe our novel simulation proof of FastTrack's correctness; in the following section, we describe our mechanization of the paper proof (which directly relates the algorithm to the definition of race).
 
-In FastTrack, when write metadata $W_x$ is collapsed to an epoch $c@t$, it is precisely because $W_x(t) = c$ and $t$ is representative of $W_x$. The relation for read metadata is more complicated, for one particular reason: the Write Shared rule resets read metadata to an empty epoch. This has two effects on the simulation relation. First, we must make a special allowance for the case in which the read metadata is empty; in this case, it is the write epoch that represents the original read vector clock. Second, even when the FastTrack state holds a vector clock in $R_x$, that vector clock may contain some 0 values in places where reads have in fact been performed. In effect, because FastTrack read vector clocks are always derived from epochs, they carry forward a partial representation relation. \TODO{Split out? R need not be a VC.}
-\begin{definition}Suppose we have a pair of vector clock and FastTrack states $(C, L, R, W)$, $(C', L', R', W')$. A thread $t$ \emph{partially represents} $R_x$ to another vector clock $V'$ if for all $t'$ such that $R'_x(t') = 0$, $R_x(t) \le V'(t)$ implies that $R_x(t') \le V'(t')$, and for all $t'$ such that $R'_x(t') \neq 0$, $R'_x(t') \le V'(t')$ implies that $R_x(t') \le V'(t')$. A thread $t$ partially represents $R_x$ if it partially represents $R_x$ to $C_u$ for all $u$ and $L_m$ for all $m$.\end{definition}
-\TODO{illustrate with examples!}
+Intuitively, the metadata optimizations of FastTrack are safe to perform because the reduced metadata still captures the same happens-before relationships, which means that the same $\sqsubseteq$ relationships hold between corresponding state components. Thus, we need only present a relation between FastTrack states and full vector clock states that captures this correspondence in order to prove a bisimulation between the two systems. The $C$ and $L$ components should remain unchanged. To characterize the expected semantics of epochs, we define the following \emph{encapsulation} relation:
+\begin{definition}An epoch $e$ \emph{encapsulates} a vector clock $V$ for another vector clock $V'$ if $e \preceq V'$ implies that $V \sqsubseteq V'$. An epoch $e$ encapsulates $V$ in a state $(C, L, R, W)$ if it summarizes $V$ for $C_u$ for all $u$ and $L_m$ for all $m$.\end{definition}
+
+\begin{figure}[htb]
+\TODO{Maybe show a program, and the corresponding vector clocks going through read VC, empty epoch, read epoch}
+\caption{Relating FastTrack and vector clock states}
+\label{encapsulation}
+\end{figure}
+
+In FastTrack, when write metadata $W_x$ is collapsed to an epoch $c@t$, it is precisely because $W_x(t) = c$ and $c@t$ encapsulates $W_x$. The relation for read metadata is more complicated, for one particular reason: the Write Shared rule resets read metadata to an empty epoch. This has two effects on the simulation relation. First, we must make a special allowance for the case in which the read metadata is empty; in this case, it is the write epoch that encapsulates the original read vector clock. Second, even when the FastTrack state holds a vector clock in $R_x$, that vector clock may contain some 0 values in places where reads have in fact been performed. In effect, because FastTrack read vector clocks are always derived from epochs, they carry forward a partial encapsulation relation, in which one component encapsulates all the relationships on zeroed values.
+\begin{definition}A vector clock $V_0$ \emph{partially encapsulates} a vector clock $V$ for another vector clock $V'$ if there is some thread $t$ such that:
+\begin{itemize}
+\item for all $u$ such that $V_0(u) = 0$, $V_0(t) \le V'(t)$ implies that $V(u) \le V'(u)$
+\item for all $u$ such that $V_0(u) \neq 0$, $V_0(u) \le V'(u)$ implies that $V(u) \le V'(u)$
+\end{itemize}
+A vector clock $V_0$ partially encapsulates a vector clock $V$ in a state $(C, L, R, W)$ if it partially encapsulates $V$ for $C_u$ for all $u$ and $L_m$ for all $m$.\end{definition}
 
 We can now state the full simulation relation between vector clock and FastTrack states.
 \begin{definition}A vector clock state $(C, L, R, W)$ and a FastTrack state $(C', L', R', W')$ are in the relation $\sim$ when $C' = C$, $L' = L$, and for every location $x$:
 \begin{itemize}
-\item if $W'_x = c@t$, then $W_x(t) = c$ and $c@t$ represents $W_x$
+\item if $W'_x = c@t$, then $W_x(t) = c$ and $c@t$ encapsulates $W_x$
 \item $R'_x(t) \le R_x(t)$ for all $t$
-\item if $R'_x = \bot_e$, then $W'_x$ represents $R_x$
-\item if $R'_x = c@t$, then $R_x(t) = c$ and $c@t$ represents $R_x$
-\item if $R'_x = V$, then there exists a thread $t$ such that $t$ partially represents $R_x$
+\item if $R'_x = \bot_e$, then $W'_x$ encapsulates $R_x$
+\item if $R'_x = c@t$, then $R_x(t) = c$ and $c@t$ encapsulates $R_x$
+\item if $R'_x = V$, then $V$ partially encapsulates $R_x$
 \end{itemize}
 \end{definition}
 \begin{theorem}The relation $\sim$ is a bisimulation.\end{theorem}
+\begin{proof}In each direction, the relation $\sim$ is preserved by corresponding steps in the two systems, which we show by case analysis on the rule applied.\end{proof}
 
-\subsubsection{Alternative Proof}
-Flanagan and Freund justify the optimizations of FastTrack by proving that the $\sqsubseteq$ relation on vector clocks still precisely captures the happens-before relation. We formalized this proof in Coq, and in the process, discovered an error in the paper proof. FastTrack's Lemma 4 states the following: {\it Suppose $\sigma$ is well-formed and $\sigma \Rightarrow^\alpha \sigma'$ and $a, b \in \alpha$. Let $t = \mathit{tid}(a)$ and $u = \mathit{tid}(b)$. If $a <_{\alpha} b$ then $K^a(t) \sqsubseteq K^b(t)$.} This lemma is then used to prove that if some operation $b$ is \emph{stuck}, then a previous operation $a$ must have raced with it, since $K^a(t) \not\sqsubseteq K^b(t)$. However, the premise of Lemma 4 requires that $a$ and $b$ not be stuck, sincen they are in a trace $\alpha$ that successfully executes to a state $\sigma'$. Because of this constraint, Lemma 4 in fact does not apply. Fortunately, this premise is stronger than necessary to prove Lemma 4, and in Coq we are able to prove a more general version:
+While the simulation relation is complicated by the encapsulation relations, once it is correctly stated, the proof itself is reduced to proving that various $\le$ relationships are preserved by mathematical operations on vector clocks. We expect that the arithmetic involved could be further automated, decreasing the burden of verifying related algorithms.
+
+\subsubsection{Direct Proof}
+\label{bug}
+Flanagan and Freund justify the optimizations of FastTrack by proving that the $\sqsubseteq$ relation on vector clocks still precisely captures the happens-before relation. As a baseline for comparison, we formalized this proof in Coq as well, and discovered an error in the paper proof in the process. FastTrack's Lemma 4 states the following: {\it Suppose $\sigma$ is well-formed and $\sigma \Rightarrow^\alpha \sigma'$ and $a, b \in \alpha$. Let $t = \mathit{tid}(a)$ and $u = \mathit{tid}(b)$. If $a <_{\alpha} b$ then $K^a(t) \sqsubseteq K^b(t)$.} This lemma is then used to prove that if some operation $b$ is \emph{stuck}, then a previous operation $a$ must have raced with it, since $K^a(t) \not\sqsubseteq K^b(t)$. However, the premise of Lemma 4 requires that $a$ and $b$ not be stuck, since they are in a trace $\alpha$ that successfully executes to a state $\sigma'$. Because of this constraint, Lemma 4 in fact does not apply. Fortunately, this premise is stronger than necessary to prove Lemma 4, and in Coq we are able to prove a more general version:
 \begin{lemma}Suppose $\sigma$ is well-formed and $\sigma \Rightarrow^\alpha \sigma'$ and $a \in \alpha$. Let $t = \mathit{tid}(a)$ and $u = \mathit{tid}(b)$. If $a <_{\alpha; b} b$ then $K^a(t) \sqsubseteq K^b(u)$.\end{lemma}
-where by abuse of notation we use $K^b(t)$ to refer to the $C_u$ component of $\sigma'$ updated as appropriate for a blocking operation. \TODO{Proof?} With this statement of the lemma, the completeness proof follows as outlined in the paper. This proof is about 130 lines longer than the proof by simulation \TODO{that's not that much}, reflecting duplication of effort from proving very similar theorems about the two systems.
+where by abuse of notation we use $K^b(t)$ to refer to the $C_u$ component of $\sigma'$ updated as appropriate for a blocking operation. With this statement of the lemma, the completeness proof follows as outlined in the paper.
+
+Compared to the proof by simulation, this proof is about 130 lines longer, reflecting duplication of effort from proving similar theorems about the two systems. It also involves a significant amount of inductive reasoning, which might have been difficult to synthesize without the guide of the paper proof. In this case, since FastTrack preserves the same invariants as the base algorithm, the proofs have largely the same structure; however, if a different algorithm modified some of these invariants, we believe that the proof by simulation would be significantly easier to construct than the proof that recapitulates the relationship between $\sqsubseteq$ and happens-before.
 
 \section{Instrumenting a Simple Language}
 \label{language}
 
 \subsection{The Language}
-We define a simple multithreaded language that is just complicated enough to have races and implement race detection instrumentation. The instructions of the language are defined as follows, where $n$ is a natural number, $a$ is a local variable, $e, e1, e2$ are expressions, $p$ is a pointer, $l$ is a lock, $t$ is a thread id, and $i_j$ are instructions:
+We define a simple multithreaded language that is just complicated enough to have races and implement race detection instrumentation. The instructions of the language are defined as follows, where $n$ is a natural number, $a$ is a local variable, $e, e1, e2$ are expressions, $p$ is a pointer, $l$ is a lock, $t$ is a numeric thread id, and $i_j$ are instructions:
 \begin{align*}\mathit{expr} ::= n~|~a~|~e_1 + e_2~|~\mathtt{max}(e_1, e_2)\end{align*}
 \begin{align*}\mathit{instr} ::=\ &\assign{a}{e}~|~\load{a}{p}~|~\store{p}{e}~|~\lock{l}~\\|~&\unlock{l}~|~\spawn{t}{i_1, ..., i_n}~|~\wait{t}~\\|~&\assert{e_1}{e_2}\end{align*}
-A \emph{program} is simply a list of instructions. The dynamic state of a program contains a collection of threads, where a thread is a pair $(t, \mathit{li})$ of a tid and a list of instructions, and a family of local environments $G_t$, one for each thread, assigning values to local variables. We give semantics to the language via a transition system of the form $(P, G) \xrightarrow{o, c} (P', G')$, where $P, P'$ are collections of threads, $G, G'$ are environments, $o$ is a race detection operation (if one is produced by the step), and $c$ is a concurrent memory operation (likewise). We define a function $\mathsf{eval}$ that takes a local environment and an expression and yields the value of the expression. The semantics of the language are shown in Figure~\ref{semantics}. \TODO{I'm not satisfied with this presentation; can we distinguish memory and RD ops better?}
+A \emph{program} is simply a list of instructions, considered to be the body of the main thread with id $0$. The dynamic state of a program contains a collection of threads, where a thread is a pair $(t, \mathit{li})$ of an id and a list of instructions, and a family of local environments $G_t$, one for each thread, assigning values to local variables. We give semantics to the language via a transition system of the form $(P, G) \xrightarrow{o, c} (P', G')$, where $P, P'$ are collections of threads, $G, G'$ are environments, $o$ is a race detection operation (if one is produced by the step), and $c$ is a concurrent memory operation (likewise). We define a function $\mathsf{eval}$ that takes a local environment and an expression and yields the value of the expression. The semantics of the language are shown in Figure~\ref{semantics}. \TODO{I'm not satisfied with this presentation; can we distinguish memory and RD ops better?}
 
 \begin{figure}[htb]
 $$\inference[assign]{P(t) = \assign{a}{e}\texttt{;} \mathit{li}}{(P, G) \rightarrow_t \\(P[t \mapsto \mathit{li}], G[G_t[a \mapsto \mathsf{eval}(G_t, e)]])}$$
@@ -191,9 +210,10 @@ $$\inference[assign]{P(t) = \assign{a}{e}\texttt{;} \mathit{li}}{(P, G) \rightar
 \label{semantics}
 \end{figure}
 
+A state $P$ is \emph{final} if all of its threads have executed to completion.
 
 \subsection{Instrumentation}
-For each rule of the vector clock algorithm, we provide a code snippet that can be added to the associated instruction to implement the rule. We begin by defining macros for the basic mathematical operations of the algorithm, as shown in Figure~\ref{helper}. We designate two local variables unused in the base program (\texttt{tmp1} and \texttt{tmp2}) as temporaries for use by the instrumentation. Let $z$ be the number of threads generated over the lifetime of the program. (Note that in our simple language, $z$ can be determined statically; in real-world implementations, the vector clock data would need to be dynamically resized in memory if more threads were created.)
+For each rule of the vector clock algorithm, we provide a code snippet that can be added to the associated instruction to implement the rule. We begin by defining macros for the basic mathematical operations of the algorithm, as shown in Figure~\ref{helper}. We designate two local variables unused in the base program (\texttt{tmp1} and \texttt{tmp2}) as temporaries for use by the instrumentation. Let $z$ be the largest thread id generated in the lifetime of the program. (Note that in our simple language, $z$ can be determined statically; in real-world implementations, the vector clock data would need to be dynamically resized in memory when this bound is exceeded.)
 
 \begin{figure}[htb]
 \move{p}{q} $\triangleq$ \load{\texttt{tmp1}}{$p$}\texttt{;} \store{$q$}{\texttt{tmp1}}
@@ -217,7 +237,7 @@ $(C \sqsubseteq C')$
 \label{helper}
 \end{figure}
 
-With these macros as building blocks, we can straightforwardly translate the rules of vector clock race detection (cite figure) into code. We set aside dedicated areas of memory for each of the components of the vector clock state, labeled $C$, $L$, $R$, and $W$ accordingly, and index into them by assigning a unique numeric identifier to each thread, local variable, and lock, so that the block at $L + m$ in memory contains the vector clock $L_m$. Note that the timing of the associated vector clock operations depends on the instruction being instrumented; in particular, the blocking operations \texttt{lock} and \texttt{wait} must not change the vector clock state until after they successfully complete.
+With these macros as building blocks, we can straightforwardly translate the rules of vector clock race detection \TODO{cite figure} into code. We set aside dedicated areas of memory for each of the components of the vector clock state, labeled $C$, $L$, $R$, and $W$ accordingly, and index into them by assigning a unique numeric identifier to each thread, local variable, and lock, so that the block at $L + m$ in memory contains the vector clock $L_m$. Note that the timing of the associated vector clock operations depends on the instruction being instrumented; in particular, the blocking operations \texttt{lock} and \texttt{wait} must not change the vector clock state until after they successfully complete.
 
 \begin{figure}[htb]
 \instr{t}{\load{a}{(b, o)}} $\triangleq$ \vcle{W + b}{C + t}\texttt{;} \move{(C + t, t)}{(R + b, t)}\texttt{;} \load{$a$}{$(b, o)$}
@@ -228,17 +248,36 @@ With these macros as building blocks, we can straightforwardly translate the rul
 
 \instr{t}{\unlock{m}} $\triangleq$ \setvc{C + t}{L + m}\texttt{;} \incvc{t}{C + t}\texttt{;} \unlock{$m$}
 
-\instr{t}{\spawn{u}{\mathit{li}}} $\triangleq$ \maxvc{C + t}{C + u}\texttt{;} \incvc{t}{C + t}\texttt{;} \spawn{$u$}{$\mathit{li}$}
+\instr{t}{\spawn{u}{\mathit{li}}} $\triangleq$ \maxvc{C + t}{C + u}\texttt{;} \incvc{t}{C + t}\texttt{;} \spawn{$u$}{(\instr{u}{\mathit{li}})}
 
 \instr{t}{\wait{u}} $\triangleq$ \wait{$u$}\texttt{;} \maxvc{C + u}{C + t}\texttt{;} \incvc{u}{C + u}
 \caption{Instrumentation}
 \label{instrumentation}
 \end{figure}
 
+The instrumented version of a program $P$ is then simply $\instrp{P} \triangleq \instr{0}{P}$. Because in our language the bodies of future threads are embedded in the \texttt{spawn} instructions, we instrument these threads by recursively calling $\mathsf{instrument}$ on their bodies.
+
 \subsection{Necessary Synchronization}
-The instrumentation of the previous section cannot implement sound and complete race detection for one important reason: when a race does occur, the corresponding instrumentation also races. \TODO{example} Poorly synchronized race detection instrumentation cannot hope to successfully detect all races. At the same time, adding too much synchronization could significantly hurt performance. It suffices to add a lock for each memory location, which is used to protect the instrumentation on that memory location. To this end, we add another area of memory, $X$, where $X + b$ holds the lock for block $b$, and add locking to the \texttt{load} and \texttt{store} instrumentation:
-$$\instr{t}{\load{a}{(b, o)}} \triangleq \lock{X + x}\texttt{;} \vcle{W + b}{C + t}\texttt{;} \move{(C + t, t)}{(R + b, t)}\texttt{;} \load{a}{(b, o)}\texttt{;} \unlock{X + x}$$
-$$\instr{t}{\store{(b, o)}{e}} \triangleq \lock{X + x}\texttt{;} \vcle{W + b}{C + t}\texttt{;} \vcle{R + b}{C + t}\texttt{;} \move{(C + t, t)}{(W + b, t)}\texttt{;} \store{(b, o)}{e}\texttt{;} \unlock{X + x}$$
+\begin{figure}[htb]
+\centering
+\begin{tabular}{c || c}
+\load{\texttt{tmp1}}{$(W + b, 0)$} & \load{\texttt{tmp1}}{$(W + b, 0)$}\\
+... & ...\\
+& \load{\texttt{tmp1}}{$(R + b, 0)$}\\
+... & ...\\
+\store{$(R + b, 0)$}{\texttt{tmp1}} & \store{$(W + b, 0)$}{\texttt{tmp1}}\\
+... & ...\\
+\load{\texttt{a}}{$(b, o)$} & \store{$(b, o)$}{\texttt{2}}
+\end{tabular}
+
+\caption{Races in instrumentation}
+\label{instr-race}
+\end{figure}
+
+The instrumentation of the previous section cannot implement sound and complete race detection for one important reason: when a race does occur, the corresponding instrumentation also races. In instrumented programs such as that shown in Figure~\ref{instr-race}, depending on the order in which the updates to metadata locations occur, the instrumentation may fail to detect the race between the two threads. In general, poorly synchronized race detection instrumentation cannot hope to successfully detect all races. At the same time, adding too much synchronization could significantly hurt performance. Given the set of operations available in our language, we can show that it suffices to add a lock for each memory location, which is used to protect the instrumentation on that memory location. (Intuitively, locks prevent races on their associated metadata, and a thread cannot race with the thread that spawns it or waits for it to terminate.) To implement the necessary synchronization in our instrumentation, we add another designated area of memory, $X$, such that $X + b$ holds the lock protecting the metadata for block $b$. We then add locking to the \texttt{load} and \texttt{store} instrumentation:
+\begin{align*}&\instr{t}{\load{a}{(b, o)}} \triangleq \lock{X + x}\texttt{;} \\&\quad\vcle{W + b}{C + t}\texttt{;} \move{(C + t, t)}{(R + b, t)}\texttt{;} \\&\quad\load{a}{(b, o)}\texttt{;} \unlock{X + x}\end{align*}
+\begin{align*}&\instr{t}{\store{(b, o)}{e}} \triangleq \lock{X + x}\texttt{;} \\&\quad\vcle{W + b}{C + t}\texttt{;} \vcle{R + b}{C + t}\texttt{;} \\&\quad\move{(C + t, t)}{(W + b, t)}\texttt{;} \store{(b, o)}{e}\texttt{;} \unlock{X + x}\end{align*}
+This guarantees that the instrumentation will never race with itself, which is sufficient to allow us to prove correctness of the instrumentation in the next section.
 
 \label{waits}
 The semantics of our language allow one more case in which instrumentation may race. Since a terminated thread is not removed from the state when another thread \texttt{wait}s for it, two threads may \texttt{wait} for the same thread, and the subsequent race detection operations may conflict. While this is a fairly obscure case, on closer examination, it is also preventable. The $\mathsf{merge}$ operation only reads the vector clock of the terminated thread, and simultaneous reads to the same location do not constitute races. The only write to $C + u$ is in the $\mathsf{inc}$ macro, which is performed to maintain the invariant that a thread always has a higher timestamp for itself than any other thread has for it. While this simplifies reasoning, the invariant is not actually necessary for a thread that will perform no further operations, which must be the case for the target of a \texttt{wait}. If we remove the $\mathsf{inc}$ from the \texttt{wait} instrumentation, we get an equally correct race detection algorithm that allows for multiple \texttt{waits} on a single thread \TODO{proof?}.
@@ -286,11 +325,11 @@ We must also consider the case in which the instrumented program fails an assert
 Using Lemmas~\ref{iexec-exec}, \ref{exec-iexec}, and \ref{exec-fail-iexec}, we can reason entirely in terms of the bigger-step relation in which instrumentation executes atomically. At this point, the correctness of the instrumentation becomes a matter of simulation: we need only prove that there is a bisimulation relation relating states of the uninstrumented and the instrumented program such that they mirror each other's behavior. For each of the two directions of bisimulation, we must consider the case in which the original program does not race (and the instrumented program matches its behavior), and the case in which it does race (and the instrumented program fails an assertion). We begin by defining the relationship between states of the abstract algorithm and memory configurations.
 \begin{definition}A block $b$ in a memory $m$ encodes a vector clock $V$ if for all $t \le z$, the value at $(b, t)$ in $m$ is equal to $V_t$. A vector clock state $(C, L, R, W)$ is modeled by a memory $m$, written $m \models (C, L, R, W)$, if $C + t$ encodes $C_t$ for every $t$, $L + m$ encodes $L_m$ for every $m$, and $R + b$ and $W + b$ encode $R_b$ and $W_b$ respectively for every $b$.\end{definition}
 
-\begin{definition}Let $\lfloor m\rfloor$ be the memory obtained by removing all operations to metadata locations from $m$. The relation $\sim$ relates an uninstrumented state $(P, G, m)$ to an instrumented state $(P', G', m')$ if:
+\begin{definition}The relation $\sim$ relates an uninstrumented configuration $(P, G, m)$ to an instrumented configuration $(P', G', m')$ if:
 \begin{itemize}
 \item $P' = \instr{0}{P}$
 \item for all $t$ and all $a$ other than \texttt{tmp1} and \texttt{tmp2}, $G'_t(a) = G_t(a)$
-\item $\lfloor m' \rfloor = m$
+\item $m$ and $m'$ hold the same values at all non-metadata locations
 \end{itemize}
 \end{definition}
 \begin{lemma}If $P$ is a well-formed program, $(P, G, m) \sim (P', G', m')$, $m' \models s$, $(P, G, m) \xrightarrow{o, c}_t (P_2, G_2, m_2)$, and $s \xrightarrow{o} s'$, then $(P', G', m') \xRightarrow{\vec{o'}, \vec{c'}}_t (P_2', G_2', m_2')$ such that $(P_2, G_2, m_2) \sim (P_2', G_2', m_2')$ and $m_2' \models s'$.\end{lemma}
@@ -299,11 +338,10 @@ Using Lemmas~\ref{iexec-exec}, \ref{exec-iexec}, and \ref{exec-fail-iexec}, we c
 \begin{lemma}If $P$ is a well-formed program, $(P, G, m) \sim (P', G', m')$, $m \models s$, and $(P, G, m) \xRightarrow{\vec{o}, \vec{c}}_t \mathit{err}$, then $(P, G, m) \xrightarrow{o', c'}_t (P_2, G_2, m_2)$ and $s \not\xrightarrow{o'}$.\end{lemma}
 
 The correctness of the instrumentation is expressed by the following theorems:
-\begin{theorem}\label{safe}For all well-formed programs $P$, $\instr{t_0}{P} \xrightarrow{\vec{a}, \vec{b}} P_f$ for some final state $P_f$ iff $P \xrightarrow{\vec{a}', \lfloor\vec{b}\rfloor} P_f'$ and $\vec{a}'$ is race-free.\end{theorem}
+\begin{theorem}\label{safe}For all well-formed programs $P$, $(\instrp{P}, G_0) \xrightarrow{\vec{a}', \vec{b}'} (P_f', G_f')$ for some final state $P_f$ iff $(P, G_0) \xrightarrow{\vec{a}, \vec{b}} (P_f', G_f')$, $\vec{a}'$ is race-free, and $(P_f, G_f, m_0; \vec{b}) \sim (P_f', G_f', m_0; \vec{b}')$.\end{theorem}
 
-\begin{theorem}\label{race}For all well-formed programs $P$, $\instr{t_0}{P} \xrightarrow{\vec{a}, \vec{b}} \mathit{err}$ iff $P \xrightarrow{\vec{a}', \vec{b}'} P_f'$ and $\vec{a}'$ contains a race.\end{theorem}
-
-\TODO{stronger; describe correctness properties}
+\begin{theorem}\label{race}For all well-formed programs $P$, $(\instrp{P}, G_0) \xrightarrow{\vec{a}', \vec{b}'} (P_1', G_1') \rightarrow \mathit{err}$ iff $(P, G_0) \xrightarrow{\vec{a}, \vec{b}} (P_1, G_1) \xrightarrow{o, c}_t (P_2, G_2)$, $(P_1, G_1, m_0; \vec{b}) \sim (P_1', G_1', m_0; \vec{b}')$, $\sigma_0 \xrightarrow{\vec{a}} \sigma$, and $\sigma \not\xrightarrow{o}$.\end{theorem}
+Since $(P, G, m) \sim (P', G', m')$ implies that $G$ and $G'$, and likewise $m$ and $m'$, agree on all locations except those involved in the instrumentation, these are strong correctness properties. Theorem~\ref{safe} guarantees that for each race-free execution of the original program, there is a successful instrumented execution that produces the same values in the environment and memory (and vice versa). Theorem~\ref{race} guarantees that for each racy execution of the original program, there is a corresponding instrumented execution that executes successfully up until the first race, then fails (and vice versa). While it is difficult to talk about ``the same'' execution across two different programs, these lemmas guarantee that in terms of observable results, the original and instrumented programs have the same behavior modulo race detection, and that all racy executions are successfully detected.
 
 \section{Related Work}
 \label{related}
