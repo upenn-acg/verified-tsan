@@ -10347,7 +10347,7 @@ Proof.
       etransitivity; eauto.
 Qed.
 
-(*Lemma exec_fail_iexec : forall P G' G lo lc
+Lemma exec_fail_iexec : forall P G' G lo lc
   (Hexec : exec_star (Some P) G lo lc None G')
   P1 (HP : state_sim P1 P) (Hsafe : safe_locs P1) (Hfresh : fresh_tmps P1)
   (Hno_asserts : no_asserts P1)
@@ -10384,7 +10384,7 @@ Proof.
   clarify; repeat rewrite <- app_assoc in *.
   do 8 eexists; eauto; split; eauto.
 Qed.
-
+(*
 Lemma list_part_diff : forall (X:Type) (l1 l2 l3 l4: list X)
  (Hlen: length l1 = length l2) (Hdiff: l3<>l4), l1++l3<> l2++l4.
 Proof.
