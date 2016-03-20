@@ -297,7 +297,6 @@ Several systems exist for detecting data races in structured parallel programs s
 
 
 \section{Conclusions and Future Work}
-=======
 conclusions/summary
 
 We intend to expand our approach to verified race detection along three main lines. First, our approach should generalize easily to verifying more sophisticated algorithms and instrumentation passes, such as an implementation of FastTrack~\cite{fasttrack} or the ThreadSanitizer algorithm used in LLVM~\cite{tsan}. The second and greater challenge will be to apply the same approach on more realistic languages, and ultimately to integrate it into high-assurance compilation frameworks like Vellvm~\cite{vellvm} or CompCert~\cite{compcert}. This would involve taking into account a wider range of program instructions and potential complications, including variable-size accesses and low-level atomics. Thirdly, our proofs thus far assume sequential consistency as the concurrent memory model; an interesting challenge would be to prove that the same instrumentation suffices under the relaxed memory models used in languages like C and Java \TODO{cite memory models?}. By extending the reach of verified race detection, we aim to make it easier to design and justify increasingly sophisticated race detection algorithms and implementations.
