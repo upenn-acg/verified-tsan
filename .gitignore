@@ -17,3 +17,4 @@ PLDI 2016/main.pdf
 PLDI 2016/main.blg
 PLDI 2016/main.pdf
 *.fls
+*.out
