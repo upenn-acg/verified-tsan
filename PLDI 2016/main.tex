@@ -143,6 +143,7 @@ Our approach to verifying instrumentation has three major steps. First, we descr
 \TODO{We need to start by defining races.}
 
 \subsection{Vector Clock Race Detection}
+\label{vc}
 definition
 
 \subsubsection{Correctness}
@@ -158,7 +159,17 @@ Intuitively, the metadata optimizations of FastTrack are safe to perform because
 \begin{definition}An epoch $e$ \emph{encapsulates} a vector clock $V$ for another vector clock $V'$ if $e \preceq V'$ implies that $V \sqsubseteq V'$. An epoch $e$ encapsulates $V$ in a state $(C, L, R, W)$ if it summarizes $V$ for $C_u$ for all $u$ and $L_m$ for all $m$.\end{definition}
 
 \begin{figure}[htb]
-\TODO{Maybe show a program, and the corresponding vector clocks going through read VC, empty epoch, read epoch}
+\centering
+\begin{tabular}{c | c}
+\textbf{Vector Clock} & \textbf{FastTrack}\\
+$R_x = (0, 0, 3), W_x = (0, 0, 3)$ & $R_x = (1, 0, 3), W_x = 3@t_3$\\
+$t_1$: write x & $t_1$: write x\\
+$R_x = (1, 0, 3), W_x = (1, 0, 3)$ & $R_x = \bot_e, W_x = 1@t_1$\\
+$t_1$: read x & $t_1$: read x\\
+$R_x = (1, 0, 3), W_x = (1, 0, 3)$ & $R_x = 1@t_1, W_x = 1@t_1$\\
+$t_2$: read x & $t_2$: read x\\
+$R_x = (1, 1, 3), W_x = (1, 0, 3)$ & $R_x = (1, 1, 0), W_x = 1@t_1$
+\end{tabular}
 \caption{Relating FastTrack and vector clock states}
 \label{encapsulation}
 \end{figure}
@@ -194,8 +205,10 @@ where by abuse of notation we use $K^b(t)$ to refer to the $C_u$ component of $\
 
 Compared to the proof by simulation, this proof is about 130 lines longer, reflecting duplication of effort from proving similar theorems about the two systems. It also involves a significant amount of inductive reasoning, which might have been difficult to synthesize without the guide of the paper proof. In this case, since FastTrack preserves the same invariants as the base algorithm, the proofs have largely the same structure; however, if a different algorithm modified some of these invariants, we believe that the proof by simulation would be significantly easier to construct than the proof that recapitulates the relationship between $\sqsubseteq$ and happens-before.
 
-\section{Instrumenting a Simple Language}
+\section{Race Detection Instrumentation}
 \label{language}
+
+In the previous section, we described the statement and verification of \emph{algorithms} for dynamic race detection. For dynamic race detection to be useful, it must be implemented as a tool that runs during the execution of a program. Most commonly, this is achieved by \emph{instrumenting} the program with additional instructions that carry out the algorithm. Instrumentation must be defined in terms of the instructions of some language instead of abstract arithmetic operations, and must take place within the flow of a program rather than alongside it. Because of this, the process of translating from algorithm to instrumentation is highly error-prone \TODO{mention differences between FastTrack paper and implementation?}. In this and the following sections, we present an instrumentation pass in a simple language that is formally proven to implement the simple vector clock race detection algorithm of Section~\ref{vc}.
 
 \subsection{The Language}
 We define a simple multithreaded language that is just complicated enough to have races and implement race detection instrumentation. The instructions of the language are defined as follows, where $n$ is a natural number, $a$ is a local variable, $e, e1, e2$ are expressions, $p$ is a pointer, $l$ is a lock, $t$ is a numeric thread id, and $i_j$ are instructions:
@@ -216,6 +229,8 @@ A state $P$ is \emph{final} if all of its threads have executed to completion.
 For each rule of the vector clock algorithm, we provide a code snippet that can be added to the associated instruction to implement the rule. We begin by defining macros for the basic mathematical operations of the algorithm, as shown in Figure~\ref{helper}. We designate two local variables unused in the base program (\texttt{tmp1} and \texttt{tmp2}) as temporaries for use by the instrumentation. Let $z$ be the largest thread id generated in the lifetime of the program. (Note that in our simple language, $z$ can be determined statically; in real-world implementations, the vector clock data would need to be dynamically resized in memory when this bound is exceeded.)
 
 \begin{figure}[htb]
+\TODO{formatting}
+
 \move{p}{q} $\triangleq$ \load{\texttt{tmp1}}{$p$}\texttt{;} \store{$q$}{\texttt{tmp1}}
 
 \setvc{a}{b} $\triangleq$ \move{(a, 0)}{(b, 0)}\texttt{;} ...\texttt{;} \move{(a, z - 1)}{(b, z - 1)}
@@ -280,11 +295,11 @@ The instrumentation of the previous section cannot implement sound and complete 
 This guarantees that the instrumentation will never race with itself, which is sufficient to allow us to prove correctness of the instrumentation in the next section.
 
 \label{waits}
-The semantics of our language allow one more case in which instrumentation may race. Since a terminated thread is not removed from the state when another thread \texttt{wait}s for it, two threads may \texttt{wait} for the same thread, and the subsequent race detection operations may conflict. While this is a fairly obscure case, on closer examination, it is also preventable. The $\mathsf{merge}$ operation only reads the vector clock of the terminated thread, and simultaneous reads to the same location do not constitute races. The only write to $C + u$ is in the $\mathsf{inc}$ macro, which is performed to maintain the invariant that a thread always has a higher timestamp for itself than any other thread has for it. While this simplifies reasoning, the invariant is not actually necessary for a thread that will perform no further operations, which must be the case for the target of a \texttt{wait}. If we remove the $\mathsf{inc}$ from the \texttt{wait} instrumentation, we get an equally correct race detection algorithm that allows for multiple \texttt{waits} on a single thread \TODO{proof?}.
+The semantics of our language allow one more case in which instrumentation may race. Since a terminated thread is not removed from the state when another thread \texttt{wait}s for it, two threads may \texttt{wait} for the same thread, and the subsequent race detection operations may conflict. While this is a fairly obscure case, on closer examination, it is also preventable. The $\mathsf{merge}$ operation only reads the vector clock of the terminated thread, and simultaneous reads to the same location do not constitute races. The only write to $C + u$ is in the $\mathsf{inc}$ macro, which is performed to maintain the invariant that a thread always has a higher timestamp for itself than any other thread has for it. While this simplifies reasoning, the invariant is not actually necessary for a thread that will perform no further operations, which must be the case for the target of a \texttt{wait}. If we remove the $\mathsf{inc}$ from the \texttt{wait} instrumentation, we get an equally correct race detection algorithm that allows for multiple \texttt{waits} on a single thread. \TODO{outline proof?}
 
 \section{Verifying Instrumentation}
 \label{verification}
-We verify the correctness of the instrumentation by showing that instrumentation records the same information and performs the same checks as the vector clock algorithm would perform on the input program.
+We verify the correctness of the instrumentation by showing that the instrumentation records the same information and performs the same checks as the vector clock algorithm would perform on the input program.
 
 Key to our correctness proof is the idea that the instrumented program can be thought of as executing under a bigger-step semantics in which each instruction and its instrumentation execute in a single step. This semantics is shown in Figure~\TODO{?}
 \begin{lemma}\label{iexec-exec}If $(P, G) \xRightarrow{\vec{a}, \vec{b}}_t (P', G')$, then $(P, G) \xrightarrow{\vec{a}, \vec{b}}_t (P', G')$.\end{lemma}
