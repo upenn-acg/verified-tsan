@@ -93,6 +93,8 @@
 \newcommand{\vcle}[2]{\ensuremath{\mathsf{hb\_check}(#1, #2)}}
 \newcommand{\instr}[2]{\ensuremath{\mathsf{instrument}(#1, #2)}}
 \newcommand{\instrp}[1]{\ensuremath{\mathsf{instrument}(#1)}}
+\newcommand{\exec}[5]{\ensuremath{(#1, #2) \xrightarrow{#4}_{#3} #5}}
+\newcommand{\execstar}[4]{\ensuremath{(#1, #2) \xrightarrow{#3} #4}}
 
 %from StackExchange, a better xrightarrow^*
 \newcommand{\tto}[1]{\mathrel{
@@ -285,7 +287,7 @@ last write with the current write, such that $\WriteVC{\Address}(\Tid) =
 %$\Address$.  
 
 \subsubsection{Correctness}
-The correctness of vector clock race detection follows from the fact that the $\sqsubseteq$ relation between vector clocks precisely models the happens-before relation. Our formalization follows the proof outline given in the presentation of FastTrack~\cite{fasttrack} (with the change described in Section~\ref{bug}), which can be straightforwardly translated into Coq. The main invariant of the algorithm is that $C_t(t) \VCCompare C_u(t)$, that is, each thread always has a higher timestamp for itself than any other thread has for it.
+The correctness of vector clock race detection follows from the fact that the $\sqsubseteq$ relation between vector clocks precisely models the happens-before relation. Our formalization follows the proof outline given in the presentation of FastTrack~\cite{fasttrack} (with the change described in Section~\ref{bug}), which can be straightforwardly translated into Coq. The main invariant of the algorithm is that $C_t(t) > C_u(t)$, that is, each thread always has a higher timestamp for itself than any other thread has for it.
 
 \subsection{FastTrack}
 
@@ -311,32 +313,32 @@ We have made two small departures from the \FT semantics as originally presented
 \begin{tabular}{cp{1cm}c}
 
 \bigcell{
-\inference[\Rule{ReadSameEpoch}]{M^R_x = E(t)}{(C, L, M) \Rightarrow^{\mathit{rd}(t, x)} (C, L, M)}\\\\
+\inference[\Rule{ReadSameEpoch}]{M^R_x = E(t)}{(C, L, M) \xRightarrow{\mathit{rd}(t, x)} (C, L, M)}\\\\
 
 \inference[\Rule{ReadSharedSameEpoch}]
 {M_x \in \mathit{\EpochVC} \\ M^W_x \EpochCompare C_t \\ M^R_x[t] = C_t(t)}
-{(C, L, M) \Rightarrow^{\mathit{rd}(t, x)} (C, L, M)}\\\\
+{(C, L, M) \xRightarrow{\mathit{rd}(t, x)} (C, L, M)}\\\\
 
-\inference[\Rule{\Rule{ReadShared}}]{M_x \in \mathit{\EpochVC} \\ M^W_x \EpochCompare C_t \\ M' = M[x := (M^R_x[t := C_t(t)], M^W_x) ] }{(C, L, M) \Rightarrow^{\mathit{rd}(t, x)} (C, L, M')}\\\\
+\inference[\Rule{\Rule{ReadShared}}]{M_x \in \mathit{\EpochVC} \\ M^W_x \EpochCompare C_t \\ M' = M[x := (M^R_x[t := C_t(t)], M^W_x) ] }{(C, L, M) \xRightarrow{\mathit{rd}(t, x)} (C, L, M')}\\\\
 
-\inference[\Rule{\Rule{ReadInflate}}]{M_x \in \mathit{\EpochPair} \\ M^W_x \EpochCompare C_t \\ M^R_x = c@u \\ V = \bot_V[t := C_t(t), u := c] \\ M' = M[x := (V,M^W_x)]}{(C, L, M) \Rightarrow^{\mathit{rd}(t, x)} (C, L, M')}\\\\
+\inference[\Rule{\Rule{ReadInflate}}]{M_x \in \mathit{\EpochPair} \\ M^W_x \EpochCompare C_t \\ M^R_x = c@u \\ V = \bot_V[t := C_t(t), u := c] \\ M' = M[x := (V,M^W_x)]}{(C, L, M) \xRightarrow{\mathit{rd}(t, x)} (C, L, M')}\\\\
 
-\inference[\Rule{\Rule{ReadExclusive}}]{M_x \in \mathit{\EpochPair} \\ M^R_x \EpochCompare C_t \qquad M^W_x \EpochCompare C_t \\ M' = M[x := (E(t),M^W_x)] }{(C, L, M) \Rightarrow^{\mathit{rd}(t, x)} (C, L, M')}
+\inference[\Rule{\Rule{ReadExclusive}}]{M_x \in \mathit{\EpochPair} \\ M^R_x \EpochCompare C_t \qquad M^W_x \EpochCompare C_t \\ M' = M[x := (E(t),M^W_x)] }{(C, L, M) \xRightarrow{\mathit{rd}(t, x)} (C, L, M')}
 } & &
 \bigcell{
-\inference[\Rule{WriteSameEpoch}]{M^W_x = E(t)}{(C, L, M) \Rightarrow^{\mathit{wr}(t, x)} (C, L, M)}\\\\
+\inference[\Rule{WriteSameEpoch}]{M^W_x = E(t)}{(C, L, M) \xRightarrow{\mathit{wr}(t, x)} (C, L, M)}\\\\
 
-\inference[\Rule{\Rule{WriteExclusive}}]{M_x \in \mathit{\EpochPair} \\ M^R_x \EpochCompare C_t \qquad M^W_x \EpochCompare C_t \\ M' = M[x := (\bot_e,E(t))] }{ (C, L, M) \Rightarrow^{\mathit{wr}(t, x)} (C, L, M')}\\\\
+\inference[\Rule{\Rule{WriteExclusive}}]{M_x \in \mathit{\EpochPair} \\ M^R_x \EpochCompare C_t \qquad M^W_x \EpochCompare C_t \\ M' = M[x := (\bot_e,E(t))] }{ (C, L, M) \xRightarrow{\mathit{wr}(t, x)} (C, L, M')}\\\\
 
-\inference[\Rule{\Rule{WriteShared}}]{M_x \in \mathit{\EpochVC} \\ M^R_x \VCCompare C_t \qquad M^W_x \EpochCompare C_t \\ M' = M[x := (\bot_e,E(t))] }{ (C, L, M) \Rightarrow^{\mathit{wr}(t, x)} (C, L, M') }\\\\
+\inference[\Rule{\Rule{WriteShared}}]{M_x \in \mathit{\EpochVC} \\ M^R_x \VCCompare C_t \qquad M^W_x \EpochCompare C_t \\ M' = M[x := (\bot_e,E(t))] }{ (C, L, M) \xRightarrow{\mathit{wr}(t, x)} (C, L, M') }\\\\
 
-\inference[\Rule{\Rule{Fork}}]{C' = C[u := C_u \VCMax C_t, t := inc_t(C_t)]}{(C, L, M) \Rightarrow^{\mathit{fork}(t, u)} (C', L, M)}\\\\
+\inference[\Rule{\Rule{Fork}}]{C' = C[u := C_u \VCMax C_t, t := inc_t(C_t)]}{(C, L, M) \xRightarrow{\mathit{fork}(t, u)} (C', L, M)}\\\\
 
-\inference[\Rule{Join}]{C' = C[t := C_t \VCMax C_u, u := inc_u(C_u)]}{(C, L, M) \Rightarrow^{\mathit{join}(t, u)} (C', L, M)}\\\\
+\inference[\Rule{Join}]{C' = C[t := C_t \VCMax C_u, u := inc_u(C_u)]}{(C, L, M) \xRightarrow{\mathit{join}(t, u)} (C', L, M)}\\\\
 
-\inference[\Rule{Acquire}]{C' = C[t := (C_t \VCMax L_m)]}{(C, L, M) \Rightarrow^{\mathit{acq}(t, m)} (C, L, M)}\\\\
+\inference[\Rule{Acquire}]{C' = C[t := (C_t \VCMax L_m)]}{(C, L, M) \xRightarrow{\mathit{acq}(t, m)} (C, L, M)}\\\\
 
-\inference[\Rule{\Rule{Release}}]{L' = L[m := C_t] \\ C' = C[t := inc_t(C_t)]}{(C, L, M) \Rightarrow^{\mathit{rel}(t, m)} (C', L', M)}
+\inference[\Rule{\Rule{Release}}]{L' = L[m := C_t] \\ C' = C[t := inc_t(C_t)]}{(C, L, M) \xRightarrow{\mathit{rel}(t, m)} (C', L', M)}
 }
 \end{tabular}
 \caption{\FT operational semantics. \TODO{update these to R,W instead of M} }
@@ -405,7 +407,7 @@ $\RelOp{0}{\Lock}$ & & \\
 \end{figure}
 
 
-In FastTrack, when write metadata $W_x$ is collapsed to an epoch $c@t$, it is precisely because $W_x(t) = c$ and $c@t$ encapsulates $W_x$. The relation for read metadata is more complicated, for one particular reason: the Write Shared rule resets read metadata to an empty epoch. This has two effects on the simulation relation. First, we must make a special allowance for the case in which the read metadata is empty; in this case, it is the write epoch that encapsulates the original read vector clock. Second, even when the FastTrack state holds a vector clock in $R_x$, that vector clock may contain some 0 values in places where reads have in fact been performed. In effect, because FastTrack read vector clocks are always derived from epochs, they carry forward a partial encapsulation relation, in which one component encapsulates all the relationships on zeroed values.
+In FastTrack, when write metadata $W_x$ is collapsed to an epoch $c@t$, it is precisely because $W_x(t) = c$ and $c@t$ encapsulates $W_x$. The relation for read metadata is more complicated, for one particular reason: the \Rule{WriteShared} rule resets read metadata to an empty epoch. This has two effects on the simulation relation. First, we must make a special allowance for the case in which the read metadata is empty; in this case, it is the write epoch that encapsulates the original read vector clock. Second, even when the FastTrack state holds a vector clock in $R_x$, that vector clock may contain some 0 values in places where reads have in fact been performed. In effect, because FastTrack read vector clocks are always derived from epochs, they carry forward a partial encapsulation relation, in which one component encapsulates all the relationships on zeroed values.
 \begin{definition}A vector clock $V_0$ \emph{partially encapsulates} a vector clock $V$ for another vector clock $V'$ if there is some thread $t$ such that:
 \begin{itemize}
 \item for all $u$ such that $V_0(u) = 0$, $V_0(t) \le V'(t)$ implies that $V(u) \le V'(u)$
@@ -430,11 +432,17 @@ While the simulation relation is complicated by the encapsulation relations, onc
 
 \subsubsection{Direct Proof}
 \label{bug}
-Flanagan and Freund justify the optimizations of FastTrack by proving that the $\sqsubseteq$ relation on vector clocks still precisely captures the happens-before relation. As a baseline for comparison, we formalized this proof in Coq as well, and discovered an error in the paper proof in the process. FastTrack's Lemma 4 states the following: {\it Suppose $\sigma$ is well-formed and $\sigma \Rightarrow^\alpha \sigma'$ and $a, b \in \alpha$. Let $t = \mathit{tid}(a)$ and $u = \mathit{tid}(b)$. If $a <_{\alpha} b$ then $K^a(t) \sqsubseteq K^b(t)$.} This lemma is then used to prove that if some operation $b$ is \emph{stuck}, then a previous operation $a$ must have raced with it, since $K^a(t) \not\sqsubseteq K^b(t)$. However, the premise of Lemma 4 requires that $a$ and $b$ not be stuck, since they are in a trace $\alpha$ that successfully executes to a state $\sigma'$. Because of this constraint, Lemma 4 in fact does not apply. Fortunately, this premise is stronger than necessary to prove Lemma 4, and in Coq we are able to prove a more general version:
-\begin{lemma}Suppose $\sigma$ is well-formed and $\sigma \Rightarrow^\alpha \sigma'$ and $a \in \alpha$. Let $t = \mathit{tid}(a)$ and $u = \mathit{tid}(b)$. If $a <_{\alpha; b} b$ then $K^a(t) \sqsubseteq K^b(u)$.\end{lemma}
+Flanagan and Freund justify the optimizations of FastTrack by proving that the $\sqsubseteq$ relation on vector clocks still precisely captures the happens-before relation. As a baseline for comparison, we formalized this proof in Coq as well, and discovered an error in the paper proof in the process. FastTrack's Lemma 4 states the following: {\it Suppose $\sigma$ is well-formed and $\sigma \xRightarrow{\alpha} \sigma'$ and $a, b \in \alpha$. Let $t = \mathit{tid}(a)$ and $u = \mathit{tid}(b)$. If $a <_{\alpha} b$ then $K^a(t) \sqsubseteq K^b(t)$.} This lemma is then used to prove that if some operation $b$ is \emph{stuck}, then a previous operation $a$ must have raced with it, since $K^a(t) \not\sqsubseteq K^b(t)$. However, the premise of Lemma 4 requires that $a$ and $b$ not be stuck, since they are in a trace $\alpha$ that successfully executes to a state $\sigma'$. Because of this constraint, Lemma 4 in fact does not apply. Fortunately, this premise is stronger than necessary to prove Lemma 4, and in Coq we are able to prove a more general version:
+\begin{lemma}Suppose $\sigma$ is well-formed and $\sigma \xRightarrow{\alpha} \sigma'$ and $a \in \alpha$. Let $t = \mathit{tid}(a)$ and $u = \mathit{tid}(b)$. If $a <_{\alpha; b} b$ then $K^a(t) \sqsubseteq K^b(u)$.\end{lemma}
 where by abuse of notation we use $K^b(t)$ to refer to the $C_u$ component of $\sigma'$ updated as appropriate for a blocking operation. With this statement of the lemma, the completeness proof follows as outlined in the paper.
 
 Compared to the proof by simulation, this proof is about 130 lines longer, reflecting duplication of effort from proving similar theorems about the two systems. It also involves a significant amount of inductive reasoning, which might have been difficult to synthesize without the guide of the paper proof. In this case, since FastTrack preserves the same invariants as the base algorithm, the proofs have largely the same structure; however, if a different algorithm modified some of these invariants, we believe that the proof by simulation would be significantly easier to construct than the proof that recapitulates the relationship between $\sqsubseteq$ and happens-before.
+
+\subsection{Handling Multiple Joins}
+\label{waits}
+In many concurrent languages, once a thread has terminated, it is possible for multiple threads to join with it. According to the rules in Figure~\ref{vc}, on a join, $C_t$ is updated to $C_t \sqcup C_u$ and $C_u(u)$ is incremented, maintaining the invariant that $C_u(u) > C_t(u)$. This increment is in some sense unnecessary, since $u$ will perform no more operations and does not require race detection, but it appears harmless. However, if we consider what would be involved in implementing this algorithm, we see that the increment is potentially dangerous: if two threads join with $u$ at the same time, the updates to $C_u$ will race. (See Section~\ref{sync} for more on races in instrumentation.)
+
+If we remove the unnecessary increment, then there is no risk of races between joins: both threads read $C_u$, but only modify their own vector clocks, and simultaneous reads do not constitute a race. Without this increment, however, we must modify the invariants of the race detection algorithm; in particular, we must allow the basic invariant to be violated for terminated threads. One possible approach is to add an operation $\mathsf{exit}(t)$ produced when a thread terminates, and to extend the state with an additional component, a set $X$ of threads that have $\mathsf{exit}$ed. A thread can then only perform operations before it $\mathsf{exit}$s, and only be the target of a $\mathsf{join}$ after it $\mathsf{exit}$s. With these changes, we obtain a new vector clock race detection algorithm suitable for multiple-join approaches to concurrency, and the new algorithm is also sound and complete. We have verified this modified algorithm in Coq by modifying the proofs of the base vector clock algorithm; note that since it accepts traces that are rejected by the base algorithm (in the original presentation of the vector clock algorithm, multiple joins to the same thread are ill-formed), we cannot hope to prove its correctness by simulation.
 
 \section{Race Detection Instrumentation}
 \label{language}
@@ -442,19 +450,35 @@ Compared to the proof by simulation, this proof is about 130 lines longer, refle
 In the previous section, we described the statement and verification of \emph{algorithms} for dynamic race detection. For dynamic race detection to be useful, it must be implemented as a tool that runs during the execution of a program. Most commonly, this is achieved by \emph{instrumenting} the program with additional instructions that carry out the algorithm. Instrumentation must be defined in terms of the instructions of some language instead of abstract arithmetic operations, and must take place within the flow of a program rather than alongside it. Because of this, the process of translating from algorithm to instrumentation is highly error-prone \TODO{mention differences between FastTrack paper and implementation?}. In this and the following sections, we present an instrumentation pass in a simple language that is formally proven to implement the simple vector clock race detection algorithm of Section~\ref{vector-clocks}.
 
 \subsection{The Language}
-We define a simple multithreaded language that is just complicated enough to have races and implement race detection instrumentation. The instructions of the language are defined as follows, where $n$ is a natural number, $a$ is a local variable, $e, e1, e2$ are expressions, $p$ is a pointer, $l$ is a lock, $t$ is a numeric thread id, and $i_j$ are instructions:
+We define a simple multithreaded language that is just complicated enough to have races and implement race detection instrumentation. The instructions of the language are defined as follows, where $n$ is a natural number, $a$ is a local variable, $e, e1, e2$ are expressions, $p$ is a pointer \TODO{block-offset?}, $l$ is a lock, $t$ is a numeric thread id, and $i_j$ are instructions:
 \begin{align*}\mathit{expr} ::= n~|~a~|~e_1 + e_2~|~\mathtt{max}(e_1, e_2)\end{align*}
 \begin{align*}\mathit{instr} ::=\ &\assign{a}{e}~|~\load{a}{p}~|~\store{p}{e}~|~\lock{l}~\\|~&\unlock{l}~|~\spawn{t}{i_1, ..., i_n}~|~\wait{t}~\\|~&\assert{e_1}{e_2}\end{align*}
-A \emph{program} is simply a list of instructions, considered to be the body of the main thread with id $0$. The dynamic state of a program contains a collection of threads, where a thread is a pair $(t, \mathit{li})$ of an id and a list of instructions, and a family of local environments $G_t$, one for each thread, assigning values to local variables. We give semantics to the language via a transition system of the form $(P, G) \xrightarrow{o, c} (P', G')$, where $P, P'$ are collections of threads, $G, G'$ are environments, $o$ is a race detection operation (if one is produced by the step), and $c$ is a concurrent memory operation (likewise). We define a function $\mathsf{eval}$ that takes a local environment and an expression and yields the value of the expression. The semantics of the language are shown in Figure~\ref{semantics}. \TODO{I'm not satisfied with this presentation; can we distinguish memory and RD ops better?}
+A \emph{program} is simply a list of instructions, considered to be the body of the main thread with id $0$. The dynamic state of a program contains a collection $P$ of thread states, where a thread is a triple $(t, \mathit{li}, \rho)$ of an id, a list of instructions, and an environment mapping local variables to values, as well as a memory state\footnote{While our semantics is phrased in terms of memory states and updates, the Coq implementation uses an approach based on that of Mansky et al.~\cite{memspec}, in which memory is represented as a sequence of operations and program and memory semantics are stated separately. This approach is convenient for verification, but its details are orthogonal to race detection instrumentation.} $m$. We also include a special error state $\mathit{err}$ for detected races (i.e., failed \texttt{assert}s). We give semantics to the language via a labeled transition system: each step is labeled with any race detection operation it produces. These operations have no effect on the program's execution, but allow us to track the (purely hypothetical) behavior of the vector clock algorithm run in parallel with the program, which serves as a reference for the correctness of the instrumentation. In each step, we pull out some thread and execute the next instruction in that thread, updating the state as necessary. Thus, the transition rules for the language are of the form \exec{P}{m}{t}{o}{(P', m')}, where $t$ is the executing thread and $o$ is an optional race detection operation. The semantics of the language are shown in Figure~\ref{semantics}.
 
 \begin{figure}[htb]
-$$\inference[assign]{P(t) = \assign{a}{e}\texttt{;} \mathit{li}}{(P, G) \rightarrow_t \\(P[t \mapsto \mathit{li}], G[G_t[a \mapsto \mathsf{eval}(G_t, e)]])}$$
+\bigcell{
+\inference{}{\exec{P \uplus (t, \assign{a}{e}\texttt{;} \mathit{li}, G)}{m}{t}{}{(P \uplus (t, \mathit{li}, G[a \mapsto \mathsf{eval}(G, e)]), m)}}\\\\
 
+\inference{\mathsf{read}(m, p) = v}{\exec{P \uplus (t, \load{a}{p}\texttt{;} \mathit{li}, G)}{m}{t}{\mathit{rd}(t, p)}{(P \uplus (t, \mathit{li}, G[a \mapsto v]), m)}}\\\\
+
+\inference{\mathsf{write}(m, p, v) = m'}{\exec{P \uplus (t, \store{p}{e}\texttt{;} \mathit{li}, G)}{m}{t}{\mathit{wr}(t, p)}{(P \uplus (t, \mathit{li}, G), m')}}\\\\
+
+\inference{\mathsf{write}(m, \ell, t + 1) = m'}{\exec{P \uplus (t, \lock{\ell}\texttt{;} \mathit{li}, G)}{m}{t}{\mathit{acq}(t, \ell)}{(P \uplus (t, \mathit{li}, G), m')}}\\\\
+
+\inference{\mathsf{write}(m, \ell, 0) = m'}{\exec{P \uplus (t, \unlock{\ell}\texttt{;} \mathit{li}, G)}{m}{t}{\mathit{rel}(t, \ell)}{(P \uplus (t, \mathit{li}, G), m)}}\\\\
+
+\inference{\forall \mathit{li}' G'.\ (t, \mathit{li}', G') \not\in P}{\exec{P \uplus (t, \spawn{u}{\mathit{li}'}\texttt{;} \mathit{li}, G)}{m}{t}{\mathit{fork}(t, u)}{(P \uplus (t, \mathit{li}, G) \uplus (u, \mathit{li}', G_0), m)}}\\\\
+
+\inference{(u, \cdot, G') \in P}{\exec{P \uplus (t, \wait{u}\texttt{;} \mathit{li}, G)}{m}{t}{\mathit{join}(t, u)}{(P \uplus (t, \mathit{li}, G), m)}}\\\\
+
+\inference{\mathsf{eval}(G, e_1) \le \mathsf{eval}(G, e_2)}{\exec{P \uplus (t, \assert{e_1}{e_2}\texttt{;} \mathit{li}, G)}{m}{t}{}{(P \uplus (t, \mathit{li}, G), m)}}\\\\
+
+\inference{\mathsf{eval}(G, e_1) > \mathsf{eval}(G, e_2)}{\exec{P \uplus (t, \assert{e_1}{e_2}\texttt{;} \mathit{li}, G)}{m}{t}{}{\mathit{err}}}
+}
 \caption{Semantics of the simple language}
 \label{semantics}
 \end{figure}
-
-A state $P$ is \emph{final} if all of its threads have executed to completion.
+Note that we implement locks as memory locations in which we store 0 if the lock is unheld or $t + 1$ if it is held by $t$; we assume a strict separation between locks and normal memory locations. The initial environment $G_0$ maps all variables to 0, and the initial memory $m_0$ likewise maps all locations to 0. We call a state $P$ \emph{final} if all of its threads have executed to completion; $\mathit{err}$ is also considered final. The result of a program $P$ is the configuration $R$ such that \execstar{(0, P, G_0)}{m_0}{\vec{o}}{R}.
 
 \subsection{Instrumentation}
 For each rule of the vector clock algorithm, we provide a code snippet that can be added to the associated instruction to implement the rule. We begin by defining macros for the basic mathematical operations of the algorithm, as shown in Figure~\ref{helper}. We designate two local variables unused in the base program (\texttt{tmp1} and \texttt{tmp2}) as temporaries for use by the instrumentation. Let $z$ be the largest thread id generated in the lifetime of the program. (Note that in our simple language, $z$ can be determined statically; in real-world implementations, the vector clock data would need to be dynamically resized in memory when this bound is exceeded.)
@@ -504,6 +528,8 @@ With these macros as building blocks, we can straightforwardly translate the rul
 The instrumented version of a program $P$ is then simply $\instrp{P} \triangleq \instr{0}{P}$. Because in our language the bodies of future threads are embedded in the \texttt{spawn} instructions, we instrument these threads by recursively calling $\mathsf{instrument}$ on their bodies.
 
 \subsection{Necessary Synchronization}
+\label{sync}
+
 \begin{figure}[htb]
 \centering
 \begin{tabular}{c || c}
@@ -524,9 +550,6 @@ The instrumentation of the previous section cannot implement sound and complete 
 \begin{align*}&\instr{t}{\load{a}{(b, o)}} \triangleq \lock{X + x}\texttt{;} \\&\quad\vcle{W + b}{C + t}\texttt{;} \move{(C + t, t)}{(R + b, t)}\texttt{;} \\&\quad\load{a}{(b, o)}\texttt{;} \unlock{X + x}\end{align*}
 \begin{align*}&\instr{t}{\store{(b, o)}{e}} \triangleq \lock{X + x}\texttt{;} \\&\quad\vcle{W + b}{C + t}\texttt{;} \vcle{R + b}{C + t}\texttt{;} \\&\quad\move{(C + t, t)}{(W + b, t)}\texttt{;} \store{(b, o)}{e}\texttt{;} \unlock{X + x}\end{align*}
 This guarantees that the instrumentation will never race with itself, which is sufficient to allow us to prove correctness of the instrumentation in the next section.
-
-\label{waits}
-The semantics of our language allow one more case in which instrumentation may race. Since a terminated thread is not removed from the state when another thread \texttt{wait}s for it, two threads may \texttt{wait} for the same thread, and the subsequent race detection operations may conflict. While this is a fairly obscure case, on closer examination, it is also preventable. The $\mathsf{merge}$ operation only reads the vector clock of the terminated thread, and simultaneous reads to the same location do not constitute races. The only write to $C + u$ is in the $\mathsf{inc}$ macro, which is performed to maintain the invariant that a thread always has a higher timestamp for itself than any other thread has for it. While this simplifies reasoning, the invariant is not actually necessary for a thread that will perform no further operations, which must be the case for the target of a \texttt{wait}. If we remove the $\mathsf{inc}$ from the \texttt{wait} instrumentation, we get an equally correct race detection algorithm that allows for multiple \texttt{waits} on a single thread. \TODO{outline proof?}
 
 \section{Verifying Instrumentation}
 \label{verification}
