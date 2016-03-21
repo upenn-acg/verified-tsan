@@ -50,14 +50,10 @@
 %\newcommand{\Epoch}[2]{(#1, #2)}
 \newcommand{\VC}{v}
 \newcommand{\VCFont}{}
-\newcommand{\SWState}{\VCFont{V}}
-%\newcommand{\SWState}{\heartsuit}
 \newcommand{\ThreadVC}[1]{\VCFont{C}_{#1}}
 \newcommand{\LockVC}[1]{\VCFont{L}_{#1}}
 \newcommand{\ReadVC}[1]{\VCFont{R}_{#1}}
 \newcommand{\WriteVC}[1]{\VCFont{W}_{#1}}
-\newcommand{\VCHB}{\sqsubseteq}
-\newcommand{\VCJoin}[2]{#1 \sqcup #2}
 \newcommand{\VCInc}[2]{inc_{#1}(#2)}
 \newcommand{\SuchThat}{\ \text{s.t.}\ }
 \newcommand{\Bind}{\ .\ }
@@ -71,7 +67,6 @@
 \newcommand{\EpochVC}{\textit{EpochPlusVC}\xspace}
 \newcommand{\EpochVCs}{\textit{EpochPlusVC}s\xspace}
 \newcommand{\Rule}[1]{\textsc{#1}}
-\newcommand{\CurWEpocht}{\mathbb{W}_t}
 \newcommand{\VCMax}{\sqcup}
 \newcommand{\VCCompare}{\sqsubseteq} 
 \newcommand{\EpochCompare}{\preceq}
@@ -205,13 +200,12 @@ The \emph{happens-before} relation $\hb$ is a partial order over events in a
 program trace \cite{lamport-hb}.  Given events $a$ and $b$, we say $a$
 \emph{happens before} $b$ (and $b$ \emph{happens after} $a$), written $a \hb b$,
 if: (1) $a$ precedes $b$ in program order in the same thread; or (2) $a$
-precedes $b$ in synchronization order, \eg, a lock release $\RelOp{\Tid}{\Lock}$
-and subsequent acquire $\AcqOp{\TidU}{\Lock}$; or (3) $(a,b)$ is in the
+precedes $b$ in synchronization order $\sw$, \eg, a lock release $\RelOp{\Tid}{\Lock}$
+and subsequent acquire $\AcqOp{\TidU}{\Lock}$ implies $\RelOp{\Tid}{\Lock} \sw \AcqOp{\TidU}{\Lock}$; or (3) $(a,b)$ is in the
 transitive closure of program order and synchronization order.
 % Synchronization order also induces happens-before ordering on
 % other synchronization events such as thread fork to thread start
 % and thread termination to thread join. 
-%If $a$ happens before $b$ then we also say that $b$ \emph{happens after} $a$.
 Two events not ordered by happens-before are \emph{concurrent}.  Two
 memory accesses to the same address form a \emph{data race} if they are
 concurrent and at least one is a write.
@@ -221,12 +215,14 @@ concurrent and at least one is a write.
 
 \emph{Vector clocks} can track the happens-before relation during
 execution \cite{fidge-vc,mattern-vc}.  A vector clock $\VC$ stores one integer
-logical clock per thread.  There are two key binary operations on vector clocks:
-\emph{union} is the element-wise maximum of two vector clocks
-($\VCJoin{\VC_1}{\VC_2} = \VC_3 \SuchThat \forall \Tid \Bind \VC_3(\Tid) =
-\max(\VC_1(\Tid), \VC_2(\Tid))$); \emph{happens-before} is the element-wise
-comparison of two vector clocks ($\VC_a \VCHB \VC_b$ is defined to mean $\forall
-\Tid \Bind \VC_a(\Tid) \leq \VC_b(\Tid)$).  A vector-clock race detector keeps
+logical clock per thread.  There are three key operations on vector clocks.
+\emph{Union} is the element-wise maximum of two vector clocks
+($\VC_1 \VCMax \VC_2 = \VC_3 \SuchThat \forall \Tid \Bind \VC_3(\Tid) =
+\max(\VC_1(\Tid), \VC_2(\Tid))$). \emph{Compare} is the element-wise
+comparison of two vector clocks ($\VC_a \VCCompare \VC_b$ is defined to mean $\forall
+\Tid \Bind \VC_a(\Tid) \leq \VC_b(\Tid)$).  Finally, \emph{increment} is defined as $inc_t(V) = \lambda u \Bind \mathrm{~if~} u=t \mathrm{~then~} V(u)+1 \mathrm{~else~} V(u)$
+
+A vector-clock race detector keeps
 four kinds of state:
 \begin{itemize}
 %\setlength{\itemsep}{1pt}
@@ -259,9 +255,9 @@ four kinds of state:
 Initially, all $\LockVC{}$, $\ReadVC{}$, and $\WriteVC{}$ vector clocks are
 set to $\VC_0$, where $\forall \Tid \Bind \VC_0(\Tid) = 0$.  Each thread $\Tid$'s
 initial vector clock is $\ThreadVC{\Tid}$, where $\ThreadVC{\Tid}(\Tid) = 1$
-and $\forall \TidU \neq \Tid \Bind \ThreadVC{\Tid}(\TidU) = 0$.  On a lock
+and $\forall \TidU \neq \Tid \Bind \ThreadVC{\Tid}(\TidU) = 0$.  \TODO{would probably be good to render these as operational semantics instead} On a lock
 acquire $\AcqOp{\Tid}{\Lock}$, we update $\ThreadVC{\Tid}$ to
-$\VCJoin{\ThreadVC{\Tid}}{\LockVC{\Lock}}$.  By acquiring lock $\Lock$, thread
+$\ThreadVC{\Tid} \VCMax \LockVC{\Lock}$.  By acquiring lock $\Lock$, thread
 $\Tid$ has synchronized with all events that happen before the last release of
 $\Lock$, so all these events happen before all subsequent events in $\Tid$.  On
 a lock release $\RelOp{\Tid}{\Lock}$, we update $\LockVC{\Lock}$ to
@@ -269,13 +265,13 @@ $\ThreadVC{\Tid}$, capturing all events that happen before this release.  We
 then increment $\Tid$'s entry in its own vector clock $\ThreadVC{\Tid}$ to
 ensure that subsequent events in $\Tid$ do not appear to happen before the
 release $\Tid$ just performed.  On a read $\ReadOp{\Tid}{\Address}{\Value}$, we
-first check if $\WriteVC{\Address} \VCHB \ThreadVC{\Tid}$.  If this
+first check if $\WriteVC{\Address} \VCCompare \ThreadVC{\Tid}$.  If this
 check fails, there is a previous write to $\Address$ that did not happen
 before this read, so there is a data race.  Otherwise, we set
 $\Tid$'s entry in $\ReadVC{\Address}$ to $\Tid$'s current logical clock,
 $\ThreadVC{\Tid}(\Tid)$.  On a write
 $\WriteOp{\Tid}{\Address}{\Value}$, we check if $\WriteVC{\Address}
-\VCHB \ThreadVC{\Tid}$ and $\ReadVC{\Address} \VCHB \ThreadVC{\Tid}$.  If
+\VCCompare \ThreadVC{\Tid}$ and $\ReadVC{\Address} \VCCompare \ThreadVC{\Tid}$.  If
 this check fails, there is a previous access to $\Address$ that did not
 happen before this write, so there is a data race.  Otherwise, we
 clear all last reads, setting $\ReadVC{\Address}$ to $\VC_0$, and replace the
@@ -290,23 +286,22 @@ last write with the current write, such that $\WriteVC{\Address}(\Tid) =
 %$\Address$.  
 
 \subsubsection{Correctness}
-The correctness of vector clock race detection follows from the fact that the $\sqsubseteq$ relation between vector clocks precisely models the happens-before relation. Our formalization follows the proof outline given in the presentation of FastTrack~\cite{fasttrack} (with the change described in Section~\ref{bug}), which can be straightforwardly translated into Coq. The main invariant of the algorithm is that $C_t(t) > C_u(t)$, that is, each thread always has a higher timestamp for itself than any other thread has for it.
+The correctness of vector clock race detection follows from the fact that the $\sqsubseteq$ relation between vector clocks precisely models the happens-before relation. Our formalization follows the proof outline given in the presentation of FastTrack~\cite{fasttrack} (with the change described in Section~\ref{bug}), which can be straightforwardly translated into Coq. The main invariant of the algorithm is that $C_t(t) \VCCompare C_u(t)$, that is, each thread always has a higher timestamp for itself than any other thread has for it.
 
 \subsection{FastTrack}
 
 % joe: lifted from the SlimFast paper
 
 The FastTrack algorithm \cite{fasttrack} leverages the observation that, by the definition of a data race, all writes to an address must be totally ordered in race-free traces. FastTrack accordingly adopts a more sophisticated representation of vector clocks to save space and time.
-\emph{Epochs} can often be used in place of vector clocks; an epoch $c@t$ is a reduced vector clock that holds a timestamp for just one thread, and is treated as a vector clock that is $c$ for $t$ and 0 for every thread other than $t$. Because epochs have a single non-zero entry, an epoch can be compared with a vector clock, or another epoch, in \Constant time using the $\EpochCompare$ operator. We say $c@t \EpochCompare V$ when $c \leq V(t)$.
-%, and $c@t \EpochCompare c'@u$ when $t = u$ and $c \leq c'$. % jld: defn doesn't handle 0@t0 <= 1@t0. Probably not worth specifying this precisely.
+\emph{Epochs} can often be used in place of vector clocks; an epoch $c@t$ is a reduced vector clock that holds a timestamp for just one thread, and is treated as a vector clock that is $c$ for $t$ and 0 for every thread other than $t$. Because epochs have a single non-zero entry, an epoch can be compared with a vector clock, or another epoch, in \Constant time using the $\EpochCompare$ operator. We say $c@t \EpochCompare V$ when $c \leq V(t)$ \TODO{iff other entries of V are zero, right?}, and $c@t \EpochCompare c'@u$ when $t = u$ and $c \leq c'$. \TODO{jld: defn doesn't handle 0@t0 <= 1@t0. Should specify this precisely.}
 $\bot_e$ denotes a minimal epoch $0@t0$, though other minimal epochs exist, \eg, $0@t1$.
 
-The \FT analysis state is a tuple $(C, L, M)$, where $C_t$ is a vector clock for the thread $t$, $L_m$ is a vector clock for the lock $m$, and $M_x = (M^R_x, M^W_x)$ is a read vector clock/epoch and a write epoch for the location $x$. \FT's initial analysis state is the tuple $(\lambda t.inc_t(\bot_V), \lambda l.\bot_V , \lambda x. (\bot_e,\bot_e))$. Each thread initially has an empty vector clock, with its own entry incremented, all locks have empty vector clocks, and all memory locations have empty read and write epochs. 
+The \FT analysis state is a tuple $(C, L, R, W)$ just as in the vector clock algorithm, except that $R_x$ may be either a read vector clock or epoch, and $W_x$ is a write epoch, for the location $x$. \FT's initial analysis state is the tuple $(\lambda t.inc_t(\bot_V), \lambda l.\bot_V , \lambda x. \bot_e, \lambda x. \bot_e)$. Each thread initially has an empty vector clock, with its own entry incremented, all locks have empty vector clocks, and all memory locations have empty read and write epochs. 
 
-Intuitively, $C_u(t)$ records the last timestamp at which the thread $t$ synchronized with $u$, and $L_m(t)$, $M^R_x(t)$, and $M^W_x(t)$ record the last timestamps at which $t$ accessed the lock $m$, read from the location $x$, and wrote to the location $x$, respectively. The write metadata for a location is always an epoch; the read metadata may be either an epoch or a full vector clock, depending on whether the location is being read concurrently by multiple threads. We write \EpochPair for the set of location metadata pairs $(R, W)$ in which both $R$ and $W$ are epochs, and \EpochVC for the set of pairs in which $R$ is a vector clock and $W$ is an epoch. The \FT operational semantics are presented in the left columns of \autoref{f:semft}.
+Intuitively, $C_u(t)$ records the last timestamp at which the thread $t$ synchronized with $u$, and $L_m(t)$, $R_x(t)$, and $W_x(t)$ record the last timestamps at which $t$ accessed the lock $m$, read from the location $x$, and wrote to the location $x$, respectively. The write metadata for a location is always an epoch; the read metadata may be either an epoch or a full vector clock, depending on whether the location is being read concurrently by multiple threads. We write \EpochPair for the set of location metadata pairs $(R, W)$ in which both $R$ and $W$ are epochs, and \EpochVC for the set of pairs in which $R$ is a vector clock and $W$ is an epoch. The \FT operational semantics are presented in \autoref{f:semft}.
 
-\TODO{are these necessary here? Would be good to avoid them I suppose}
-We have made three small departures from the \FT semantics as originally presented. First, we represent metadata for a location $x$ as a pair of read and write metadata $M_x$, instead of tracking read metadata and write metadata in separate pieces of analysis state, to more closely mirror our implementation. We also extend the \FT \Rule{WriteExclusive} rule (\autoref{f:semft}) to reset the read epoch $M'^R_x := \bot_e$. This extension is correct because $M'^W_x := E(t)$ and $M^R_x \EpochCompare E(t)$. Any subsequent race-free access to $x$ must be well-ordered with respect to $M'^W_x$ and thus must also be well-ordered with $M^R_x$. Any subsequent racing access to $x$ that is concurrent with $M^R_x$ will be concurrent with $M'^W_x$ as well, so the read epoch is extraneous and can be cleared. Finally, we have added a \Rule{ReadSharedSameEpoch} rule which is used when a thread $t$ reads \EpochVC metadata multiple times within a given epoch. This lets us distinguish cases where \EpochVC updates are necessary, which have different semantics with \TODO{drop this?}.
+\TODO{are these necessary here? Would be good to avoid them if possible}
+We have made two small departures from the \FT semantics as originally presented. We extend the \FT \Rule{WriteExclusive} rule (\autoref{f:semft}) to reset the read epoch $M'^R_x := \bot_e$. This extension is correct because $M'^W_x := E(t)$ and $M^R_x \EpochCompare E(t)$. Any subsequent race-free access to $x$ must be well-ordered with respect to $M'^W_x$ and thus must also be well-ordered with $M^R_x$. Any subsequent racing access to $x$ that is concurrent with $M^R_x$ will be concurrent with $M'^W_x$ as well, so the read epoch is extraneous and can be cleared. Finally, we have added a \Rule{ReadSharedSameEpoch} rule which is used when a thread $t$ reads \EpochVC metadata multiple times within a given epoch. This lets us distinguish the case where \EpochVC updates are necessary from that where updates are not.
 
 \newcommand{\bigcell}[2][c]{% hat tip to http://tex.stackexchange.com/a/19678
   \begin{tabular}[#1]{@{}c@{}}#2\end{tabular}}
