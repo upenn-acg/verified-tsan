@@ -96,11 +96,13 @@
 %\newcommand{\instr}[2]{\ensuremath{\mathsf{instrument}(#1, #2)}}
 \newcommand{\instr}[2]{\ensuremath{\means{#2}_{#1}}}
 \newcommand{\instrp}[1]{\ensuremath{\mathsf{instrument}(#1)}}
-\newcommand{\exec}[5]{\ensuremath{(#1, #2) \xrightarrow{#4}_{#3} #5}}
-\newcommand{\execstar}[4]{\ensuremath{(#1, #2) \tto{#3} #4}}
-\newcommand{\iexec}[4]{\ensuremath{(#1, #2) \Rightarrow_{#3} #4}}
-\newcommand{\execstart}[4]{\ensuremath{(#1, #2) \rightarrow^{*}_{#3} #4}}
-\newcommand{\execstarm}[4]{\ensuremath{(#1, #2) \rightarrow^{*}_{\not #3} #4}}
+\newcommand{\cfg}[2]{\ensuremath{(#1, #2)}}
+\newcommand{\anarrow}[2]{\ensuremath{\xrightarrow{#2}_{#1}}}
+\newcommand{\exec}[5]{\ensuremath{\cfg{#1}{#2} \anarrow{#3}{#4} #5}}
+\newcommand{\execstar}[4]{\ensuremath{\cfg{#1}{#2} \tto{#3} #4}}
+\newcommand{\iexec}[4]{\ensuremath{\cfg{#1}{#2} \Rightarrow_{#3} #4}}
+\newcommand{\execstart}[4]{\ensuremath{\cfg{#1}{#2} \rightarrow^{*}_{#3} #4}}
+\newcommand{\execstarm}[4]{\ensuremath{\cfg{#1}{#2} \rightarrow^{*}_{\not #3} #4}}
 \newcommand{\execs}[3]{\ensuremath{ \xrightarrow{#2}_{#1} #3}}
 \newcommand{\execstars}[2]{\ensuremath{ \tto{#1} #2}}
 \newcommand{\iexecs}[2]{\ensuremath{ \Rightarrow_{#1} #2}}
@@ -485,26 +487,78 @@ We define a simple multithreaded language that is just complicated enough to hav
 \begin{align*}\mathit{instr} ::=\ &\assign{a}{e}~|~\load{a}{p}~|~\store{p}{e}~|~\lock{l}~\\|~&\unlock{l}~|~\spawn{t}{i_1, ..., i_n}~|~\wait{t}~\\|~&\assert{e_1}{e_2}\end{align*}
 A \emph{program} is simply a list of instructions, considered to be the body of the main thread with id $0$. The dynamic state of a program contains a collection $P$ of thread states, where a thread is a triple $(t, \mathit{li}, \rho)$ of an id, a list of instructions, and an environment mapping local variables to values, as well as a memory state\footnote{While our semantics is phrased in terms of memory states and updates, the Coq implementation uses an approach based on that of Mansky et al.~\cite{memspec}, in which memory is represented as a sequence of operations and program and memory semantics are stated separately. This approach is convenient for verification, but its details are orthogonal to race detection instrumentation.} $m$. We also include a special error state $\mathit{err}$ for detected races (i.e., failed \texttt{assert}s). We give semantics to the language via a labeled transition system: each step is labeled with any race detection operation it produces. These operations have no effect on the program's execution, but allow us to track the (purely hypothetical) behavior of the vector clock algorithm run in parallel with the program, which serves as a reference for the correctness of the instrumentation. In each step, we pull out some thread and execute the next instruction in that thread, updating the state as necessary. Thus, the transition rules for the language are of the form \exec{P}{m}{t}{o}{(P', m')}, where $t$ is the executing thread and $o$ is an optional race detection operation. The semantics of the language are shown in Figure~\ref{semantics}.
 
-\begin{figure}[htb]
-\bigcell{
-\inference{}{\exec{P \uplus (t, \assign{a}{e}\texttt{;} \mathit{li}, G)}{m}{t}{}{(P \uplus (t, \mathit{li}, G[a \mapsto \mathsf{eval}(G, e)]), m)}}\\\\
+\begin{figure}[tb]
+\[
+\begin{array}{l}
+\hline
+ \cfg{P \uplus (t, \assign{a}{e}\texttt{;} \mathit{li}, G)}{m}  
+\\ \qquad \anarrow{t}{} \quad 
+\cfg{P \uplus (t, \mathit{li}, G[a \mapsto \mathsf{eval}(G, e)])}{m}
+\\\\
 
-\inference{\mathsf{read}(m, p) = v}{\exec{P \uplus (t, \load{a}{p}\texttt{;} \mathit{li}, G)}{m}{t}{\mathit{rd}(t, p)}{(P \uplus (t, \mathit{li}, G[a \mapsto v]), m)}}\\\\
+\multicolumn{1}{c}{\mathsf{read}(m, p) = v} 
+\\ \hline
+\cfg{P \uplus (t, \load{a}{p}\texttt{;} \mathit{li}, G)}{m}  
+\\ \qquad \anarrow{t}{\mathit{rd}(t, p)} \quad  
+\cfg{P \uplus (t, \mathit{li}, G[a \mapsto v)]}{m}
+\\\\
 
-\inference{\mathsf{write}(m, p, v) = m'}{\exec{P \uplus (t, \store{p}{e}\texttt{;} \mathit{li}, G)}{m}{t}{\mathit{wr}(t, p)}{(P \uplus (t, \mathit{li}, G), m')}}\\\\
+\multicolumn{1}{c}{\mathsf{write}(m, p, v) = m'} 
+\\ \hline
+\cfg{P \uplus (t, \store{p}{e}\texttt{;} \mathit{li}, G)}{m} 
+\\ \qquad \anarrow{t}{\mathit{wr}(t, p)} \quad
+\cfg{P \uplus (t, \mathit{li}, G)}{m'}
+\\\\
 
-\inference{\mathsf{write}(m, \ell, t + 1) = m'}{\exec{P \uplus (t, \lock{\ell}\texttt{;} \mathit{li}, G)}{m}{t}{\mathit{acq}(t, \ell)}{(P \uplus (t, \mathit{li}, G), m')}}\\\\
+\multicolumn{1}{c}{\mathsf{write}(m, \ell, t + 1) = m'} 
+\\ \hline
+\cfg{P \uplus (t, \lock{\ell}\texttt{;} \mathit{li}, G)}{m}
+\\ \qquad \anarrow{t}{\mathit{acq}(t, \ell)} \quad
+\cfg{P \uplus (t, \mathit{li}, G)}{m'}
+\\\\
 
-\inference{\mathsf{write}(m, \ell, 0) = m'}{\exec{P \uplus (t, \unlock{\ell}\texttt{;} \mathit{li}, G)}{m}{t}{\mathit{rel}(t, \ell)}{(P \uplus (t, \mathit{li}, G), m)}}\\\\
+\multicolumn{1}{c}{\mathsf{write}(m, \ell, 0) = m'} 
+\\ \hline
+\cfg{P \uplus (t, \unlock{\ell}\texttt{;} \mathit{li}, G)}{m}
+\\ \qquad \anarrow{t}{\mathit{rel}(t, \ell)} \quad
+\cfg{P \uplus (t, \mathit{li}, G}{m}
+\\\\
 
-\inference{\forall \mathit{li}' G'.\ (t, \mathit{li}', G') \not\in P}{\exec{P \uplus (t, \spawn{u}{\mathit{li}'}\texttt{;} \mathit{li}, G)}{m}{t}{\mathit{fork}(t, u)}{(P \uplus (t, \mathit{li}, G) \uplus (u, \mathit{li}', G_0), m)}}\\\\
+\multicolumn{1}{c}{\forall \mathit{li}' G'.\ (t, \mathit{li}', G') \not\in P}
+\\ \hline
+\cfg{P \uplus (t, \spawn{u}{\mathit{li}'}\texttt{;} \mathit{li}, G)}{m}
+\\ \qquad \anarrow{t}{\mathit{fork}(t, u)} \quad
+\cfg{P \uplus (t, \mathit{li}, G) \uplus (u, \mathit{li}', G_0)}{m}
+\\\\
 
-\inference{(u, \cdot, G') \in P}{\exec{P \uplus (t, \wait{u}\texttt{;} \mathit{li}, G)}{m}{t}{\mathit{join}(t, u)}{(P \uplus (t, \mathit{li}, G), m)}}\\\\
+\multicolumn{1}{c}{(u, \cdot, G') \in P}
+\\ \hline
+\cfg{P \uplus (t, \wait{u}\texttt{;} \mathit{li}, G)}{m}
+\\ \qquad \anarrow{t}{\mathit{join}(t, u)} \quad
+\cfg{P \uplus (t, \mathit{li}, G)}{m}
+\\\\
 
-\inference{\mathsf{eval}(G, e_1) \le \mathsf{eval}(G, e_2)}{\exec{P \uplus (t, \assert{e_1}{e_2}\texttt{;} \mathit{li}, G)}{m}{t}{}{(P \uplus (t, \mathit{li}, G), m)}}\\\\
+\multicolumn{1}{c}{\mathsf{eval}(G, e_1) \le \mathsf{eval}(G, e_2)}
+\\ \hline
+\cfg{P \uplus (t, \assert{e_1}{e_2}\texttt{;} \mathit{li}, G)}{m}
+\\ \qquad \anarrow{t}{} \quad
+\cfg{P \uplus (t, \mathit{li}, G}{m}
+\\\\
 
-\inference{\mathsf{eval}(G, e_1) > \mathsf{eval}(G, e_2)}{\exec{P \uplus (t, \assert{e_1}{e_2}\texttt{;} \mathit{li}, G)}{m}{t}{}{\mathit{err}}}
-}
+\multicolumn{1}{c}{\mathsf{eval}(G, e_1) > \mathsf{eval}(G, e_2)}
+\\ \hline
+\cfg{P \uplus (t, \assert{e_1}{e_2}\texttt{;} \mathit{li}, G)}{m}
+\quad \anarrow{t}{} \quad
+\mathit{err}
+\end{array}
+\]
+
+
+
+
+
+
+
 \caption{Semantics of the simple language}
 \label{semantics}
 \end{figure}
@@ -513,7 +567,7 @@ Note that we implement locks as memory locations in which we store 0 if the lock
 \subsection{Instrumentation}
 For each rule of the vector clock algorithm, we provide a code snippet that can be added to the associated instruction to implement the rule. We begin by defining macros for the basic mathematical operations of the algorithm, as shown in Figure~\ref{helper}. We designate two local variables unused in the base program (\texttt{tmp1} and \texttt{tmp2}) as temporaries for use by the instrumentation. Let $z$ be the largest thread id generated in the lifetime of the program. (Note that in our simple language, $z$ can be determined statically; in real-world implementations, the vector clock data would need to be dynamically resized in memory when this bound is exceeded.)
 
-\begin{figure}[htb]
+\begin{figure}[tb]
 
   \begin{tabular}[t]{rcl}
 
