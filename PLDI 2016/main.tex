@@ -303,6 +303,7 @@ The FastTrack algorithm \cite{fasttrack} leverages the observation that, by the 
    c & \mathrm{if}\ t = u \\
    0 & \mathrm{otherwise}
   \end{array}
+  \right\}
 \]
 
 Because epochs have a single non-zero entry, an epoch can be compared with a vector clock, or another epoch, in \Constant time using the $\EpochCompare$ operator, which is equivalent to $\VCCompare$. We say $c@t \EpochCompare V$ when $c \leq V(t)$, and $c@t \EpochCompare c'@u$ when $c = 0$ or ($t = u$ and $c \leq c'$).
