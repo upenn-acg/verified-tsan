@@ -610,7 +610,7 @@ For each rule of the vector clock algorithm, we provide a code snippet that can 
 
 With these macros as building blocks, we can straightforwardly translate the rules of vector clock race detection from Figure~\ref{f:semvc} into code. We set aside dedicated areas of memory for each of the components of the vector clock state, labeled $C$, $L$, $R$, and $W$ accordingly, and index into them by assigning a unique numeric identifier to each thread, local variable, and lock, so that the block at $L[m]$ in memory contains the vector clock $L_m$ (we write $L[m]$ as a shorthand for $L + m$, using the commonly understood equivalence between pointers and arrays). Note that the timing of the associated vector clock operations depends on the instruction being instrumented; in particular, the blocking operations \texttt{lock} and \texttt{wait} must not change the vector clock state until after they successfully complete.
 
-\begin{figure}[htb]
+\begin{figure}[tb]
   \begin{tabular}[t]{rcl}
 \instr{t}{\load{a}{(b, o)}} & $\triangleq$ & \vcle{W[b]}{C[t]}\texttt{;}
 \\ & &  \move{(C[t], t)}{(R[b], t)}\texttt{;} 
@@ -686,11 +686,24 @@ This guarantees that the instrumentation will never race with itself, which is s
 We verify the correctness of the instrumentation by showing that the instrumentation records the same information and performs the same checks as the vector clock algorithm would perform on the input program.
 
 \begin{figure}[htb]
-\bigcell{
-\inference{}{\iexec{P \uplus (t, \assign{a}{e}\texttt{;} \mathit{li}, G)}{m}{t}{(P \uplus (t, \mathit{li}, G[a \mapsto \mathsf{eval}(G, e)]), m)}}\\\\
+\[
+\begin{array}{l}
+\hline
+\cfg{P \uplus (t, \assign{a}{e}\texttt{;} \mathit{li}, G}{m}
+\\ \qquad \anarrow{t}{} \quad
+\cfg{P \uplus (t, \mathit{li}, G[a \mapsto \mathsf{eval}(G, e)]}{m}
+\\\\
 
-\inference{\mathsf{read}(m, p) = v \quad \forall o.\ (W + p, o) \le (C + t, o) \\\mathsf{read}(m, X + p) = 0 \quad m' = \mathsf{write}(m, (C + t, t), (R + x, t))}{\iexec{P \uplus (t, \instr{t}{\load{a}{p}}\texttt{;} \mathit{li}, G)}{m}{t}{(P \uplus (t, \mathit{li}, G[a \mapsto v, \texttt{tmp1} \mapsto ?, \texttt{tmp2} \mapsto ?]), m')}}
-}
+\multicolumn{1}{c}{\mathsf{read}(m, p) = v \quad \forall o.\ (W[p], o) \le (C[t], o)}
+\\
+\multicolumn{1}{c}{\mathsf{read}(m, X[p]) = 0 \quad m' = \mathsf{write}(m, (C[t], t), (R[x], t))}
+\\
+\hline
+\cfg{P \uplus (t, \instr{t}{\load{a}{p}}\texttt{;} \mathit{li}, G)}{m}
+\\ \qquad \Rightarrow_{t} \quad 
+\cfg{P \uplus (t, \mathit{li}, G[a \mapsto v, \texttt{tmp1} \mapsto ?, \texttt{tmp2} \mapsto ?]}{m'}
+\end{array}
+\]
 \TODO{How can we present this?}
 \caption{Bigger-step semantics of instrumented programs}
 \label{iexec}
