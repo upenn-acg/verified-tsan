@@ -482,66 +482,66 @@ If we remove the unnecessary increment, then there is no risk of races between j
 In the previous section, we described the statement and verification of \emph{algorithms} for dynamic race detection. For dynamic race detection to be useful, it must be implemented as a tool that runs during the execution of a program. Most commonly, this is achieved by \emph{instrumenting} the program with additional instructions that carry out the algorithm. Instrumentation must be defined in terms of the instructions of some language instead of abstract arithmetic operations, and must take place within the flow of a program rather than alongside it. Because of this, the process of translating from algorithm to instrumentation is highly error-prone \TODO{mention differences between FastTrack paper and implementation?}. In this and the following sections, we present an instrumentation pass in a simple language that is formally proven to implement the simple vector clock race detection algorithm of Section~\ref{vector-clocks}.
 
 \subsection{The Language}
-We define a simple multithreaded language that is just complicated enough to have races and implement race detection instrumentation. The instructions of the language are defined as follows, where $n$ is a natural number, $a$ is a local variable, $e, e1, e2$ are expressions, $p$ is a pointer \TODO{block-offset?}, $l$ is a lock, $t$ is a numeric thread id, and $i_j$ are instructions:
+We define a simple multithreaded language that is just complicated enough to have races and implement race detection instrumentation. The instructions of the language are defined as follows, where $n$ is a natural number, $a$ is a local variable, $e, e1, e2$ are expressions, $x$ is a memory location, $l$ is a lock, $t$ is a numeric thread id, and $i_j$ are instructions:
 \begin{align*}\mathit{expr} ::= n~|~a~|~e_1 + e_2~|~\mathtt{max}(e_1, e_2)\end{align*}
-\begin{align*}\mathit{instr} ::=\ &\assign{a}{e}~|~\load{a}{p}~|~\store{p}{e}~|~\lock{l}~\\|~&\unlock{l}~|~\spawn{t}{i_1, ..., i_n}~|~\wait{t}~\\|~&\assert{e_1}{e_2}\end{align*}
+\begin{align*}\mathit{instr} ::=\ &\assign{a}{e}~|~\load{a}{x}~|~\store{x}{e}~|~\lock{l}~\\|~&\unlock{l}~|~\spawn{t}{i_1, ..., i_n}~|~\wait{t}~\\|~&\assert{e_1}{e_2}\end{align*}
 A \emph{program} is simply a list of instructions, considered to be the body of the main thread with id $0$. The dynamic state of a program contains a collection $P$ of thread states, where a thread is a triple $(t, \mathit{li}, \rho)$ of an id, a list of instructions, and an environment mapping local variables to values, as well as a memory state\footnote{While our semantics is phrased in terms of memory states and updates, the Coq implementation uses an approach based on that of Mansky et al.~\cite{memspec}, in which memory is represented as a sequence of operations and program and memory semantics are stated separately. This approach is convenient for verification, but its details are orthogonal to race detection instrumentation.} $m$. We also include a special error state $\mathit{err}$ for detected races (i.e., failed \texttt{assert}s). We give semantics to the language via a labeled transition system: each step is labeled with any race detection operation it produces. These operations have no effect on the program's execution, but allow us to track the (purely hypothetical) behavior of the vector clock algorithm run in parallel with the program, which serves as a reference for the correctness of the instrumentation. In each step, we pull out some thread and execute the next instruction in that thread, updating the state as necessary. Thus, the transition rules for the language are of the form \exec{P}{m}{t}{o}{(P', m')}, where $t$ is the executing thread and $o$ is an optional race detection operation. The semantics of the language are shown in Figure~\ref{semantics}.
 
 \begin{figure}[tb]
 \[
-\begin{array}{l}
+\begin{array}{c}
 \hline
  \cfg{P \uplus (t, \assign{a}{e}\texttt{;} \mathit{li}, G)}{m}  
-\\ \qquad \anarrow{t}{} \quad 
+\anarrow{t}{} \\
 \cfg{P \uplus (t, \mathit{li}, G[a \mapsto \mathsf{eval}(G, e)])}{m}
 \\\\
 
-\multicolumn{1}{c}{\mathsf{read}(m, p) = v} 
+\multicolumn{1}{c}{} 
 \\ \hline
-\cfg{P \uplus (t, \load{a}{p}\texttt{;} \mathit{li}, G)}{m}  
-\\ \qquad \anarrow{t}{\mathit{rd}(t, p)} \quad  
-\cfg{P \uplus (t, \mathit{li}, G[a \mapsto v)]}{m}
+\cfg{P \uplus (t, \load{a}{x}\texttt{;} \mathit{li}, G)}{m}  
+\anarrow{t}{\mathit{rd}(t, p)} \\
+\cfg{P \uplus (t, \mathit{li}, G[a \mapsto m(x))]}{m}
 \\\\
 
-\multicolumn{1}{c}{\mathsf{write}(m, p, v) = m'} 
+\multicolumn{1}{c}{} 
 \\ \hline
 \cfg{P \uplus (t, \store{p}{e}\texttt{;} \mathit{li}, G)}{m} 
-\\ \qquad \anarrow{t}{\mathit{wr}(t, p)} \quad
-\cfg{P \uplus (t, \mathit{li}, G)}{m'}
+\anarrow{t}{\mathit{wr}(t, x)} \\
+\cfg{P \uplus (t, \mathit{li}, G)}{m[x \mapsto \mathsf{eval}(G, e)]}
 \\\\
 
-\multicolumn{1}{c}{\mathsf{write}(m, \ell, t + 1) = m'} 
+\multicolumn{1}{c}{m(\ell) = 0}
 \\ \hline
 \cfg{P \uplus (t, \lock{\ell}\texttt{;} \mathit{li}, G)}{m}
-\\ \qquad \anarrow{t}{\mathit{acq}(t, \ell)} \quad
-\cfg{P \uplus (t, \mathit{li}, G)}{m'}
+ \anarrow{t}{\mathit{acq}(t, \ell)} \\
+\cfg{P \uplus (t, \mathit{li}, G)}{m[\ell \mapsto t + 1]}
 \\\\
 
-\multicolumn{1}{c}{\mathsf{write}(m, \ell, 0) = m'} 
+\multicolumn{1}{c}{m(\ell) = t + 1} 
 \\ \hline
 \cfg{P \uplus (t, \unlock{\ell}\texttt{;} \mathit{li}, G)}{m}
-\\ \qquad \anarrow{t}{\mathit{rel}(t, \ell)} \quad
-\cfg{P \uplus (t, \mathit{li}, G}{m}
+\anarrow{t}{\mathit{rel}(t, \ell)} \\
+\cfg{P \uplus (t, \mathit{li}, G}{m[\ell \mapsto 0]}
 \\\\
 
 \multicolumn{1}{c}{\forall \mathit{li}' G'.\ (t, \mathit{li}', G') \not\in P}
 \\ \hline
 \cfg{P \uplus (t, \spawn{u}{\mathit{li}'}\texttt{;} \mathit{li}, G)}{m}
-\\ \qquad \anarrow{t}{\mathit{fork}(t, u)} \quad
+\anarrow{t}{\mathit{fork}(t, u)} \\
 \cfg{P \uplus (t, \mathit{li}, G) \uplus (u, \mathit{li}', G_0)}{m}
 \\\\
 
 \multicolumn{1}{c}{(u, \cdot, G') \in P}
 \\ \hline
 \cfg{P \uplus (t, \wait{u}\texttt{;} \mathit{li}, G)}{m}
-\\ \qquad \anarrow{t}{\mathit{join}(t, u)} \quad
+ \anarrow{t}{\mathit{join}(t, u)} \\
 \cfg{P \uplus (t, \mathit{li}, G)}{m}
 \\\\
 
 \multicolumn{1}{c}{\mathsf{eval}(G, e_1) \le \mathsf{eval}(G, e_2)}
 \\ \hline
 \cfg{P \uplus (t, \assert{e_1}{e_2}\texttt{;} \mathit{li}, G)}{m}
-\\ \qquad \anarrow{t}{} \quad
+\anarrow{t}{} \\
 \cfg{P \uplus (t, \mathit{li}, G}{m}
 \\\\
 
@@ -608,18 +608,18 @@ For each rule of the vector clock algorithm, we provide a code snippet that can 
 \label{helper}
 \end{figure}
 
-With these macros as building blocks, we can straightforwardly translate the rules of vector clock race detection from Figure~\ref{f:semvc} into code. We set aside dedicated areas of memory for each of the components of the vector clock state, labeled $C$, $L$, $R$, and $W$ accordingly, and index into them by assigning a unique numeric identifier to each thread, local variable, and lock, so that the block at $L[m]$ in memory contains the vector clock $L_m$ (we write $L[m]$ as a shorthand for $L + m$, using the commonly understood equivalence between pointers and arrays). Note that the timing of the associated vector clock operations depends on the instruction being instrumented; in particular, the blocking operations \texttt{lock} and \texttt{wait} must not change the vector clock state until after they successfully complete.
+With these macros as building blocks, we can straightforwardly translate the rules of vector clock race detection from Figure~\ref{f:semvc} into code. For this purpose, we use a block-offset memory model (normal variables are considered to be blocks of size 1). We set aside dedicated areas of memory for each of the components of the vector clock state, labeled $C$, $L$, $R$, and $W$ accordingly, and index into them by assigning a unique numeric identifier to each thread, local variable, and lock, so that offset $t$ into block $L[m]$ in memory contains the value of $L_m(t)$ (we write $L[m]$ as a shorthand for $L + m$, using the commonly understood equivalence between pointers and arrays). Note that the timing of the associated vector clock operations depends on the instruction being instrumented; in particular, the blocking operations \texttt{lock} and \texttt{wait} must not change the vector clock state until after they successfully complete.
 
 \begin{figure}[tb]
   \begin{tabular}[t]{rcl}
-\instr{t}{\load{a}{(b, o)}} & $\triangleq$ & \vcle{W[b]}{C[t]}\texttt{;}
+\instr{t}{\load{a}{x}} & $\triangleq$ & \vcle{W[x]}{C[t]}\texttt{;}
 \\ & &  \move{(C[t], t)}{(R[b], t)}\texttt{;} 
-\\ & & \load{$a$}{$(b, o)$}\texttt{;} 
+\\ & & \load{$a$}{$x$}\texttt{;} 
 \\ \\
-\instr{t}{\store{(b, o)}{e}} & $\triangleq$ & \vcle{W[b]}{C[t]}\texttt{;}
+\instr{t}{\store{x}{e}} & $\triangleq$ & \vcle{W[x]}{C[t]}\texttt{;}
 \\ & &  \vcle{R[b]}{C[t]}\texttt{;}
-\\ & & \move{(C[t], t)}{(W[b], t)}\texttt{;}
-\\ & &  \store{$(b, o)$}{$e$}\texttt{;}
+\\ & & \move{(C[t], t)}{(W[x], t)}\texttt{;}
+\\ & &  \store{$x$}{$e$}\texttt{;}
 \\ \\
 \instr{t}{\lock{m}} & $\triangleq$ & \lock{$m$}\texttt{;}
 \\ & & \maxvc{L[m]}{C[t]}\texttt{;}
@@ -649,33 +649,33 @@ The instrumented version of a program $P$ is then simply $\instrp{P} \triangleq 
 \begin{figure}[htb]
 \centering
 \begin{tabular}{c || c}
-\load{\texttt{tmp1}}{$(W[b], 0)$} & \load{\texttt{tmp1}}{$(W[b], 0)$}\\
+\load{\texttt{tmp1}}{$(W[x], 0)$} & \load{\texttt{tmp1}}{$(W[x], 0)$}\\
 ... & ...\\
-& \load{\texttt{tmp1}}{$(R[b], 0)$}\\
+& \load{\texttt{tmp1}}{$(R[x], 0)$}\\
 ... & ...\\
-\store{$(R[b], 0)$}{\texttt{tmp1}} & \store{$(W[b], 0)$}{\texttt{tmp1}}\\
+\store{$(R[x], 0)$}{\texttt{tmp1}} & \store{$(W[x], 0)$}{\texttt{tmp1}}\\
 ... & ...\\
-\load{\texttt{a}}{$(b, o)$} & \store{$(b, o)$}{\texttt{2}}
+\load{\texttt{a}}{$x$} & \store{$x$}{\texttt{2}}
 \end{tabular}
 
 \caption{Races in instrumentation}
 \label{instr-race}
 \end{figure}
 
-The instrumentation of the previous section cannot implement sound and complete race detection for one important reason: when a race does occur, the corresponding instrumentation also races. In instrumented programs such as that shown in Figure~\ref{instr-race}, depending on the order in which the updates to metadata locations occur, the instrumentation may fail to detect the race between the two threads. In general, poorly synchronized race detection instrumentation cannot hope to successfully detect all races. At the same time, adding too much synchronization could significantly hurt performance. Given the set of operations available in our language, we can show that it suffices to add a lock for each memory location, which is used to protect the instrumentation on that memory location. (Intuitively, locks prevent races on their associated metadata, and a thread cannot race with the thread that spawns it or waits for it to terminate.) To implement the necessary synchronization in our instrumentation, we add another designated area of memory, $X$, such that $X[b]$ holds the lock protecting the metadata for block $b$. We then add locking to the \texttt{load} and \texttt{store} instrumentation:
+The instrumentation of the previous section cannot implement sound and complete race detection for one important reason: when a race does occur, the corresponding instrumentation also races. In instrumented programs such as that shown in Figure~\ref{instr-race}, depending on the order in which the updates to metadata locations occur, the instrumentation may fail to detect the race between the two threads. In general, poorly synchronized race detection instrumentation cannot hope to successfully detect all races. At the same time, adding too much synchronization could significantly hurt performance. Given the set of operations available in our language, we can show that it suffices to add a lock for each memory location, which is used to protect the instrumentation on that memory location. (Intuitively, locks prevent races on their associated metadata, and a thread cannot race with the thread that spawns it or waits for it to terminate.) To implement the necessary synchronization in our instrumentation, we add another designated area of memory, $X$, such that $X[x]$ holds the lock protecting the metadata for $x$. We then add locking to the \texttt{load} and \texttt{store} instrumentation:
 \begin{tabular}[t]{rcl}
-\instr{t}{\load{a}{(b, o)}} & $\triangleq$ & \lock{X[b]}\texttt{;}
-\\ & & \vcle{W[b]}{C[t]}\texttt{;} 
-\\ & & \move{(C[t], t)}{(R[b], t)}\texttt{;} 
-\\ & &\load{a}{(b, o)}\texttt{;}
-\\ & & \unlock{X[b]}\texttt{;}
+\instr{t}{\load{a}{x}} & $\triangleq$ & \lock{X[x]}\texttt{;}
+\\ & & \vcle{W[x]}{C[t]}\texttt{;} 
+\\ & & \move{(C[t], t)}{(R[x], t)}\texttt{;}
+\\ & &\load{a}{x}\texttt{;}
+\\ & & \unlock{X[x]}\texttt{;}
 \\
-\instr{t}{\store{(b, o)}{e}} & $\triangleq$ & \lock{X[b]}\texttt{;}
-\\ & & \vcle{W[b]}{C[t]}\texttt{;} 
-\\ & & \vcle{R[b]}{C[t]}\texttt{;}
-\\ & & \move{(C[t], t)}{(W[b], t)}\texttt{;} 
-\\ & & \store{(b, o)}{e}\texttt{;} 
-\\ & & \unlock{X[b]} \texttt{;} 
+\instr{t}{\store{x}{e}} & $\triangleq$ & \lock{X[x]}\texttt{;}
+\\ & & \vcle{W[x]}{C[t]}\texttt{;} 
+\\ & & \vcle{R[x]}{C[t]}\texttt{;}
+\\ & & \move{(C[t], t)}{(W[x], t)}\texttt{;} 
+\\ & & \store{x}{e}\texttt{;} 
+\\ & & \unlock{X[x]} \texttt{;} 
 \end{tabular}
 This guarantees that the instrumentation will never race with itself, which is sufficient to allow us to prove correctness of the instrumentation in the next section.
 \TODO{If this takes up too much space, we can put the locks directly
@@ -687,28 +687,92 @@ We verify the correctness of the instrumentation by showing that the instrumenta
 
 \begin{figure}[htb]
 \[
-\begin{array}{l}
+\begin{array}{c}
+
+\multicolumn{1}{c}{m(X[x]) = 0 \quad \forall o.\ m(W[x], o) \le m(C[t], o)}
+\\
+\multicolumn{1}{c}{m' = m[(R[x], t) \mapsto m(C[t], t)]}
+\\
 \hline
-\cfg{P \uplus (t, \assign{a}{e}\texttt{;} \mathit{li}, G}{m}
-\\ \qquad \anarrow{t}{} \quad
-\cfg{P \uplus (t, \mathit{li}, G[a \mapsto \mathsf{eval}(G, e)]}{m}
+\cfg{P \uplus (t, \instr{t}{\load{a}{x}}\texttt{;} \mathit{li}, G)}{m}
+\Rightarrow_{t} \\
+\cfg{P \uplus (t, \mathit{li}, G[a \mapsto m(x), \texttt{tmp1} \mapsto ?, \texttt{tmp2} \mapsto ?])}{m'}
 \\\\
 
-\multicolumn{1}{c}{\mathsf{read}(m, p) = v \quad \forall o.\ (W[p], o) \le (C[t], o)}
-\\
-\multicolumn{1}{c}{\mathsf{read}(m, X[p]) = 0 \quad m' = \mathsf{write}(m, (C[t], t), (R[x], t))}
+\multicolumn{1}{c}{m(X[x]) = 0 \quad \exists o.\ m(W[x], o) > m(C[t], o)}
 \\
 \hline
-\cfg{P \uplus (t, \instr{t}{\load{a}{p}}\texttt{;} \mathit{li}, G)}{m}
-\\ \qquad \Rightarrow_{t} \quad 
-\cfg{P \uplus (t, \mathit{li}, G[a \mapsto v, \texttt{tmp1} \mapsto ?, \texttt{tmp2} \mapsto ?]}{m'}
+\cfg{P \uplus (t, \instr{t}{\load{a}{x}}\texttt{;} \mathit{li}, G)}{m}
+\Rightarrow_{t} \mathit{err}
+\\\\
+
+\multicolumn{1}{c}{m(X[x]) = 0 \quad \forall o.\ m(W[x], o) \le m(C[t], o)}
+\\
+\multicolumn{1}{c}{\forall o.\ m(R[x], o) \le m(C[t], o)}
+\\
+\multicolumn{1}{c}{m' = m[x \mapsto \mathsf{eval}(G, e), (W[x], t) \mapsto m(C[t], t)]}
+\\
+\hline
+\cfg{P \uplus (t, \instr{t}{\store{x}{e}}\texttt{;} \mathit{li}, G)}{m}
+\Rightarrow_{t} \\
+\cfg{P \uplus (t, \mathit{li}, G[\texttt{tmp1} \mapsto ?, \texttt{tmp2} \mapsto ?])}{m'}
+\\\\
+
+\multicolumn{1}{c}{m(X[x]) = 0}
+\\
+\multicolumn{1}{c}{\exists o.\ m(W[x], o) > m(C[t], o) \vee m(R[x], o) > m(C[t], o)}
+\\
+\hline
+\cfg{P \uplus (t, \instr{t}{\store{x}{e}}\texttt{;} \mathit{li}, G)}{m}
+\Rightarrow_{t} \mathit{err}
+\\\\
+
+\multicolumn{1}{c}{m(\ell) = 0 \quad m' = m[\ell \mapsto t + 1,}
+\\
+\multicolumn{1}{c}{ (C[t], o) \mapsto \mathsf{max}(m(L[m], o), m(C[t], o))]}
+\\
+\hline
+\cfg{P \uplus (t, \instr{t}{\lock{\ell}}\texttt{;} \mathit{li}, G)}{m}
+\Rightarrow_{t} \\
+\cfg{P \uplus (t, \mathit{li}, G[\texttt{tmp1} \mapsto ?, \texttt{tmp2} \mapsto ?])}{m'}
+\\\\
+
+\multicolumn{1}{c}{m(\ell) = t + 1}
+\\
+\multicolumn{1}{c}{m' = m[\ell \mapsto 0, (L[m], o) \mapsto m(C[t], o),}
+\\
+\multicolumn{1}{c}{(C[t], t) \mapsto m(C[t], t) + 1]}
+\\
+\hline
+\cfg{P \uplus (t, \instr{t}{\unlock{\ell}}\texttt{;} \mathit{li}, G)}{m}
+\Rightarrow_{t} \\
+\cfg{P \uplus (t, \mathit{li}, G[\texttt{tmp1} \mapsto ?, \texttt{tmp2} \mapsto ?])}{m'}
+\\\\
+\ignore{
+\multicolumn{1}{c}{m' = m[(C[u], o) \mapsto \mathsf{max}(m(C[u], o), m(C[t], o)), (C[t], t) \mapsto m(C[t], t) + 1]}
+\\
+\hline
+\cfg{P \uplus (t, \instr{t}{\spawn{u}{\mathit{li}'}}\texttt{;} \mathit{li}, G)}{m}
+\Rightarrow_{t} \\
+\cfg{P \uplus (t, \mathit{li}, G[\texttt{tmp1} \mapsto ?, \texttt{tmp2} \mapsto ?]) \uplus (u, \instr{u}{\mathit{li}'}, G_0)}{m'}
+\\\\
+
+\multicolumn{1}{c}{(u, \cdot, G_0) \in P}
+\\
+\multicolumn{1}{c}{m' = m[(C[t], o) \mapsto \mathsf{max}(m(C[t], o), m(C[u], o)), (C[u], u) \mapsto m(C[u], u) + 1]}
+\\
+\hline
+\cfg{P \uplus (t, \instr{t}{\wait{u}}\texttt{;} \mathit{li}, G)}{m}
+\Rightarrow_{t} \\
+\cfg{P \uplus (t, \mathit{li}, G[\texttt{tmp1} \mapsto ?, \texttt{tmp2} \mapsto ?]}{m'}
+}
 \end{array}
 \]
-\TODO{How can we present this?}
+\TODO{Which rules should we show? Also, some omitted ``iterate over o''s}
 \caption{Bigger-step semantics of instrumented programs}
 \label{iexec}
 \end{figure}
-Key to our correctness proof is the idea that the instrumented program can be thought of as executing under a bigger-step semantics in which each instruction and its instrumentation execute in a single step. This semantics is shown in Figure~\ref{iexec}.
+Key to our correctness proof is the idea that the instrumented program can be thought of as executing under a bigger-step semantics in which each instruction and its instrumentation execute in a single step. This semantics is shown in Figure~\ref{iexec}. Each step may modify the temporary variables in an arbitrary way, but otherwise performs a combination of the underlying operation and the corresponding checks and changes to the metadata. Instrumentation for \texttt{load} and \texttt{store} may also fail some checks and step to the $\mathit{err}$ state.
 \begin{lemma}\label{iexec-exec}If $\iexec{P}{m}{t}{(P', m')}$, then $\execstar{P}{m}{}{(P', m')}$.\end{lemma}
 \begin{proof}By case analysis and application of the relevant small-step rules.\end{proof}
 
