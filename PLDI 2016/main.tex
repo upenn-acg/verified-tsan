@@ -391,7 +391,7 @@ rel $\Lock$ & &'' &'' & [2,0] & " \\
 & acq $\Lock$ & " &'' & " & [1,1] \\
 & write $\Address$ & [1,1] & t1@1 & " & " \\
 \end{tabular}
-\caption{An example of how \FT's write epoch emulates the conventional write vector clock.}
+\caption{An example of how \FT's write epoch emulates the conventional write vector clock. \TODO{joe: I think the $\ThreadVC{}$ columns are extraneous} }
 \label{f:encap-writes}
 \end{figure}
 
@@ -411,7 +411,7 @@ write $\Address$ & " & [1,0] & $\EmptyEpoch$ & t0@1 \\
 \begin{figure}[htb]
 \centering
 \begin{tabular}{ccc|c|c|}
-$\Tid_0$ & $\Tid_1$ & $\Tid_2$ & VC $\ReadVC{\Address}$ & FT $\WriteVC{\Address}$ \\
+$\Tid_0$ & $\Tid_1$ & $\Tid_2$ & VC $\ReadVC{\Address}$ & FT $\ReadVC{\Address}$ \\
 \hline
 read $\Address$ & &      & [1,0,0] & t0@1\\
 rel $\Lock$ & &      &''&''\\
