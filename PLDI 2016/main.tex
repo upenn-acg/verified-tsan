@@ -73,6 +73,10 @@
 %\newcommand{\EmptyEpoch}{\bot_e} % TODO: not used
 %\newcommand{\EmptyVC}{\bot_V} % TODO: not used
 
+%%% Semantics
+\newcommand{\meanl}{\ensuremath{[ \! [}}
+\newcommand{\meanr}{\ensuremath{] \! ]}}
+\newcommand{\means}[1]{\ensuremath{\meanl #1 \meanr}}
 
 
 %%% our language's concrete syntax
@@ -91,7 +95,8 @@
 \newcommand{\maxvc}[2]{\ensuremath{\mathsf{merge}(#1, #2)}}
 \newcommand{\lea}[2]{\ensuremath{\mathsf{lea}(#1, #2)}}
 \newcommand{\vcle}[2]{\ensuremath{\mathsf{hb\_check}(#1, #2)}}
-\newcommand{\instr}[2]{\ensuremath{\mathsf{instrument}(#1, #2)}}
+%\newcommand{\instr}[2]{\ensuremath{\mathsf{instrument}(#1, #2)}}
+\newcommand{\instr}[2]{\ensuremath{\means{#2}_{#1}}}
 \newcommand{\instrp}[1]{\ensuremath{\mathsf{instrument}(#1)}}
 \newcommand{\exec}[5]{\ensuremath{(#1, #2) \xrightarrow{#4}_{#3} #5}}
 \newcommand{\execstar}[4]{\ensuremath{(#1, #2) \xrightarrow{#3} #4}}
@@ -494,46 +499,79 @@ A \emph{program} is simply a list of instructions, considered to be the body of 
 Note that we implement locks as memory locations in which we store 0 if the lock is unheld or $t + 1$ if it is held by $t$; we assume a strict separation between locks and normal memory locations. The initial environment $G_0$ maps all variables to 0, and the initial memory $m_0$ likewise maps all locations to 0. We call a state $P$ \emph{final} if all of its threads have executed to completion; $\mathit{err}$ is also considered final. The result of a program $P$ is the configuration $R$ such that \execstar{(0, P, G_0)}{m_0}{\vec{o}}{R}.
 
 \subsection{Instrumentation}
+\TODO{Explain the notation $A[b] = A + b$}
 For each rule of the vector clock algorithm, we provide a code snippet that can be added to the associated instruction to implement the rule. We begin by defining macros for the basic mathematical operations of the algorithm, as shown in Figure~\ref{helper}. We designate two local variables unused in the base program (\texttt{tmp1} and \texttt{tmp2}) as temporaries for use by the instrumentation. Let $z$ be the largest thread id generated in the lifetime of the program. (Note that in our simple language, $z$ can be determined statically; in real-world implementations, the vector clock data would need to be dynamically resized in memory when this bound is exceeded.)
 
 \begin{figure}[htb]
-\TODO{formatting}
 
-\move{p}{q} $\triangleq$ \load{\texttt{tmp1}}{$p$}\texttt{;} \store{$q$}{\texttt{tmp1}}
+  \begin{tabular}[t]{rcl}
 
-\setvc{a}{b} $\triangleq$ \move{(a, 0)}{(b, 0)}\texttt{;} ...\texttt{;} \move{(a, z - 1)}{(b, z - 1)}
-$(V = V')$
+    \move{p}{q} & $\triangleq$ & \load{\texttt{tmp1}}{$p$}\texttt{;}
+\\                    &                      & \store{$q$}{\texttt{tmp1}}\texttt{;}
+\\
+\\ & &  // {\small $V := V'$}
+\\ \setvc{a}{b} & $\triangleq$ & \move{(a, 0)}{(b, 0)}\texttt{;} 
+\\                   &                     &  \ldots
+\\                   &                     &  \move{(a, z - 1)}{(b, z - 1)}\texttt{;} 
+\\
+\\ & & // {\small$C = C[t := \mathit{inc}_t(C_t)]$}
+\\  \incvc{a}{b} & $\triangleq$ & \load{\texttt{tmp1}}{$(a, b)$}\texttt{;} 
+\\                    &                     & \assign{\texttt{tmp1}}{\texttt{tmp1 + 1}}\texttt{;}
+\\                    &                     & \store{$(a, b)$}{\texttt{tmp1}}\texttt{;}
+\\
+\\ \maxa{p}{q} & $\triangleq$ & \load{\texttt{tmp1}}{$p$}\texttt{;}
+\\                    &                     & \load{\texttt{tmp2}}{$q$}\texttt{;}
+\\                    &                     & \assign{\texttt{tmp2}}{\texttt{max\ tmp1\ tmp2}}\texttt{;}
+\\                    &                     & \store{$p$}{\texttt{tmp2}}\texttt{;}
+\\
+\\ & & // {\small $C' = C \sqcup C'$}
+\\  \maxvc{a}{b} & $\triangleq$ & \maxa{(a, 0)}{(b, 0)}\texttt{;} 
+\\                    &                     & \ldots
+\\                    &                     & \maxa{(a, z - 1)}{(b, z - 1)}\texttt{;}
+\\
+\\  \lea{p}{q} & $\triangleq$ & \load{\texttt{tmp1}}{$p$}\texttt{;}
+\\                    &                     & \load{\texttt{tmp2}}{$q$}\texttt{;}
+\\                    &                     & \assert{\texttt{tmp1}}{\texttt{tmp2}}\texttt{;}
+\\
+\\ & & // {$C \sqsubseteq C'$}
+\\  \vcle{a}{b} & $\triangleq$ & \lea{(a, 0)}{(b, 0)}\texttt{;} 
+\\                    &                     & ... 
+\\                    &                     & \lea{(a, z - 1)}{(b, z - 1)}\texttt{;}
+  \end{tabular}
 
-\incvc{a}{b} $\triangleq$ \load{\texttt{tmp1}}{$(a, t)$}\texttt{;} \assign{\texttt{tmp1}}{\texttt{tmp1 + 1}}\texttt{;} \store{$(a, t)$}{\texttt{tmp1}}
-$(C = C[t := \mathit{inc}_t(C_t)])$
-
-\maxa{p}{q} $\triangleq$ \load{\texttt{tmp1}}{$p$}\texttt{;} \load{\texttt{tmp2}}{$q$}\texttt{;} \assign{\texttt{tmp2}}{\texttt{max\ tmp1\ tmp2}}\texttt{;} \store{$p$}{\texttt{tmp2}}
-
-\maxvc{a}{b} $\triangleq$ \maxa{(a, 0)}{(b, 0)}\texttt{;} ...\texttt{;} \maxa{(a, z - 1)}{(b, z - 1)}
-$(C' = C \sqcup C')$
-
-\lea{p}{q} $\triangleq$ \load{\texttt{tmp1}}{$p$}\texttt{;} \load{\texttt{tmp2}}{$q$}\texttt{;} \assert{\texttt{tmp1}}{\texttt{tmp2}}
-
-\vcle{a}{b} $\triangleq$ \lea{(a, 0)}{(b, 0)}\texttt{;} ...\texttt{;} \lea{(a, z - 1)}{(b, z - 1)}
-$(C \sqsubseteq C')$
 \caption{Helper macros}
 \label{helper}
 \end{figure}
 
-With these macros as building blocks, we can straightforwardly translate the rules of vector clock race detection \TODO{cite figure} into code. We set aside dedicated areas of memory for each of the components of the vector clock state, labeled $C$, $L$, $R$, and $W$ accordingly, and index into them by assigning a unique numeric identifier to each thread, local variable, and lock, so that the block at $L + m$ in memory contains the vector clock $L_m$. Note that the timing of the associated vector clock operations depends on the instruction being instrumented; in particular, the blocking operations \texttt{lock} and \texttt{wait} must not change the vector clock state until after they successfully complete.
+With these macros as building blocks, we can straightforwardly translate the rules of vector clock race detection \TODO{cite figure} into code. We set aside dedicated areas of memory for each of the components of the vector clock state, labeled $C$, $L$, $R$, and $W$ accordingly, and index into them by assigning a unique numeric identifier to each thread, local variable, and lock, so that the block at $L[m$ in memory contains the vector clock $L_m$. Note that the timing of the associated vector clock operations depends on the instruction being instrumented; in particular, the blocking operations \texttt{lock} and \texttt{wait} must not change the vector clock state until after they successfully complete.
 
 \begin{figure}[htb]
-\instr{t}{\load{a}{(b, o)}} $\triangleq$ \vcle{W + b}{C + t}\texttt{;} \move{(C + t, t)}{(R + b, t)}\texttt{;} \load{$a$}{$(b, o)$}
-
-\instr{t}{\store{(b, o)}{e}} $\triangleq$ \vcle{W + b}{C + t}\texttt{;} \vcle{R + b}{C + t}\texttt{;} \move{(C + t, t)}{(W + b, t)}\texttt{;} \store{$(b, o)$}{$e$}
-
-\instr{t}{\lock{m}} $\triangleq$ \lock{$m$}\texttt{;} \maxvc{L + m}{C + t}
-
-\instr{t}{\unlock{m}} $\triangleq$ \setvc{C + t}{L + m}\texttt{;} \incvc{t}{C + t}\texttt{;} \unlock{$m$}
-
-\instr{t}{\spawn{u}{\mathit{li}}} $\triangleq$ \maxvc{C + t}{C + u}\texttt{;} \incvc{t}{C + t}\texttt{;} \spawn{$u$}{(\instr{u}{\mathit{li}})}
-
-\instr{t}{\wait{u}} $\triangleq$ \wait{$u$}\texttt{;} \maxvc{C + u}{C + t}\texttt{;} \incvc{u}{C + u}
+  \begin{tabular}[t]{rcl}
+\instr{t}{\load{a}{(b, o)}} & $\triangleq$ & \vcle{W[b]}{C[t]}\texttt{;}
+\\ & &  \move{(C[t], t)}{(R[b], t)}\texttt{;} 
+\\ & & \load{$a$}{$(b, o)$}\texttt{;} 
+\\ \\
+\instr{t}{\store{(b, o)}{e}} & $\triangleq$ & \vcle{W[b]}{C[t]}\texttt{;}
+\\ & &  \vcle{R[b]}{C[t]}\texttt{;}
+\\ & & \move{(C[t], t)}{(W[b], t)}\texttt{;}
+\\ & &  \store{$(b, o)$}{$e$}\texttt{;}
+\\ \\
+\instr{t}{\lock{m}} & $\triangleq$ & \lock{$m$}\texttt{;}
+\\ & & \maxvc{L[m]}{C[t]}\texttt{;}
+\\ \\
+\instr{t}{\unlock{m}} & $\triangleq$ & \setvc{C[t]}{L[m]}\texttt{;}
+\\ & & \incvc{t}{C[t]}\texttt{;}
+\\ & & \unlock{$m$}\texttt{;}
+\\ \\
+\instr{t}{\spawn{u}{\mathit{li}}} & $\triangleq$ &
+                                                   \maxvc{C[t]}{C[u]}\texttt{;}
+\\ & &  \incvc{t}{C[t]}\texttt{;}
+\\ & & \spawn{$u$}{(\instr{u}{\mathit{li}})}\texttt{;}
+\\ \\
+\instr{t}{\wait{u}} & $\triangleq$ & \wait{$u$}\texttt{;}
+\\ & & \maxvc{C[u]}{C[t]}\texttt{;}
+\\ & & \incvc{u}{C[u]}\texttt{;}
+  \end{tabular}
 \caption{Instrumentation}
 \label{instrumentation}
 \end{figure}
@@ -546,11 +584,11 @@ The instrumented version of a program $P$ is then simply $\instrp{P} \triangleq 
 \begin{figure}[htb]
 \centering
 \begin{tabular}{c || c}
-\load{\texttt{tmp1}}{$(W + b, 0)$} & \load{\texttt{tmp1}}{$(W + b, 0)$}\\
+\load{\texttt{tmp1}}{$(W[b], 0)$} & \load{\texttt{tmp1}}{$(W[b], 0)$}\\
 ... & ...\\
-& \load{\texttt{tmp1}}{$(R + b, 0)$}\\
+& \load{\texttt{tmp1}}{$(R[b], 0)$}\\
 ... & ...\\
-\store{$(R + b, 0)$}{\texttt{tmp1}} & \store{$(W + b, 0)$}{\texttt{tmp1}}\\
+\store{$(R[b], 0)$}{\texttt{tmp1}} & \store{$(W[b], 0)$}{\texttt{tmp1}}\\
 ... & ...\\
 \load{\texttt{a}}{$(b, o)$} & \store{$(b, o)$}{\texttt{2}}
 \end{tabular}
@@ -559,9 +597,9 @@ The instrumented version of a program $P$ is then simply $\instrp{P} \triangleq 
 \label{instr-race}
 \end{figure}
 
-The instrumentation of the previous section cannot implement sound and complete race detection for one important reason: when a race does occur, the corresponding instrumentation also races. In instrumented programs such as that shown in Figure~\ref{instr-race}, depending on the order in which the updates to metadata locations occur, the instrumentation may fail to detect the race between the two threads. In general, poorly synchronized race detection instrumentation cannot hope to successfully detect all races. At the same time, adding too much synchronization could significantly hurt performance. Given the set of operations available in our language, we can show that it suffices to add a lock for each memory location, which is used to protect the instrumentation on that memory location. (Intuitively, locks prevent races on their associated metadata, and a thread cannot race with the thread that spawns it or waits for it to terminate.) To implement the necessary synchronization in our instrumentation, we add another designated area of memory, $X$, such that $X + b$ holds the lock protecting the metadata for block $b$. We then add locking to the \texttt{load} and \texttt{store} instrumentation:
-\begin{align*}&\instr{t}{\load{a}{(b, o)}} \triangleq \lock{X + x}\texttt{;} \\&\quad\vcle{W + b}{C + t}\texttt{;} \move{(C + t, t)}{(R + b, t)}\texttt{;} \\&\quad\load{a}{(b, o)}\texttt{;} \unlock{X + x}\end{align*}
-\begin{align*}&\instr{t}{\store{(b, o)}{e}} \triangleq \lock{X + x}\texttt{;} \\&\quad\vcle{W + b}{C + t}\texttt{;} \vcle{R + b}{C + t}\texttt{;} \\&\quad\move{(C + t, t)}{(W + b, t)}\texttt{;} \store{(b, o)}{e}\texttt{;} \unlock{X + x}\end{align*}
+The instrumentation of the previous section cannot implement sound and complete race detection for one important reason: when a race does occur, the corresponding instrumentation also races. In instrumented programs such as that shown in Figure~\ref{instr-race}, depending on the order in which the updates to metadata locations occur, the instrumentation may fail to detect the race between the two threads. In general, poorly synchronized race detection instrumentation cannot hope to successfully detect all races. At the same time, adding too much synchronization could significantly hurt performance. Given the set of operations available in our language, we can show that it suffices to add a lock for each memory location, which is used to protect the instrumentation on that memory location. (Intuitively, locks prevent races on their associated metadata, and a thread cannot race with the thread that spawns it or waits for it to terminate.) To implement the necessary synchronization in our instrumentation, we add another designated area of memory, $X$, such that $X[b]$ holds the lock protecting the metadata for block $b$. We then add locking to the \texttt{load} and \texttt{store} instrumentation:
+\begin{align*}&\instr{t}{\load{a}{(b, o)}} \triangleq \lock{X[x]}\texttt{;} \\&\quad\vcle{W[b]}{C[t]}\texttt{;} \move{(C[t], t)}{(R[b], t)}\texttt{;} \\&\quad\load{a}{(b, o)}\texttt{;} \unlock{X[x]}\end{align*}
+\begin{align*}&\instr{t}{\store{(b, o)}{e}} \triangleq \lock{X[x]}\texttt{;} \\&\quad\vcle{W[b]}{C[t]}\texttt{;} \vcle{R[b]}{C[t]}\texttt{;} \\&\quad\move{(C[t], t)}{(W[b], t)}\texttt{;} \store{(b, o)}{e}\texttt{;} \unlock{X[x]}\end{align*}
 This guarantees that the instrumentation will never race with itself, which is sufficient to allow us to prove correctness of the instrumentation in the next section.
 
 \section{Verifying Instrumentation}
@@ -580,7 +618,7 @@ The reordering proceeds inductively: given an execution, we can always find the 
 Steps by a thread have no effect on the state or local environment of other threads. The only way in which they communicate is via their effects on the shared memory. As such, the main obligation in proving that we can reorder steps in an execution is to show that reordering the associated memory operations does not change the behavior of the program. For our purposes, it suffices to show the stronger condition that if two instrumentation sections execute simultaneously, then the memory locations that they access do not overlap. We refer to this property as \emph{noninterference}. In the following, we use $P \rightarrow^{*}_t P'$ to mean that there is a (possibly empty) sequence of steps $P \rightarrow_t P_1 \rightarrow_t ... \rightarrow_t P'$, and $P \rightarrow^{*}_{\not t} P'$ to mean that there is a (possibly empty) sequence of steps $P \rightarrow_a P_1 \rightarrow_b ... \rightarrow_z P'$ where $a, b, ..., z \neq t$.
 
 \begin{lemma}\label{indep}Let $P_0$ be a well-formed uninstrumented program and $P_0'$ its instrumented counterpart. Suppose we have some state $P'$ and instruction $i$ such that $P_0' \rightarrow^{*} P'$ and $P'(t) = \instr{t}{i}; \mathit{li}$, and $P' \xrightarrow{o1, c1}_t P_1 \tto{\vec{a}, \vec{b}} P_2 \xrightarrow{o2, c2}_u P_3$ such that $P_2(t) = i'; ...; \mathit{li}$. Then the operations performed by $t$ in $c1; \vec{b}; c2$ do not overlap with the operations performed by threads other than $t$ in $c1; \vec{b}; c2$.\end{lemma}
-\begin{proof}By case analysis on the instruction $i$. In the cases of assignment and \texttt{assert} statements, no memory operations are produced. For \texttt{load} and \texttt{store} instructions on a location $(b, o)$, the lock $X + b$ protects all associated memory locations, and so no other thread can access them until the lock is released. For \texttt{lock} and \texttt{unlock} instructions on a lock $m$, $m$ itself protects its associated metadata, and likewise no other thread can access until the instrumentation is finished and the lock released. For \texttt{spawn} instructions, the thread is not spawned until the end of the instrumentation, and so no other thread can interact with it or its metadata. Likewise, for \texttt{wait} instructions, the instrumentation cannot begin to execute until the target of the \texttt{wait} has terminated, and at that point no other thread will access its metadata (we assume that only one thread \texttt{wait}s for each thread; see the note in Section~\ref{waits}).\end{proof}
+\begin{proof}By case analysis on the instruction $i$. In the cases of assignment and \texttt{assert} statements, no memory operations are produced. For \texttt{load} and \texttt{store} instructions on a location $(b, o)$, the lock $X[b]$ protects all associated memory locations, and so no other thread can access them until the lock is released. For \texttt{lock} and \texttt{unlock} instructions on a lock $m$, $m$ itself protects its associated metadata, and likewise no other thread can access until the instrumentation is finished and the lock released. For \texttt{spawn} instructions, the thread is not spawned until the end of the instrumentation, and so no other thread can interact with it or its metadata. Likewise, for \texttt{wait} instructions, the instrumentation cannot begin to execute until the target of the \texttt{wait} has terminated, and at that point no other thread will access its metadata (we assume that only one thread \texttt{wait}s for each thread; see the note in Section~\ref{waits}).\end{proof}
 
 This lemma lets us gather up the steps by a thread $t$ that make up an instrumentation section, and reorder them into a consecutive sequence.
 \begin{lemma}[Noninterference]\label{noninterference}Let $P_0$ be a well-formed uninstrumented program and $P$ its instrumented counterpart. Suppose that $P \tto{\vec{a}, \vec{b}}_t P_1 \tto{\vec{c}, \vec{d}}_{\not t} P_2 \xrightarrow{o, c}_t P_3$ such that $P_2$ is an instrumented suffix of $P_0$. Then $c$ does not overlap with the operations in $\vec{d}$.\end{lemma}
@@ -605,7 +643,7 @@ We must also consider the case in which the instrumented program fails an assert
 \begin{proof}There must be some last good state $P''$ such that $P \tto{\vec{a}, \vec{b}} P'' \rightarrow \mathit{err}$. Then by Lemma~\ref{exec-iexec1}, there is some $P_1$ such that $P''$ is an instrumented suffix of $P_1$ and $P \tTo{\vec{c}, \vec{d}} P_1 \tto{\vec{e}, \vec{f}} P''$. Adding the failing step to the end of this execution yields the desired result.\end{proof}
 
 Using Lemmas~\ref{iexec-exec}, \ref{exec-iexec}, and \ref{exec-fail-iexec}, we can reason entirely in terms of the bigger-step relation in which instrumentation executes atomically. At this point, the correctness of the instrumentation becomes a matter of simulation: we need only prove that there is a bisimulation relation relating states of the uninstrumented and the instrumented program such that they mirror each other's behavior. For each of the two directions of bisimulation, we must consider the case in which the original program does not race (and the instrumented program matches its behavior), and the case in which it does race (and the instrumented program fails an assertion). We begin by defining the relationship between states of the abstract algorithm and memory configurations.
-\begin{definition}A block $b$ in a memory $m$ encodes a vector clock $V$ if for all $t \le z$, the value at $(b, t)$ in $m$ is equal to $V_t$. A vector clock state $(C, L, R, W)$ is modeled by a memory $m$, written $m \models (C, L, R, W)$, if $C + t$ encodes $C_t$ for every $t$, $L + m$ encodes $L_m$ for every $m$, and $R + b$ and $W + b$ encode $R_b$ and $W_b$ respectively for every $b$.\end{definition}
+\begin{definition}A block $b$ in a memory $m$ encodes a vector clock $V$ if for all $t \le z$, the value at $(b, t)$ in $m$ is equal to $V_t$. A vector clock state $(C, L, R, W)$ is modeled by a memory $m$, written $m \models (C, L, R, W)$, if $C[t]$ encodes $C_t$ for every $t$, $L[m]$ encodes $L_m$ for every $m$, and $R[b]$ and $W[b]$ encode $R_b$ and $W_b$ respectively for every $b$.\end{definition}
 
 \begin{definition}The relation $\sim$ relates an uninstrumented configuration $(P, G, m)$ to an instrumented configuration $(P', G', m')$ if:
 \begin{itemize}
