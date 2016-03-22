@@ -14,8 +14,10 @@
 
 \newcommand{\eg}{\textit{e.g.}\xspace}
 \newcommand{\ie}{\textit{i.e.}\xspace}
-\newcommand{\TODO}[1]{\textbf{\textcolor{red}{[ TODO: #1]}}}
+\newcommand{\TODO}[1]{}
+%\textbf{\textcolor{red}{[ TODO: #1]}}
 \newcommand{\ignore}[1]{}
+
 
 %%% from this paper
 \newcommand{\con}[1]{\ensuremath{\mathsf{consistent}(#1)}}
@@ -96,6 +98,7 @@
 \newcommand{\instrp}[1]{\ensuremath{\mathsf{instrument}(#1)}}
 \newcommand{\exec}[5]{\ensuremath{(#1, #2) \xrightarrow{#4}_{#3} #5}}
 \newcommand{\execstar}[4]{\ensuremath{(#1, #2) \xrightarrow{#3} #4}}
+\newcommand{\iexec}[4]{\ensuremath{(#1, #2) \Rightarrow_{#3} #4}}
 
 %from StackExchange, a better xrightarrow^*
 \newcommand{\tto}[1]{\mathrel{
@@ -141,7 +144,7 @@
 \titlebanner{}        % These are ignored unless
 \preprintfooter{}   % 'preprint' option specified.
 
-\title{Verifying Dynamic Race Detection}
+\title{Verifying Dynamic Race Detection (Draft)}
 \ignore{\authorinfo{William Mansky \and Yuanfeng Peng \and Steve Zdancewic \and Joseph Devietti}
            {University of Pennsylvania}
            {wmansky@seas.upenn.edu, yuanfeng@cis.upenn.edu, stevez@cis.upenn.edu, devietti@cis.upenn.edu}}
@@ -159,15 +162,15 @@ Writing race-free concurrent code is notoriously difficult, and races can result
 
 \section{Introduction}
 
-Multicore processors have steadily invaded a broad swathe of the computing ecosystem in everything from datacenters to smart watches. Writing multithreaded code for such platforms can bring good performance but also a host of programmability challenges. One of the key challenges is dealing with data races, as the presence of a data race introduces non-sequentially-consistent \cite{manson_java_2005} and in some cases undefined \cite{boehm_foundations_2008} behavior into programs, making program semantics very difficult to understand. Races are not detected by default in current language runtimes, though there are many systems that provide sound and complete data race detection via dynamic analysis \cite{djit+,fasttrack,slimstate,slimfast} to help programmers detect and remove data races from their programs. 
+Multicore processors have steadily invaded a broad swathe of the computing ecosystem in everything from datacenters to smart watches. Writing multithreaded code for such platforms can bring good performance but also a host of programmability challenges. One of the key challenges is dealing with data races, as the presence of a data race introduces non-sequentially-consistent~\cite{manson_java_2005} and in some cases undefined~\cite{boehm_foundations_2008} behavior into programs, making program semantics very difficult to understand. Races are not detected by default in current language runtimes, though there are many systems that provide sound and complete data race detection via dynamic analysis~\cite{djit+,fasttrack,slimstate,slimfast} to help programmers detect and remove data races from their programs. 
 
 While these analyses have been proven correct, such proofs have two main shortcomings: they are proofs of the algorithms, instead of the implementations, and they are paper proofs instead of machine-checked proofs. Because of these shortcomings, it is possible that a race detector does not faithfully implement its algorithm, or that the algorithm itself is not fully correct. Moreover, it still remains to be shown that the implementation, often done via code instrumentation, does not itself introduce or mask races, and that, in the absence or races, the program's behavior is unchanged.
 
-In this paper, we seek to rectify these concerns and place dynamic race detection on a provably-correct foundation for the first time. We have begun by formalizing the proof of the classic vector clock race detection algorithm \cite{fidge,friedmann_mattern} using the Coq interactive theorem prover \cite{coq}. Having established the correctness of this base algorithm, we extend our work along two dimensions. 
+In this paper, we seek to rectify these concerns and place dynamic race detection on a provably-correct foundation for the first time. We have begun by formalizing the proof of the classic vector clock race detection algorithm~\cite{vcfidge,vcmattern} using the Coq interactive theorem prover~\cite{coq}. Having established the correctness of this base algorithm, we extend our work along two dimensions. 
 
 \TODO{figure showing these two dimensions?}
 
-We first explore the \textbf{algorithmic dimension}, by formally establishing the correctness of the FastTrack algorithm \cite{fasttrack}. FastTrack includes several significant optimizations over the base vector clock algorithm. We find that the correctness of FastTrack can be demonstrated by proving its equivalence to the vector clock algorithm, which is a more straightforward process than demonstrating correctness in isolation, and likely lends itself to formalizing additional algorithms with reduced effort. Our verification efforts have revealed a small issue in the paper proof from \cite{fasttrack} that, while fixable, illustrates the potential dangers that stem from best-effort proofs. We have repaired this issue in our proof of FastTrack, establishing that the algorithm is correct.
+We first explore the \textbf{algorithmic dimension}, by formally establishing the correctness of the FastTrack algorithm~\cite{fasttrack}. FastTrack includes several significant optimizations over the base vector clock algorithm. We find that the correctness of FastTrack can be demonstrated by proving its equivalence to the vector clock algorithm, which is a more straightforward process than demonstrating correctness in isolation, and likely lends itself to formalizing additional algorithms with reduced effort. Our verification efforts have revealed a small issue in the paper proof from \cite{fasttrack} that, while fixable, illustrates the potential dangers that stem from best-effort proofs. We have repaired this issue in our proof of FastTrack, establishing that the algorithm is correct.
 
 We next explore the \textbf{implementation dimension}, by formally establishing in Coq the correctness of an implementation of vector clock race detection on a simple imperative language with threads. Given a program written in our language, our race detector adds instrumentation, written in the same language, to the program to perform vector clock race detection. We demonstrate that this instrumentation correctly implements the vector clock algorithm, again leveraging our previous verification effort. We also prove that our implementation preserves the program's semantics in the absence of races. While constructing our implementation, we consulted the existing implementation of FastTrack for guidance and our verification process brought to light an example of extraneous work performed by the current FastTrack implementation. This issue is unlikely to have come to light otherwise, but when proving our implementation equivalent to the abstract algorithm such discrepancies were quickly revealed. This again demonstrates the value of formal verification over best-effort implementation, ensuring that an implementation does no less, and no more, than is necessary for correctness.
 
@@ -191,19 +194,18 @@ Our approach to verifying instrumentation has three major steps. First, we descr
 
 \section{Race Detection Algorithms}
 \label{algorithms}
-
-This section reviews the classic vector-clock race detection algorithm \cite{}, and how we verified its correctness in Coq. Then, we turn to the FastTrack \cite{fasttrack} algorithm and its verification both by simulation of the vector-clock algorithm and by direct proof.
+This section reviews the classic vector-clock race detection algorithm~\cite{vcmattern, vcfidge}, and how we verified its correctness in Coq. Then we turn to the FastTrack~\cite{fasttrack} algorithm and its verification both by simulation of the vector-clock algorithm and by direct proof.
 
 % NB: VC stuff borrowed from Joe's Radish paper [ISCA '12]
 
 \subsection{Defining Data Races}
-
-The \emph{happens-before} relation $\hb$ is a partial order over events in a
-program trace \cite{lamport-hb}.  Given events $a$ and $b$, we say $a$
+Data races are defined in terms of a \emph{happens-before} relation $\hb$, a partial order over events in a
+program trace \cite{lamporthb}.  Given events $a$ and $b$, we say $a$
 \emph{happens before} $b$ (and $b$ \emph{happens after} $a$), written $a \hb b$,
 if: (1) $a$ precedes $b$ in program order in the same thread; or (2) $a$
 precedes $b$ in synchronization order $\sw$, \eg, if $a$ is thread $\Tid$ releasing a lock $\Lock$, and $b$ is thread $\TidU$ subsequently acquiring it, then $a \sw b$; or (3) $(a,b)$ is in the
 transitive closure of program order and synchronization order.
+Synchronization order is also commonly considered to include thread operations such as fork and join.
 % Synchronization order also induces happens-before ordering on
 % other synchronization events such as thread fork to thread start
 % and thread termination to thread join. 
@@ -213,20 +215,19 @@ concurrent and at least one is a write.
 
 \subsection{Vector-Clock Race Detection}
 \label{vector-clocks}
-
-\emph{Vector clocks} can track the happens-before relation during
-execution \cite{fidge-vc,mattern-vc}.  A vector clock $\VC$ stores one (non-negative) integer
-logical clock per thread, and we write $\VC(\Tid)$ for the data associated with thread $\Tid$ in clock $\VC$.
+\TODO{Should ``vector-clock race detection'' be hyphenated everywhere?}
+One common algorithm for dynamic race detection is to use \emph{vector clocks} to track the happens-before relation during
+execution \cite{vcfidge,vcmattern}.  A vector clock $\VC$ stores one (non-negative) integer
+logical clock per thread; we write $\VC(\Tid)$ for the data associated with thread $\Tid$ in clock $\VC$.
 
   There are three key operations on vector clocks.
 \emph{Union} is the element-wise maximum of two vector clocks:
 $\VC_1 \VCMax \VC_2 = \VC_3 \SuchThat \forall \Tid \Bind \VC_3(\Tid) =
-\max(\VC_1(\Tid), \VC_2(\Tid))$. \emph{Compare} is the element-wise
+\max(\VC_1(\Tid), \VC_2(\Tid))$. \emph{Comparison} is the element-wise
 comparison of two vector clocks: $\VC_a \VCCompare \VC_b$ is defined to mean $\forall
-\Tid \Bind \VC_a(\Tid) \leq \VC_b(\Tid)$.  Finally, \emph{increment} is defined as $inc_t(V) = \lambda u \Bind \mathrm{~if~} u=t \mathrm{~then~} V(u)+1 \mathrm{~else~} V(u)$
+\Tid \Bind \VC_a(\Tid) \leq \VC_b(\Tid)$.  Finally, \emph{increment} increases a single component of a vector clock, defined as $\mathit{inc}_t(V) = \lambda u.\ \mathrm{~if~} u=t \mathrm{~then~} V(u)+1 \mathrm{~else~} V(u)$.
 
-A vector-clock race detector keeps
-four kinds of state:
+The state of a vector-clock race detector is a tuple $(C, L, R, W)$ of collections of vector clocks, where:
 \begin{itemize}
 %\setlength{\itemsep}{1pt}
 %\setlength{\parskip}{0pt}
@@ -256,15 +257,15 @@ four kinds of state:
 \end{itemize}
 
 Initially, all $\LockVC{}$, $\ReadVC{}$, and $\WriteVC{}$ vector clocks are
-set to $\VC_0$, where $\forall \Tid \Bind \VC_0(\Tid) = 0$.  Each thread $\Tid$'s
+set to $\bot_V$, where $\forall \Tid \Bind \bot_V(\Tid) = 0$.  Each thread $\Tid$'s
 initial vector clock is $\ThreadVC{\Tid}$, where $\ThreadVC{\Tid}(\Tid) = 1$
 and $\forall \TidU \neq \Tid \Bind \ThreadVC{\Tid}(\TidU) = 0$.  
 
 The vector clock algorithm's operational semantics are presented in \autoref{f:semvc}. When a thread $\Tid$ acquires a lock $\Lock$ (the \Rule{Acquire} rule) we update $\ThreadVC{\Tid}$ to $\ThreadVC{\Tid} \VCMax \LockVC{\Lock}$.  By acquiring lock $\Lock$, thread $\Tid$ has synchronized with all events that happen before the last release of $\Lock$, so all these events happen before all subsequent events in $\Tid$.  When $\Tid$ releases a lock $\Lock$ (the \Rule{Release} rule), we update $\LockVC{\Lock}$ to $\ThreadVC{\Tid}$, capturing all events that happen before this release.  We then increment $\Tid$'s entry in its own vector clock $\ThreadVC{\Tid}$ to ensure that subsequent events in $\Tid$ do not appear to happen before the release $\Tid$ just performed.  The \Rule{Fork} and \Rule{Join} rules are similar to \Rule{Release} and \Rule{Acquire}, respectively. The increment $inc_u(C_u)$ in \Rule{Join} is needed to preserve the invariant that a thread $\TidU$'s $\ThreadVC{\TidU}(u)$ entry for itself is always higher than any other thread's entry for $\TidU$.
 
-When $\Tid$ reads a location $\Address$ (the \Rule{Read} rule), we check if $\WriteVC{\Address} \VCCompare \ThreadVC{\Tid}$.  If this check fails, there is a previous write to $\Address$ that did not happen before this read, so there is a data race.  Otherwise, we set $\Tid$'s entry in $\ReadVC{\Address}$ to $\Tid$'s current logical clock, $\ThreadVC{\Tid}(\Tid)$.  It often arises that $\Tid$ will read the same location repeatedly without an intervening change in its own clock value $\ThreadVC{\Tid}(\Tid)$. The \Rule{ReadNoChange} rule covers this case, where no metadata updates are necessary.
+When $\Tid$ reads a location $\Address$ (the \Rule{Read} rule), we check if $\WriteVC{\Address} \VCCompare \ThreadVC{\Tid}$.  If this check fails, there is a previous write to $\Address$ that did not happen before this read, so there is a data race. (Note that the algorithm is considered to detect a race when it is \emph{stuck}, that is, when there is no rule that can be applied for the next operation; when a state $\sigma$ is stuck on an operation $o$, we write $\sigma \not\xRightarrow{o}$.) Otherwise, we set $\Tid$'s entry in $\ReadVC{\Address}$ to $\Tid$'s current logical clock, $\ThreadVC{\Tid}(\Tid)$.  It often arises that $\Tid$ will read the same location repeatedly without an intervening change in its own clock value $\ThreadVC{\Tid}(\Tid)$. The \Rule{ReadNoChange} rule covers this case, where no metadata updates are necessary.
 
-Writes operate similarly to reads, with an additional check in the \Rule{Write} rule that $\ReadVC{\Address} \VCCompare \ThreadVC{\Tid}$ to ensure that all previous reads of $\Address$ are well-ordered before the current write.
+Writes operate similarly to reads, with an additional check in the \Rule{Write} rule that $\ReadVC{\Address} \VCCompare \ThreadVC{\Tid}$ to ensure that all previous reads of $\Address$ are well-ordered before the current write. This is not necessary in the \Rule{Read} case because two unordered reads are not considered to race.
 
 %\paragraph{Optimizations of Vector Clocks}
 %Thus every read and write of $\Address$
@@ -273,12 +274,13 @@ Writes operate similarly to reads, with an additional check in the \Rule{Write} 
 %$\Address$.  
 
 \subsubsection{Correctness}
-The correctness of vector clock race detection follows from the fact that the $\sqsubseteq$ relation between vector clocks precisely models the happens-before relation. Our formalization follows the proof outline given in the presentation of FastTrack~\cite{fasttrack} (with the change described in Section~\ref{bug}), which can be straightforwardly translated into Coq. The main invariant of the algorithm is that $C_t(t) > C_u(t)$, that is, each thread always has a higher timestamp for itself than any other thread has for it.
+Correctness for dynamic race detection is phrased in terms of \emph{soundness} and \emph{completeness}. Soundness means that if the algorithm runs to completion, then there was no race in the program trace; completeness means that given a trace without races, the algorithm does not get stuck. The soundness and completeness of vector clock race detection follows from the fact that the $\sqsubseteq$ relation between vector clocks precisely models the happens-before relation. Our Coq formalization follows the proof outline given in the presentation of FastTrack~\cite{fasttrack} (with the change described in Section~\ref{bug}), which can be straightforwardly translated into Coq. The main invariant of the algorithm is that $C_t(t) > C_u(t)$, that is, each thread always has a higher timestamp for itself than any other thread has for it. This guarantees that no operation by a thread $t$ can be seen by another thread $u$ (without detecting a race) until $t$ has synchronized with $u$.
+
 \subsection{FastTrack}
 
 % joe: lifted from the SlimFast paper
 
-The FastTrack algorithm \cite{fasttrack} leverages the observation that, by the definition of a data race, all writes to an address must be totally ordered in race-free traces. FastTrack accordingly adopts a more sophisticated representation of vector clocks to save space and time.
+The FastTrack algorithm~\cite{fasttrack} leverages the observation that, by the definition of a data race, all writes to an address must be totally ordered in race-free traces. FastTrack accordingly adopts a more sophisticated representation of vector clocks to save space and time.
 \emph{Epochs} can often be used in place of vector clocks; an epoch $c@t$  holds a timestamp for just one thread, and is treated as a vector clock that is $c$ for $t$ and 0 for every thread other than $t$:
 \[
 (c@t)(u) = 
@@ -287,15 +289,13 @@ The FastTrack algorithm \cite{fasttrack} leverages the observation that, by the 
    c & \mathrm{if}\ t = u \\
    0 & \mathrm{otherwise}
   \end{array}
-  \right\}
+  \right.
 \]
 
-Because epochs have a single non-zero entry, an epoch can be compared with a vector clock, or another epoch, in \Constant time using the $\EpochCompare$ operator, which is equivalent to $\VCCompare$. We say $c@t \EpochCompare V$ when $c \leq V(t)$, and $c@t \EpochCompare c'@u$ when $c = 0$ or ($t = u$ and $c \leq c'$).
-$\bot_e$ denotes a minimal epoch $0@t0$, though other minimal epochs exist, \eg, $0@t1$.
+Because epochs have a single non-zero entry, an epoch can be compared with a vector clock, or another epoch, in \Constant time using the $\EpochCompare$ operator, which is equivalent to $\VCCompare$. We say $c@t \EpochCompare V$ (and similarly $c@t \EpochCompare e'$) when $(c@t)(u) \leq V(u)$ for all $u$, which occurs exactly when $c \le V(t)$.
+$\bot_e$ denotes a minimal epoch at an arbitrary thread $0@t_0$.
 
-The \FT analysis state is a tuple $(C, L, R, W)$ just as in the vector clock algorithm, except that $R_x$ may be either a read vector clock or epoch, and $W_x$ is a write epoch, for the location $x$. \FT's initial analysis state is the tuple $(\lambda t.inc_t(\bot_V), \lambda l.\bot_V , \lambda x. \bot_e, \lambda x. \bot_e)$. Each thread initially has an empty vector clock, with its own entry incremented, all locks have empty vector clocks, and all memory locations have empty read and write epochs. 
-
-Intuitively, $C_u(t)$ records the last timestamp at which the thread $t$ synchronized with $u$, and $L_m(t)$, $R_x(t)$, and $W_x(t)$ record the last timestamps at which $t$ accessed the lock $m$, read from the location $x$, and wrote to the location $x$, respectively. The write metadata for a location is always an epoch; the read metadata may be either an epoch or a full vector clock, depending on whether the location is being read concurrently by multiple threads. The \FT operational semantics are presented in \autoref{f:semft}.
+The \FT analysis state is a tuple $(C, L, R, W)$ just as in the vector clock algorithm, except that $R_x$ may be either a read vector clock or epoch, and $W_x$ is always an epoch. \FT's initial analysis state is the tuple $(\lambda t.\ \mathit{inc}_t(\bot_V), \lambda l.\bot_V , \lambda x. \bot_e, \lambda x. \bot_e)$. Each thread initially has an empty vector clock with its own entry incremented, all locks have empty vector clocks, and all memory locations have empty read and write epochs. The \FT operational semantics are presented in \autoref{f:semft}. The \Rule{Read} and \Rule{Write} rules are split into several cases, as $R_x$ transitions between an epoch and a full vector clock. When a write occurs to a location $x$ for which $R_x$ is a vector clock, $R_x$ is set to an empty epoch $\bot_e$; conversely, when multiple unordered reads to $x$ occur, $R_x$ is inflated to a full vector clock.
 
 \newcommand{\bigcell}[2][c]{% hat tip to http://tex.stackexchange.com/a/19678
   \begin{tabular}[#1]{@{}c@{}}#2\end{tabular}}
@@ -362,7 +362,7 @@ Intuitively, $C_u(t)$ records the last timestamp at which the thread $t$ synchro
 
 
 \subsubsection{Proof by Simulation}
-Beyond guaranteeing the correctness of FastTrack, we want to test the simulation approach described in Section~\ref{strategy} as a tool for verifying refinements of the vector clock algorithm. In this section, we describe our novel simulation proof of FastTrack's correctness; in the following section, we describe our mechanization of the paper proof (which directly relates the algorithm to the definition of race).
+Flanagan and Freund justify the optimizations of FastTrack by proving that the $\sqsubseteq$ relation on vector clocks still precisely captures the happens-before relation. However, as part of the proof strategy outlined in Section~\ref{strategy}, we took a different approach, proving that the transition system of FastTrack simulates that of the base vector clock algorithm. Since we have already verified the base algorithm, this is sufficient to guarantee that FastTrack is sound and complete. In this section, we describe our novel simulation proof of FastTrack's correctness; in the following section, we describe our mechanization of the paper proof.
 
 Intuitively, the metadata optimizations of FastTrack are safe to perform because the reduced metadata still captures the same happens-before relationships, which means that the same $\sqsubseteq$ relationships hold between corresponding state components. Thus, we need only present a relation between FastTrack states and full vector clock states that captures this correspondence in order to prove a bisimulation between the two systems. The $C$ and $L$ components should remain unchanged. To characterize the expected semantics of epochs, we define the following \emph{emulation} relation:
 \begin{definition}An epoch $e$ \emph{emulates} a vector clock $V$ for another vector clock $V'$ if $e \preceq V'$ implies that $V \sqsubseteq V'$. An epoch $e$ emulates $V$ in a state $(C, L, R, W)$ if it emulates $V$ for $C_u$ for all $u$ and $L_m$ for all $m$.\end{definition}
@@ -386,10 +386,10 @@ Intuitively, the metadata optimizations of FastTrack are safe to perform because
 \begin{tabular}{cc|c|c|cc}
 $\Tid_0$ & $\Tid_1$ & VC $\WriteVC{\Address}$ & FT $\WriteVC{\Address}$ & $\ThreadVC{0}$ & $\ThreadVC{1}$ \\
 \hline
-write $\Address$ && [1,0] & t0@1 & [1,0] & [0,1] \\
+write $\Address$ && [1,0] & $1@t_0$ & [1,0] & [0,1] \\
 rel $\Lock$ & &'' &'' & [2,0] & " \\
 & acq $\Lock$ & " &'' & " & [1,1] \\
-& write $\Address$ & [1,1] & t1@1 & " & " \\
+& write $\Address$ & [1,1] & $1@t_1$ & " & " \\
 \end{tabular}
 \caption{An example of how \FT's write epoch emulates the conventional write vector clock.}
 \label{f:encap-writes}
@@ -402,7 +402,7 @@ rel $\Lock$ & &'' &'' & [2,0] & " \\
 $\Tid_0$ & $\ReadVC{\Address}$ & $\WriteVC{\Address}$ & $\ReadVC{\Address}$ & $\WriteVC{\Address}$ \\
 \hline
 read $\Address$ & [1,1] & [0,0] & [1,1] & $\EmptyEpoch$ \\
-write $\Address$ & " & [1,0] & $\EmptyEpoch$ & t0@1 \\
+write $\Address$ & " & [1,0] & $\EmptyEpoch$ & $1@t_0$ \\
 \end{tabular}
 \caption{An example of how \FT's write epoch emulates a conventional read vector clock.}
 \label{f:encap-empty-read}
@@ -413,17 +413,17 @@ write $\Address$ & " & [1,0] & $\EmptyEpoch$ & t0@1 \\
 \begin{tabular}{ccc|c|c|}
 $\Tid_0$ & $\Tid_1$ & $\Tid_2$ & VC $\ReadVC{\Address}$ & FT $\WriteVC{\Address}$ \\
 \hline
-read $\Address$ & &      & [1,0,0] & t0@1\\
+read $\Address$ & &      & [1,0,0] & $1@t_0$\\
 rel $\Lock$ & &      &''&''\\
 & acq $\Lock$ &      &''&''\\
-& read $\Address$ &      &[1,1,0]&t1@1\\
+& read $\Address$ &      &[1,1,0]&$1@t_1$\\
 & & read $\Address$      &[1,1,1]&[0,1,1]\\
 \end{tabular}
 \caption{An example of how \FT's read vector clock partially emulates the conventional read vector clock.}
 \label{f:encap-readvc}
 \end{figure}
 
-In FastTrack, when write metadata $W_x$ is collapsed to an epoch $c@t$, it is precisely because $W_x(t) = c$ and $c@t$ emulates $W_x$. The relation for read metadata is more complicated, for one particular reason: the \Rule{WriteShared} rule resets read metadata to an empty epoch. \TODO{Technically, this can also arise due to ReadExclusive rule, which blows away the previous read} This has two effects on the simulation relation. First, we must make a special allowance for the case in which the read metadata is empty; in this case, it is the write epoch that emulates the original read vector clock. Second, even when the FastTrack state holds a vector clock in $R_x$, that vector clock may contain some 0 values in places where reads have in fact been performed. In effect, because FastTrack read vector clocks are always derived from epochs, they carry forward a partial emulation relation, in which one component emulates all the relationships on zeroed values.
+In FastTrack, when write metadata $W_x$ is collapsed to an epoch $c@t$, it is precisely because $W_x(t) = c$ and $c@t$ emulates $W_x$. The relation for read metadata is more complicated, because even when $R_x$ is a vector clock, it may not contain all the information about most recent reads. The \Rule{WriteShared} rule resets read metadata to an empty epoch, erasing all previous values, and as long as $R_x$ remains an epoch, any information about previous reads is lost. This has two effects on the simulation relation. First, we must make a special allowance for the case in which the read metadata is empty; in this case, it is the write epoch that emulates the original read vector clock. Second, even when the FastTrack state holds a vector clock in $R_x$, that vector clock may contain some 0 values in places where reads have in fact been performed. In effect, because FastTrack read vector clocks are always derived from epochs, they carry forward a partial emulation relation, in which one component emulates all the relationships on zeroed values.
 \begin{definition}A vector clock $V_0$ \emph{partially emulates} a vector clock $V$ for another vector clock $V'$ if there is some thread $t$ such that:
 
 \begin{itemize}
@@ -449,7 +449,7 @@ While the simulation relation is complicated by the emulation relations, once it
 
 \subsubsection{Direct Proof}
 \label{bug}
-Flanagan and Freund justify the optimizations of FastTrack by proving that the $\sqsubseteq$ relation on vector clocks still precisely captures the happens-before relation. As a baseline for comparison, we formalized this proof in Coq as well, and discovered an error in the paper proof in the process. FastTrack's Lemma 4 states the following: {\it Suppose $\sigma$ is well-formed and $\sigma \xRightarrow{\alpha} \sigma'$ and $a, b \in \alpha$. Let $t = \mathit{tid}(a)$ and $u = \mathit{tid}(b)$. If $a <_{\alpha} b$ then $K^a(t) \sqsubseteq K^b(t)$.} This lemma is then used to prove that if some operation $b$ is \emph{stuck}, then a previous operation $a$ must have raced with it, since $K^a(t) \not\sqsubseteq K^b(t)$. However, the premise of Lemma 4 requires that $a$ and $b$ not be stuck, since they are in a trace $\alpha$ that successfully executes to a state $\sigma'$. Because of this constraint, Lemma 4 in fact does not apply. Fortunately, this premise is stronger than necessary to prove Lemma 4, and in Coq we are able to prove a more general version:
+As a baseline for comparison, we formalized the original proof of correctness in Coq as well, and discovered an error in the paper proof in the process. FastTrack's Lemma 4 states the following: {\it Suppose $\sigma$ is well-formed and $\sigma \xRightarrow{\alpha} \sigma'$ and $a, b \in \alpha$. Let $t = \mathit{tid}(a)$ and $u = \mathit{tid}(b)$. If $a <_{\alpha} b$ then $K^a(t) \sqsubseteq K^b(t)$.} This lemma is then used to prove that if some operation $b$ is \emph{stuck}, then a previous operation $a$ must have raced with it, since $K^a(t) \not\sqsubseteq K^b(t)$. However, the premise of Lemma 4 requires that $a$ and $b$ not be stuck, since they are in a trace $\alpha$ that successfully executes to a state $\sigma'$. Because of this constraint, Lemma 4 in fact does not apply. Fortunately, this premise is stronger than necessary to prove Lemma 4, and in Coq we are able to prove a more general version:
 \begin{lemma}Suppose $\sigma$ is well-formed and $\sigma \xRightarrow{\alpha} \sigma'$ and $a \in \alpha$. Let $t = \mathit{tid}(a)$ and $u = \mathit{tid}(b)$. If $a <_{\alpha; b} b$ then $K^a(t) \sqsubseteq K^b(u)$.\end{lemma}
 \noindent where by abuse of notation we use $K^b(u)$ to refer to the $C_u$ component of $\sigma'$ updated as appropriate for a blocking operation. With this statement of the lemma, the completeness proof follows as outlined in the paper.
 
@@ -620,7 +620,17 @@ This guarantees that the instrumentation will never race with itself, which is s
 \label{verification}
 We verify the correctness of the instrumentation by showing that the instrumentation records the same information and performs the same checks as the vector clock algorithm would perform on the input program.
 
-Key to our correctness proof is the idea that the instrumented program can be thought of as executing under a bigger-step semantics in which each instruction and its instrumentation execute in a single step. This semantics is shown in Figure~\TODO{?}
+\begin{figure}[htb]
+\bigcell{
+\inference{}{\iexec{P \uplus (t, \assign{a}{e}\texttt{;} \mathit{li}, G)}{m}{t}{(P \uplus (t, \mathit{li}, G[a \mapsto \mathsf{eval}(G, e)]), m)}}\\\\
+
+\inference{\mathsf{read}(m, p) = v \quad \forall o.\ (W + p, o) \le (C + t, o) \\\mathsf{read}(m, X + p) = 0 \quad m' = \mathsf{write}(m, (C + t, t), (R + x, t))}{\iexec{P \uplus (t, \instr{t}{\load{a}{p}}\texttt{;} \mathit{li}, G)}{m}{t}{(P \uplus (t, \mathit{li}, G[a \mapsto v, \texttt{tmp1} \mapsto ?, \texttt{tmp2} \mapsto ?]), m')}}
+}
+\TODO{How can we present this?}
+\caption{Bigger-step semantics of instrumented programs}
+\label{iexec}
+\end{figure}
+Key to our correctness proof is the idea that the instrumented program can be thought of as executing under a bigger-step semantics in which each instruction and its instrumentation execute in a single step. This semantics is shown in Figure~\ref{iexec}.
 \begin{lemma}\label{iexec-exec}If $(P, G) \xRightarrow{\vec{a}, \vec{b}}_t (P', G')$, then $(P, G) \xrightarrow{\vec{a}, \vec{b}}_t (P', G')$.\end{lemma}
 \begin{proof}By case analysis and application of the relevant small-step rules.\end{proof}
 
@@ -682,7 +692,7 @@ Since $(P, G, m) \sim (P', G', m')$ implies that $G$ and $G'$, and likewise $m$ 
 
 \TODO{discuss verified instrumentation like SoftBound, RockSalt SFI? I don't think either of these support multithreading.}
 
-There is a rich history of systems that provide dynamic data race detection, dating back to the original proposals of the vector clock algorithm \cite{friedmann,mattern,lamportvc}. Subsequent systems have implemented vector clocks, with various optimizations, using dynamic analysis to provide race detection for C/C++ \cite{pozniansky_efficient_2003,serebryany_threadsanitizer:_2009} and Java \cite{christiaens_trade:_2001,elmas_goldilocks:_2007,flanagan_fasttrack:_2009,flanagan_fasttrack:_2010,slimstate} programs. These systems have relied on paper proofs to demonstrate correctness, but these proofs have not been mechanically verified until our work. Furthermore, these paper proofs operate at a high level of abstraction, using an operational semantics that elides important details such as the synchronization used within the race detector itself. Thus, the implementations of these algorithms are far removed from the algorithms themselves, leaving the door open for bugs.
+There is a rich history of systems that provide dynamic data race detection, dating back to the original proposals of the vector clock algorithm \cite{vcfidge,vcmattern,lamporthb}. Subsequent systems have implemented vector clocks, with various optimizations, using dynamic analysis to provide race detection for C/C++ \cite{pozniansky_efficient_2003,serebryany_threadsanitizer:_2009} and Java \cite{christiaens_trade:_2001,elmas_goldilocks:_2007,fasttrack,flanagan_fasttrack:_2010,slimstate} programs. These systems have relied on paper proofs to demonstrate correctness, but these proofs have not been mechanically verified until our work. Furthermore, these paper proofs operate at a high level of abstraction, using an operational semantics that elides important details such as the synchronization used within the race detector itself. Thus, the implementations of these algorithms are far removed from the algorithms themselves, leaving the door open for bugs.
 
 Lockset-based race detection \cite{dinning_detecting_1991,savage_eraser:_1997}, an alternative to the traditional vector clock data race detection algorithm, reports false races on some common programming idioms like privatization but can also detect with a single execution some races that would require multiple executions to detect with vector clocks. Other work has generalized vector clock race detection to detect more races from a single execution \cite{smaragdakis_sound_2012,sen_detecting_2005,chen_parametric_2007} at the cost of decreased performance.
 
