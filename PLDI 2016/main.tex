@@ -40,10 +40,10 @@
 \newcommand{\Value}{b}
 \newcommand{\Lock}{m}
 \newcommand{\Op}[1]{o_{#1}}
-\newcommand{\ReadOp}[3]{rd_{#1}(#2)}
-\newcommand{\WriteOp}[3]{wr_{#1}(#2)}
-\newcommand{\AcqOp}[2]{acq_{#1}(#2)}
-\newcommand{\RelOp}[2]{rel_{#1}(#2)}
+% \newcommand{\ReadOp}[1]{read #1}
+% \newcommand{\WriteOp}[3]{wr_{#1}(#2)}
+% \newcommand{\AcqOp}[2]{acq_{#1}(#2)}
+% \newcommand{\RelOp}[2]{rel_{#1}(#2)}
 \newcommand{\Clock}{c}
 %\newcommand{\Epoch}[2]{(#1, #2)}
 \newcommand{\VC}{V}
@@ -62,15 +62,11 @@
 \newcommand{\Linear}{O($n$)\xspace}
 \newcommand{\Epoch}{\textit{Epoch}\xspace}
 \newcommand{\VectorClock}{\textit{Vector Clock}\xspace}
-%\newcommand{\EpochPair}{\textit{EpochPair}\xspace}
-%\newcommand{\EpochPairs}{\textit{EpochPair}s\xspace}
-%\newcommand{\EpochVC}{\textit{EpochPlusVC}\xspace}
-%\newcommand{\EpochVCs}{\textit{EpochPlusVC}s\xspace}
 \newcommand{\Rule}[1]{\textsc{#1}}
 \newcommand{\VCMax}{\sqcup}
 \newcommand{\VCCompare}{\sqsubseteq} 
 \newcommand{\EpochCompare}{\preceq}
-%\newcommand{\EmptyEpoch}{\bot_e} % TODO: not used
+\newcommand{\EmptyEpoch}{\bot_e}
 %\newcommand{\EmptyVC}{\bot_V} % TODO: not used
 
 
@@ -201,8 +197,7 @@ The \emph{happens-before} relation $\hb$ is a partial order over events in a
 program trace \cite{lamport-hb}.  Given events $a$ and $b$, we say $a$
 \emph{happens before} $b$ (and $b$ \emph{happens after} $a$), written $a \hb b$,
 if: (1) $a$ precedes $b$ in program order in the same thread; or (2) $a$
-precedes $b$ in synchronization order $\sw$, \eg, a lock release $\RelOp{\Tid}{\Lock}$
-and subsequent acquire $\AcqOp{\TidU}{\Lock}$ implies $\RelOp{\Tid}{\Lock} \sw \AcqOp{\TidU}{\Lock}$; or (3) $(a,b)$ is in the
+precedes $b$ in synchronization order $\sw$, \eg, if $a$ is thread $\Tid$ releasing a lock $\Lock$, and $b$ is thread $\TidU$ subsequently acquiring it, then $a \sw b$; or (3) $(a,b)$ is in the
 transitive closure of program order and synchronization order.
 % Synchronization order also induces happens-before ordering on
 % other synchronization events such as thread fork to thread start
@@ -369,26 +364,27 @@ Intuitively, the metadata optimizations of FastTrack are safe to perform because
 
 \begin{figure}[htb]
 \centering
-\ignore{
-\begin{tabular}{c | c}
-\textbf{Vector Clock} & \textbf{FastTrack}\\
-$R_x = (0, 0, 3), W_x = (0, 0, 3)$ & $R_x = (1, 0, 3), W_x = 3@t_3$\\
-$t_1$: write x & $t_1$: write x\\
-$R_x = (1, 0, 3), W_x = (1, 0, 3)$ & $R_x = \bot_e, W_x = 1@t_1$\\
-$t_1$: read x & $t_1$: read x\\
-$R_x = (1, 0, 3), W_x = (1, 0, 3)$ & $R_x = 1@t_1, W_x = 1@t_1$\\
-$t_2$: read x & $t_2$: read x\\
-$R_x = (1, 1, 3), W_x = (1, 0, 3)$ & $R_x = (1, 1, 0), W_x = 1@t_1$
-\end{tabular}
-\caption{Relating FastTrack and vector clock states}
-\label{emulation}}
+
+% \begin{tabular}{c | c}
+% \textbf{Vector Clock} & \textbf{FastTrack}\\
+% $R_x = (0, 0, 3), W_x = (0, 0, 3)$ & $R_x = (1, 0, 3), W_x = 3@t_3$\\
+% $t_1$: write x & $t_1$: write x\\
+% $R_x = (1, 0, 3), W_x = (1, 0, 3)$ & $R_x = \bot_e, W_x = 1@t_1$\\
+% $t_1$: read x & $t_1$: read x\\
+% $R_x = (1, 0, 3), W_x = (1, 0, 3)$ & $R_x = 1@t_1, W_x = 1@t_1$\\
+% $t_2$: read x & $t_2$: read x\\
+% $R_x = (1, 1, 3), W_x = (1, 0, 3)$ & $R_x = (1, 1, 0), W_x = 1@t_1$
+% \end{tabular}
+% \caption{Relating FastTrack and vector clock states}
+% \label{emulation}
+
 \begin{tabular}{cc|c|c|cc}
 $\Tid_0$ & $\Tid_1$ & VC $\WriteVC{\Address}$ & FT $\WriteVC{\Address}$ & $\ThreadVC{0}$ & $\ThreadVC{1}$ \\
 \hline
-$\WriteOp{0}{\Address}{}$ && [3,0] & t0@3 & [3,2] & [2,4] \\
-$\RelOp{0}{\Lock}$ & & && [4,2] & " \\
-& $\AcqOp{1}{\Lock}$ & && " & [4,5] \\
-& $\WriteOp{1}{\Address}{}$ & [3,5] & t1@5 & " & " \\
+write $\Address$ && [1,0] & t0@1 & [1,0] & [0,1] \\
+rel $\Lock$ & &'' &'' & [2,0] & " \\
+& acq $\Lock$ & " &'' & " & [1,1] \\
+& write $\Address$ & [1,1] & t1@1 & " & " \\
 \end{tabular}
 \caption{An example of how \FT's write epoch emulates the conventional write vector clock.}
 \label{f:encap-writes}
@@ -396,11 +392,12 @@ $\RelOp{0}{\Lock}$ & & && [4,2] & " \\
 
 \begin{figure}[htb]
 \centering
-\begin{tabular}{c}
-$\Tid_0$ \\
+\begin{tabular}{c|cc|cc|}
+& \multicolumn{2}{c}{VC} & \multicolumn{2}{c}{FT} \\
+$\Tid_0$ & $\ReadVC{\Address}$ & $\WriteVC{\Address}$ & $\ReadVC{\Address}$ & $\WriteVC{\Address}$ \\
 \hline
-$\ReadOp{0}{\Address}{}$ \\
-$\WriteOp{0}{\Address}{}$ \\
+read $\Address$ & [1,1] & [0,0] & [1,1] & $\EmptyEpoch$ \\
+write $\Address$ & " & [1,0] & $\EmptyEpoch$ & t0@1 \\
 \end{tabular}
 \caption{An example of how \FT's write epoch emulates a conventional read vector clock.}
 \label{f:encap-empty-read}
@@ -408,20 +405,20 @@ $\WriteOp{0}{\Address}{}$ \\
 
 \begin{figure}[htb]
 \centering
-\begin{tabular}{ccc}
-$\Tid_0$ & $\Tid_1$ & $\Tid_2$ \\
+\begin{tabular}{ccc|c|c|}
+$\Tid_0$ & $\Tid_1$ & $\Tid_2$ & VC $\ReadVC{\Address}$ & FT $\WriteVC{\Address}$ \\
 \hline
-$\ReadOp{0}{\Address}{}$ & & \\
-$\RelOp{0}{\Lock}$ & & \\
-& $\AcqOp{1}{\Lock}$ & \\
-& $\ReadOp{1}{\Address}{}$ & \\
-& & $\ReadOp{2}{\Address}{}$ \\
+read $\Address$ & &      & [1,0,0] & t0@1\\
+rel $\Lock$ & &      &''&''\\
+& acq $\Lock$ &      &''&''\\
+& read $\Address$ &      &[1,1,0]&t1@1\\
+& & read $\Address$      &[1,1,1]&[0,1,1]\\
 \end{tabular}
 \caption{An example of how \FT's read vector clock partially emulates the conventional read vector clock.}
 \label{f:encap-readvc}
 \end{figure}
 
-In FastTrack, when write metadata $W_x$ is collapsed to an epoch $c@t$, it is precisely because $W_x(t) = c$ and $c@t$ emulates $W_x$. The relation for read metadata is more complicated, for one particular reason: the \Rule{WriteShared} rule resets read metadata to an empty epoch. This has two effects on the simulation relation. First, we must make a special allowance for the case in which the read metadata is empty; in this case, it is the write epoch that emulates the original read vector clock. Second, even when the FastTrack state holds a vector clock in $R_x$, that vector clock may contain some 0 values in places where reads have in fact been performed. In effect, because FastTrack read vector clocks are always derived from epochs, they carry forward a partial emulation relation, in which one component emulates all the relationships on zeroed values.
+In FastTrack, when write metadata $W_x$ is collapsed to an epoch $c@t$, it is precisely because $W_x(t) = c$ and $c@t$ emulates $W_x$. The relation for read metadata is more complicated, for one particular reason: the \Rule{WriteShared} rule resets read metadata to an empty epoch. \TODO{Technically, this can also arise due to ReadExclusive rule, which blows away the previous read} This has two effects on the simulation relation. First, we must make a special allowance for the case in which the read metadata is empty; in this case, it is the write epoch that emulates the original read vector clock. Second, even when the FastTrack state holds a vector clock in $R_x$, that vector clock may contain some 0 values in places where reads have in fact been performed. In effect, because FastTrack read vector clocks are always derived from epochs, they carry forward a partial emulation relation, in which one component emulates all the relationships on zeroed values.
 \begin{definition}A vector clock $V_0$ \emph{partially emulates} a vector clock $V$ for another vector clock $V'$ if there is some thread $t$ such that:
 
 \begin{itemize}
