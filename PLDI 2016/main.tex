@@ -598,9 +598,23 @@ The instrumented version of a program $P$ is then simply $\instrp{P} \triangleq 
 \end{figure}
 
 The instrumentation of the previous section cannot implement sound and complete race detection for one important reason: when a race does occur, the corresponding instrumentation also races. In instrumented programs such as that shown in Figure~\ref{instr-race}, depending on the order in which the updates to metadata locations occur, the instrumentation may fail to detect the race between the two threads. In general, poorly synchronized race detection instrumentation cannot hope to successfully detect all races. At the same time, adding too much synchronization could significantly hurt performance. Given the set of operations available in our language, we can show that it suffices to add a lock for each memory location, which is used to protect the instrumentation on that memory location. (Intuitively, locks prevent races on their associated metadata, and a thread cannot race with the thread that spawns it or waits for it to terminate.) To implement the necessary synchronization in our instrumentation, we add another designated area of memory, $X$, such that $X[b]$ holds the lock protecting the metadata for block $b$. We then add locking to the \texttt{load} and \texttt{store} instrumentation:
-\begin{align*}&\instr{t}{\load{a}{(b, o)}} \triangleq \lock{X[x]}\texttt{;} \\&\quad\vcle{W[b]}{C[t]}\texttt{;} \move{(C[t], t)}{(R[b], t)}\texttt{;} \\&\quad\load{a}{(b, o)}\texttt{;} \unlock{X[x]}\end{align*}
-\begin{align*}&\instr{t}{\store{(b, o)}{e}} \triangleq \lock{X[x]}\texttt{;} \\&\quad\vcle{W[b]}{C[t]}\texttt{;} \vcle{R[b]}{C[t]}\texttt{;} \\&\quad\move{(C[t], t)}{(W[b], t)}\texttt{;} \store{(b, o)}{e}\texttt{;} \unlock{X[x]}\end{align*}
+\begin{tabular}[t]{rcl}
+\instr{t}{\load{a}{(b, o)}} & $\triangleq$ & \lock{X[b]}\texttt{;}
+\\ & & \vcle{W[b]}{C[t]}\texttt{;} 
+\\ & & \move{(C[t], t)}{(R[b], t)}\texttt{;} 
+\\ & &\load{a}{(b, o)}\texttt{;}
+\\ & & \unlock{X[b]}\texttt{;}
+\\
+\instr{t}{\store{(b, o)}{e}} & $\triangleq$ & \lock{X[b]}\texttt{;}
+\\ & & \vcle{W[b]}{C[t]}\texttt{;} 
+\\ & & \vcle{R[b]}{C[t]}\texttt{;}
+\\ & & \move{(C[t], t)}{(W[b], t)}\texttt{;} 
+\\ & & \store{(b, o)}{e}\texttt{;} 
+\\ & & \unlock{X[b]} \texttt{;} 
+\end{tabular}
 This guarantees that the instrumentation will never race with itself, which is sufficient to allow us to prove correctness of the instrumentation in the next section.
+\TODO{If this takes up too much space, we can put the locks directly
+  into Figure 7.}
 
 \section{Verifying Instrumentation}
 \label{verification}
