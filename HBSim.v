@@ -12403,11 +12403,11 @@ Lemma instrument_sim_race : forall P P1 P2 G1 G2 t ops1
   m1 (Hroot : exec_star (Some (init_state P)) init_env ops1 m1 (Some P1) G1)
   o c P1' G1' (Hstep : exec P1 G1 t o c (Some P1') G1') m0
   (Hinit : forall p, meta_loc p -> initialized m0 p) 
-  (Hcon : consistent (m0++m1 ++ opt_to_list c)) s m2 (Hs : clocks_sim m0 s)
-  (Hmem_vals: mem_vals (m0++m1) (m0++m2)) s_good
+  (Hcon : consistent (m0++m1 (*++ opt_to_list c*))) s (*m2*) (Hs : clocks_sim m0 s)
+  (*(Hmem_vals: mem_vals (m0++m1) (m0++m2))*) s_good
   (Hsafe:  step_star s ops1 s_good)   
   (Hrace : forall s', ~step_star s_good (opt_to_list o) s'),
-  exists P20 G20 lo2 m2s lo lc G2s G2', exec_star (Some P20) G20 lo2 m2s (Some P2) G2s /\exec_star (Some P2) G2s lo lc None G2' /\ consistent (m0++m2) /\ mem_vals (m0++m2s) (m0++m1) /\ env_sim G1 G2s.
+  exists  lo2 m2s lo lc G2s G2', exec_star (Some (init_state (instrument P 0))) init_env lo2 m2s (Some P2) G2s /\exec_star (Some P2) G2s lo lc None G2' /\ consistent (m0++m2s) /\ mem_vals (m0++m2s) (m0++m1) /\ env_sim G1 G2s.
 Proof.
   admit. (*
   intros.
@@ -12638,7 +12638,7 @@ Lemma instrument_sim_race2 : forall P P1 P2 G1 G2 t ops2
   m0 m2 (Hroot : iexec_star (init_state (instrument P 0)) init_env ops2 m2 P2 G2)
   (Hinit : forall p, meta_loc p -> initialized m0 p)
   o2 c2 (Hstep : fail_iexec P2 t o2 c2) (*(Hmem_sim': mem_sim' m1 m2)*)
-  (Hcon2 : consistent (m0++m2 ++ c2)) s (Hs : clocks_sim m0 s) ,               
+  (Hcon2 : consistent (m0++m2 (*++ c2*))) s (Hs : clocks_sim m0 s) ,               
   exists o1 ops1 m1 c1 P1' G1s G1', exec_star (Some (init_state P)) init_env ops1 m1 (Some P1) G1s/\ env_sim G1s G1 /\ exec P1 G1s t o1 c1 (Some P1') G1' /\ consistent (m0++m1(*++(opt_to_list c1)*)) /\ mem_vals (m0++m1) (m0++m2) /\
    ( exists s', step_star s ops1 s' /\ (forall s'', ~step_star s' (opt_to_list o1) s'')).
 Proof.
@@ -12654,7 +12654,7 @@ Proof.
   { apply Hroot. }
   { instantiate (1:=[]). instantiate(1:=[]). setoid_rewrite app_nil_r. apply mem_vals_refl. }
   { rewrite app_nil_r. eapply consistent_app_SC;  eauto. }
-  { rewrite app_nil_r. eapply consistent_app_SC. rewrite <- app_assoc. eauto. }
+  { rewrite app_nil_r. auto. }
   { rewrite app_nil_r. apply Hs. }
   { auto. }
   intros (ops1 & m1 & P1_good & G1_good & Hexec_star_P1good & Hstate_simP1good
@@ -13039,14 +13039,7 @@ Theorem instrument_correct : forall P (Hsafe_locs: safe_locs (init_state P))
 (Hlgood_lock:  forall l : lock,
    locks l (init_state (instrument P 0)) ->
    good_lock (l, 0) (init_state (instrument P 0)))
-  (Hspawn_wait:  Forall
-     (fun p : tid * list instr =>
-      let (t0, y) := p in
-      match y with
-      | Spawn u _ :: _ => u <> t0
-      | Wait u :: _ => u <> t0
-      | _ => True
-      end) (init_state P))
+  (Hspawn_wait_other: spawn_wait_other_prog (init_state P))
   (Hinit: forall p : ptr, meta_loc p -> initialized m0 p)
   (Hclocks_sim: clocks_sim m0 s0) G1' m1',
   (exists ops2 m2 P2' G2', exec_star (Some (init_state (instrument P 0)))
@@ -13146,14 +13139,7 @@ Theorem instrument_correct_race : forall P
 (Hlgood_lock:  forall l : lock,
    locks l (init_state (instrument P 0)) ->
    good_lock (l, 0) (init_state (instrument P 0)))
-  (Hspawn_wait:  Forall
-     (fun p : tid * list instr =>
-      let (t0, y) := p in
-      match y with
-      | Spawn u _ :: _ => u <> t0
-      | Wait u :: _ => u <> t0
-      | _ => True
-      end) (init_state P))
+  (Hspawn_wait_other: spawn_wait_other_prog (init_state P))
   (Hinit: forall p : ptr, meta_loc p -> initialized m0 p)
   (Hclocks_sim: clocks_sim m0 s0) G1' m1' (Hcon_m01': consistent (m0++m1')),
   (exists ops2 t m2 P2' G2' o c,
@@ -13162,15 +13148,15 @@ Theorem instrument_correct_race : forall P
     (* exec_star (Some (init_state (instrument P 0))) init_env ops2 m2 (Some P2') G2' /\
      exec P2' G2' t o c None G2''*)
      /\
-     consistent (m0 ++ m2++c) /\ mem_vals (m0++m2) (m0++m1') /\ env_sim G1' G2') <->
+     consistent (m0 ++ m2) /\ mem_vals (m0++m2) (m0++m1') /\ env_sim G1' G2') <->
   (exists ops m1 P' G' t o c P1'' G1'',
      exec_star (Some (init_state P)) init_env ops m1 (Some P') G' /\
-     exec P' G' t o c P1'' G1'' /\ consistent (m0 ++ m1) /\ mem_vals (m0++m1) (m0++m1') /\
+     exec P' G' t o c (Some P1'') G1'' /\ consistent (m0 ++ m1) /\ mem_vals (m0++m1) (m0++m1') /\
      env_sim G' G1' /\ exists s, step_star s0 ops s /\ forall s', ~step_star s (opt_to_list o) s').
 Proof.
   intros. split.
   -intros (ops2 & t &m2 & P2' & G2' & o & c & Hexec_star_inst & Hexec_inst & Hcon_m02  & Hmem_m2 & HenvG1'2').
-   exploit state_sim_steps'.  Check state_sim_steps.
+   exploit state_sim_steps'. 
    { instantiate(1:=(init_state (instrument P 0))).
      unfold distinct, init_state; constructor; clarify. }
    { instantiate(1:= init_state P).
@@ -13194,7 +13180,7 @@ Proof.
    { unfold legal_tids in Hlegal_tidsP1'. clarify. }
    { instantiate (1:=P2'). auto. }
    { auto. }
-   { apply HenvG1'2'. (* is this the G1 we need? *) }
+   { apply HenvG1'2'.  }
    { apply Hexec_star_inst. }
    { apply Hinit. }
    { apply Hexec_inst. }
@@ -13204,11 +13190,76 @@ Proof.
    destruct Hmon as (Hexec_starP1' & Henv_simG1' & HexecP1'' & Hcon_m01
                      & Hmem_valsm012 & s' & Hss_s' & Hrace); clarify.
    do 9 eexists. split;[|split;[|split;[|split;[|split]]]]; eauto.
-   admit. (*Is mem_vals transitive?*)
+   admit. (*need the conditional transitivity of mem_vals here*)
   -intros (ops1 & m1 & P1_good & G1_good & t & o1 & c1 & P1_race & G1_race &
                 Hexec_starP1_good & Hexec_race & Hcon_m01 & Hmem_valsm011' &
-                Henv_simG1_good & s_good & Hstep_starsgood & Hnostep). 
-   Check instrument_sim_race.
+                Henv_simG1_good & s_good & Hstep_starsgood & Hnostep).
+   exploit instrument_sim_safe'.
+   { instantiate (1:=init_state P). clarify. }
+   { clarify. }
+   { instantiate (1:=init_state (instrument P 0)). unfold distinct, init_state.
+     clarify. constructor; auto. }
+   { clarify. }
+   { auto. }
+   { unfold state_sim, init_state. clarify. }
+   { do 2 instantiate(1:=init_env). apply env_sim_refl. }
+   { apply Hinit. }
+   { constructor. }
+   { apply Hexec_starP1_good. }
+   { rewrite app_nil_r. auto. }
+   { instantiate(1:=[]). rewrite app_nil_r. auto. }
+   { apply mem_vals_refl. }
+   { rewrite app_nil_r. eauto. }
+   { apply Hstep_starsgood. }
+   rewrite app_nil_r.
+   intros (ops2 & m2 & P2_good & G2_good & Hexec_starP2_good & Hcon_m02 &
+                Hstate_simP2good & Henv_simG2good & Hmem_vals_m012 & Hclocks_sims_good).
+   rewrite app_assoc, app_nil_r in Hclocks_sims_good.
+   exploit instrument_sim_race. Check instrument_sim_race.
+   { instantiate (1:=P1_good). admit. (* apply fresh_tmp_steps. *) }
+   { admit. (*apply safe_locs_steps. *) }
+   { eapply legal_tids_steps in Ht; eauto. unfold legal_tids in Ht. clarify. }
+   { instantiate (1:=P2_good). eapply distinct_steps; eauto.
+     unfold distinct, init_state. clarify. constructor; auto. }
+   { admit. (*may not need this in instruent_sim_race*) }
+   { auto. }
+   { apply Henv_simG2good. }
+   { eauto. }
+   { eauto. }
+   { apply Hinit. }
+   { auto. }
+   { eauto. }
+   { eauto. }
+   { auto. }
+   intros (ops2' & m2s & lo & lc & G2s & G2' & Hexec_starP2good & Hexec_race2 &
+           Hcon_m02s & Hmem_vals_m12s & Henv_sim_G12s ).
+   exploit exec_fail_iexec.
+   { apply Hexec_race2. }
+   { apply Hstate_simP2good. }
+   { admit. }
+   { admit. }
+   { admit. (*need to add as an assumption *) }
+   { instantiate(1:=init_state (instrument P 0)).
+     unfold distinct, init_state. clarify.
+     constructor; auto. }
+   { instantiate(1:= init_state P). unfold state_sim, init_state.
+     clarify. }
+   { clarify. }
+   { clarify. }
+   { unfold legal_tids in Ht. clarify. }
+   { clarify. }
+   { clarify. }
+   { clarify. }
+   { clarify. }
+   { clarify. }
+   { clarify. }
+   { apply Hexec_starP2good. }
+   { instantiate (1:=m0). admit. (* do we really have to prove consistency of lc as well?*) }
+   { clarify. }
+   { clarify. }
+   { clarify. }
+   admit. (* the current exec_fail_iexec cannot fill the gap here*)
+     
 Qed.
 
 End Sim_Proofs.
