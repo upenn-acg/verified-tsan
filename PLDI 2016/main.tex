@@ -12,6 +12,7 @@
 \usepackage{xspace}
 \usepackage{hyperref}
 \usepackage{stmaryrd}
+\usepackage{xy}
 
 \newcommand{\eg}{\textit{e.g.}\xspace}
 \newcommand{\ie}{\textit{i.e.}\xspace}
@@ -837,7 +838,21 @@ Using Lemmas~\ref{iexec-exec}, \ref{exec-iexec}, and \ref{exec-fail-iexec}, we c
 \begin{lemma}If $P$ is a well-formed state, $(P, m) \sim (P', m')$, $m' \models \sigma$, and $\iexec{P}{m}{t}{\mathit{err}}$, then $\exec{P}{m}{t}{o}{(P_2, m_2)}$ and $s \not\xRightarrow{o}$.\end{lemma}
 
 The correctness of the instrumentation is expressed by the following theorems:
-\begin{theorem}[Race-free bisimulation]\label{safe}For all well-formed programs $\mathit{prog}$, $\execstar{(0, \instrp{\mathit{prog}}, G_0)}{m_0}{}{(P_f', m_f')}$ for some final state $P_f'$ iff $\execstar{(0, \mathit{prog}, G_0)}{m_0}{\alpha}{(P_f, m_f)}$, $\alpha$ is race-free, and $(P_f, m_f) \sim (P_f', m_f')$.\end{theorem}
+
+\begin{theorem}[Race-free bisimulation]\label{safe} 
+ For all  well-formed programs $\mathit{prog}$, 
+\[
+\begin{array}{c}
+\execstar{(0, \instrp{\mathit{prog}}, G_0)}{m_0}{}{(P_f', m_f')}    
+\\
+\mbox{for some final state $P_f'$ }
+\\
+\mathit{iff} \\ 
+\execstar{(0, \mathit{prog}, G_0)}{m_0}{\alpha}{(P_f, m_f)}
+\end{array}
+\]
+where $\alpha$ is race-free, and $(P_f, m_f) \sim (P_f', m_f')$.
+\end{theorem}
 
 \begin{theorem}[Race-detected bisimulation]\label{race}For all well-formed programs $\mathit{prog}$, 
 \[
