@@ -1588,7 +1588,7 @@ year = "2011",
 }
 
 @online{coq,
-title = {The Coq Proof Assistant Reference Manual (Version 8.5)},
+title = {The {Coq} Proof Assistant Reference Manual (Version 8.5)},
 author = {The Coq Development Team},
 year = 2016,
 url = {https://coq.inria.fr/refman/}
@@ -2955,7 +2955,7 @@ language={English}
 
 @inproceedings{boehm_foundations_2008,
  author = {Boehm, Hans-J. and Adve, Sarita V.},
- title = {Foundations of the C++ Concurrency Memory Model},
+ title = {Foundations of the {C++} Concurrency Memory Model},
  booktitle = {Proceedings of the 29th ACM SIGPLAN Conference on Programming Language Design and Implementation},
  series = {PLDI '08},
  year = {2008},
@@ -2973,7 +2973,7 @@ language={English}
 
 @article{djit+,
  author = {Itzkovitz, Ayal and Schuster, Assaf and Zeev-Ben-Mordehai, Oren},
- title = {Toward Integration of Data Race Detection in DSM Systems},
+ title = {Toward Integration of Data Race Detection in {DSM} Systems},
  journal = {J. Parallel Distrib. Comput.},
  issue_date = {Nov. 1999},
  volume = {59},
@@ -2993,7 +2993,7 @@ language={English}
 
 @inproceedings{fasttrack,
  author = {Flanagan, Cormac and Freund, Stephen N.},
- title = {FastTrack: Efficient and Precise Dynamic Race Detection},
+ title = {{FastTrack}: Efficient and Precise Dynamic Race Detection},
  booktitle = {Proceedings of the 30th ACM SIGPLAN Conference on Programming Language Design and Implementation},
  series = {PLDI '09},
  year = {2009},
@@ -3011,7 +3011,7 @@ language={English}
 
 @inproceedings{softbound,
  author = {Nagarakatte, Santosh and Zhao, Jianzhou and Martin, Milo M.K. and Zdancewic, Steve},
- title = {SoftBound: Highly Compatible and Complete Spatial Memory Safety for C},
+ title = {{SoftBound}: Highly Compatible and Complete Spatial Memory Safety for {C}},
  booktitle = {Proceedings of the 30th ACM SIGPLAN Conference on Programming Language Design and Implementation},
  series = {PLDI '09},
  year = {2009},
@@ -3025,7 +3025,25 @@ language={English}
  publisher = {ACM},
  address = {New York, NY, USA},
  keywords = {buffer overflows, c, spatial memory safety},
-}
+} 
+
+@inproceedings{tsan,
+ author = {Serebryany, Konstantin and Iskhodzhanov, Timur},
+ title = {ThreadSanitizer: Data Race Detection in Practice},
+ booktitle = {Proceedings of the Workshop on Binary Instrumentation and Applications},
+ series = {WBIA '09},
+ year = {2009},
+ isbn = {978-1-60558-793-6},
+ location = {New York, New York, USA},
+ pages = {62--71},
+ numpages = {10},
+ url = {http://doi.acm.org/10.1145/1791194.1791203},
+ doi = {10.1145/1791194.1791203},
+ acmid = {1791203},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {Valgrind, concurrency bugs, dynamic data race detection, testing},
+} 
 
 @inproceedings{pozniansky_efficient_2003,
 	address = {New York, NY, USA},
@@ -3081,7 +3099,7 @@ language={English}
 }
 
 @inproceedings{elmas_goldilocks:_2007,
-	title = {Goldilocks: a race and transaction-aware java runtime},
+	title = {Goldilocks: a race and transaction-aware {Java} runtime},
 	shorttitle = {Goldilocks},
 	url = {http://doi.acm.org/10.1145/1273442.1250762},
 	doi = {10.1145/1273442.1250762},
@@ -3093,23 +3111,6 @@ language={English}
 	keywords = {\_tablet, data-race detection, Java runtime, runtime monitoring, software transactions},
 	pages = {245--255},
 	file = {goldilocks.pdf:/Users/devietti/Documents/bibliotheca/zotero/storage/HEGJNPZZ/goldilocks.pdf:application/pdf}
-}
-
-@article{flanagan_fasttrack:_2010,
-	title = {{FastTrack}: {Efficient} and {Precise} {Dynamic} {Race} {Detection}},
-	volume = {53},
-	issn = {0001-0782},
-	shorttitle = {{FastTrack}},
-	url = {http://doi.acm.org/10.1145/1839676.1839699},
-	doi = {10.1145/1839676.1839699},
-	number = {11},
-	urldate = {2011-12-22},
-	journal = {Communications of the ACM},
-	author = {Flanagan, Cormac and Freund, Stephen N.},
-	month = nov,
-	year = {2010},
-	pages = {93--101},
-	file = {10-cacm.pdf:/Users/devietti/Documents/bibliotheca/zotero/storage/HTR7HTXJ/10-cacm.pdf:application/pdf}
 }
 
 @inproceedings{slimstate,
@@ -3182,7 +3183,7 @@ Automated Software Engineering},
 	urldate = {2015-03-20},
 	booktitle = {Proceedings of the 7th {IFIP} {WG} 6.1 {International} {Conference} on {Formal} {Methods} for {Open} {Object}-{Based} {Distributed} {Systems}},
 	publisher = {Springer-Verlag},
-	author = {Sen, Koushik and Roşu, Grigore and Agha, Gul},
+	author = {Sen, Koushik and Ro{\c s}u, Grigore and Agha, Gul},
 	year = {2005},
 	pages = {211--226}
 }
@@ -3197,7 +3198,7 @@ Automated Software Engineering},
 	urldate = {2015-03-20},
 	booktitle = {Proceedings of the 19th {International} {Conference} on {Computer} {Aided} {Verification}},
 	publisher = {Springer-Verlag},
-	author = {Chen, Feng and Roşu, Grigore},
+	author = {Chen, Feng and Ro{\c s}u, Grigore},
 	year = {2007},
 	pages = {240--253}
 }
@@ -3543,3 +3544,27 @@ Automated Software Engineering},
  keywords = {Android, Data Races, Happens-before, Non-determinism},
 }
 
+@article{boyer2008automated,
+  title={Automated dynamic analysis of {CUDA} programs},
+  author={Boyer, Michael and Skadron, Kevin and Weimer, Westley},
+  journal={Third Workshop on Software Tools for MultiCore Systems},
+  year={2008}
+}
+
+@inproceedings{Morrisett:2012:RBF:2254064.2254111,
+ author = {Morrisett, Greg and Tan, Gang and Tassarotti, Joseph and Tristan, Jean-Baptiste and Gan, Edward},
+ title = {{RockSalt}: Better, Faster, Stronger {SFI} for the x86},
+ booktitle = {Proceedings of the 33rd ACM SIGPLAN Conference on Programming Language Design and Implementation},
+ series = {PLDI '12},
+ year = {2012},
+ isbn = {978-1-4503-1205-9},
+ location = {Beijing, China},
+ pages = {395--404},
+ numpages = {10},
+ url = {http://doi.acm.org/10.1145/2254064.2254111},
+ doi = {10.1145/2254064.2254111},
+ acmid = {2254111},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {domain-specific languages, software fault isolation},
+}
