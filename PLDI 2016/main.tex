@@ -11,6 +11,7 @@
 \usepackage{xcolor}
 \usepackage{xspace}
 \usepackage{hyperref}
+\usepackage{stmaryrd}
 
 \newcommand{\eg}{\textit{e.g.}\xspace}
 \newcommand{\ie}{\textit{i.e.}\xspace}
@@ -156,7 +157,7 @@
 \titlebanner{}        % These are ignored unless
 \preprintfooter{}   % 'preprint' option specified.
 
-\title{Verifying Dynamic Race Detection (Draft)}
+\title{Verifying Dynamic Race Detection}
 \ignore{\authorinfo{William Mansky \and Yuanfeng Peng \and Steve Zdancewic \and Joseph Devietti}
            {University of Pennsylvania}
            {wmansky@seas.upenn.edu, yuanfeng@cis.upenn.edu, stevez@cis.upenn.edu, devietti@cis.upenn.edu}}
@@ -180,7 +181,7 @@ While these analyses have been proven correct, such proofs have two main shortco
 
 In this paper, we seek to rectify these concerns and place dynamic race detection on a provably correct foundation for the first time. We have begun by formalizing the proof of the classic vector-clock race detection algorithm~\cite{vcfidge,vcmattern} using the Coq interactive theorem prover~\cite{coq}. Having established the correctness of this base algorithm, we extend our work along two dimensions. 
 
-\begin{figure}[h]
+\begin{figure}[t]
 \centering
  \includegraphics[width=0.6\columnwidth]{overview.pdf}
  \caption{An overview of our work, showing verified algorithms (top) and our approach to verified instrumentation code via a labeled operational semantics.}
@@ -205,7 +206,7 @@ The remainder of this paper is organized as follows. In Section~\ref{strategy}, 
 
 \section{Proof Strategy}
 \label{strategy}
-Our goal for each algorithm and program transformation presented in this paper is to prove that it implements sound and complete race detection, i.e., that it raises an alarm in all racy executions and only racy executions. However, as much as possible, we prefer not to do this by referring back to the base definition of racy executions. We begin by stating and proving correctness of a simple vector-clock race detection algorithm, by direct relation to the definition of a race. We then prove further results---the correctness of a more sophisticated algorithm, and of an instrumentation pass meant to implement the simple algorithm---by relating them to the verified base algorithm. We may think of this hierarchy in terms of specifications and refinement: we begin by proving that the base algorithm refines the abstract specification of race detection, and then use it in turn as a specification refined by more complex or detailed mechanisms. \TODO{diagram?} This allows us to separate concerns and avoid duplicating proof effort, but it also serves as further validation of the base vector-clock algorithm: by showing that it is \emph{two-sided}, that is, that it both implements a higher-level specification of its desired behavior and is implemented by more concrete systems, we gain confidence that it is correctly stated (and not, e.g., vacuously correct).
+Our goal for each algorithm and program transformation presented in this paper is to prove that it implements sound and complete race detection, i.e., that it raises an alarm in all racy executions and only racy executions. However, as much as possible, we prefer not to do this by referring back to the base definition of racy executions. We begin by stating and proving correctness of a simple vector-clock race detection algorithm, by direct relation to the definition of a race. We then prove further results---the correctness of a more sophisticated algorithm, and of an instrumentation pass meant to implement the simple algorithm---by relating them to the verified base algorithm. We may think of this hierarchy in terms of specifications and refinement: we begin by proving that the base algorithm refines the abstract specification of race detection, and then use it in turn as a specification refined by more complex or detailed mechanisms. This allows us to separate concerns and avoid duplicating proof effort, but it also serves as further validation of the base vector-clock algorithm: by showing that it is \emph{two-sided}, that is, that it both implements a higher-level specification of its desired behavior and is implemented by more concrete systems, we gain confidence that it is correctly stated (and not, e.g., vacuously correct).
 
 Our approach to verifying instrumentation has three major steps. First, we describe our race detection algorithm abstractly, separately from the details of any programming language. We verify this algorithm against a high-level specification of the property we want to guarantee (in this case, soundness and completeness). Secondly, we define the semantics of a target language, labeled with the abstract operations produced by each step. This means that from each execution of an uninstrumented program, we can use the algorithm to determine the behavior we \emph{would have observed} if the program was correctly instrumented. Thirdly, we define our instrumentation pass, and also write a bigger-step semantics for instrumented programs in which an instruction executes together with its instrumentation in a single step. This proof strategy is analogous to that used in other proof efforts~\cite{softbound}, and makes it easier to directly relate executions of an instrumented program to executions of the original program. Given the bigger-step semantics, the proof of correctness of the instrumentation then breaks down into two parts: a proof of simulation between the bigger-step semantics and ``would have observed'' semantics of the uninstrumented program, and a proof that the bigger-step semantics completely captures the possible behaviors of any instrumented program. This three-step approach has applications beyond race detection: we believe that it could be applied to simplify the verification of any kind of instrumentation for dynamic checks, including memory safety and atomicity violation checking. The approach is particularly useful when verifying instrumentation of concurrent programs, since we are able to isolate all reasoning about interference between threads in the latter half of the third step---characterizing the possible behaviors of the instrumented program---and otherwise reason more or less sequentially.
 
@@ -325,7 +326,9 @@ Writes operate similarly to reads, with an additional check in the \Rule{Write} 
 %$\Address$.  
 
 \subsubsection{Correctness}
-Correctness for dynamic race detection is phrased in terms of \emph{soundness} and \emph{completeness}. Soundness means that if the algorithm runs to completion, then there was no race in the program trace; completeness means that given a trace without races, the algorithm does not get stuck. The soundness and completeness of \VCalg follows from the fact that the $\sqsubseteq$ relation between vector clocks precisely models the happens-before relation. Our Coq formalization follows the proof outline given in the presentation of \FT~\cite{fasttrack} (with the change described in Section~\ref{bug}), which can be straightforwardly translated into Coq. The main invariant of the algorithm is that $C_t(t) > C_u(t)$, that is, each thread always has a higher timestamp for itself than any other thread has for it. This guarantees that no operation by a thread $t$ can be seen by another thread $u$ (without detecting a race) until $t$ has synchronized with $u$.
+Correctness for dynamic race detection is phrased in terms of \emph{soundness} and \emph{completeness}. Soundness means that if the algorithm runs to completion, then there was no race in the program trace; completeness means that given a trace without races, the algorithm does not get stuck.
+\begin{theorem}\VCalg is sound and complete.\end{theorem}
+The soundness and completeness of \VCalg follows from the fact that the $\sqsubseteq$ relation between vector clocks precisely models the happens-before relation. Our Coq formalization follows the proof outline given in the presentation of \FT~\cite{fasttrack} (with the change described in Section~\ref{bug}), which can be straightforwardly translated into Coq. The main invariant of the algorithm is that $C_t(t) > C_u(t)$, that is, each thread always has a higher timestamp for itself than any other thread has for it. This guarantees that no operation by a thread $t$ can be seen by another thread $u$ (without detecting a race) until $t$ has synchronized with $u$.
 
 \subsection{\FT}
 
@@ -467,7 +470,7 @@ We can now state the full simulation relation between vector clock and \FT state
 \item if $R'_x = V$, then $V$ partially emulates $R_x$
 \end{itemize}
 \end{definition}
-\begin{theorem}The relation $\sim$ is a bisimulation.\end{theorem}
+\begin{lemma}The relation $\sim$ is a bisimulation.\end{lemma}
 \begin{proof}In each direction, the relation $\sim$ is preserved by corresponding steps in the two systems, which we show by case analysis on the rule applied.\end{proof}
 
 \begin{theorem}\FT is sound and complete.\end{theorem}
@@ -481,19 +484,20 @@ As a baseline for comparison, we formalized the original proof of \FT's correctn
 \begin{lemma}Suppose $\sigma$ is well-formed and $\sigma \xRightarrow{\alpha} \sigma'$ and $a \in \alpha$. Let $t = \mathit{tid}(a)$ and $u = \mathit{tid}(b)$. If $a <_{\alpha; b} b$ then $K^a(t) \sqsubseteq K^b(u)$.\end{lemma}
 \noindent where by abuse of notation we use $K^b(u)$ to refer to the $C_u$ component of $\sigma'$ updated as appropriate for a blocking operation. With this statement of the lemma, the completeness proof follows as outlined in the paper.
 
-\TODO{SAZ: we didn't say anything specific about the Coq proofs of the simulation relation, or of the original correctness, so this comparison is a little bit baseless; we should say more about the Coq proofs somewhere. Perhaps collect all of that into a discussion section? }
-Compared to the proof by simulation, this proof is about 130 lines longer, reflecting duplication of effort from proving similar theorems about the two systems. It also involves a significant amount of inductive reasoning, which might have been difficult to synthesize without the guide of the paper proof. In this case, since \FT preserves the same invariants as the base algorithm, the proofs have largely the same structure; however, if a different algorithm modified some of these invariants, we believe that the proof by simulation would be significantly easier to construct than the proof that recapitulates the relationship between $\sqsubseteq$ and happens-before.
+The size of this proof and the effort involved are comparable to that of the proof by simulation. The direct proof also requires a significant amount of inductive reasoning, which might have been difficult to synthesize without the guide of the paper proof. In this case, since \FT preserves the same invariants as the base algorithm, its proof have largely the same structure as those of \VCalg; however, if a different algorithm modified some of these invariants, we believe that the proof by simulation would be significantly easier to construct than the proof that recapitulates the relationship between $\sqsubseteq$ and happens-before.
 
 \subsection{Handling Multiple Joins}
 \label{waits}
 In many concurrent languages, once a thread has terminated, it is possible for multiple threads to join with it. According to the rules in Figure~\ref{f:semvc}, on a join operation, $C_t$ is updated to $C_t \sqcup C_u$ and $C_u(u)$ is incremented, maintaining the invariant that $C_u(u) > C_t(u)$. This increment is in some sense unnecessary, since $u$ will perform no more operations and does not require race detection, but it appears harmless. However, if we consider what would be involved in implementing this algorithm, we see that the increment is potentially dangerous: if two threads join with $u$ at the same time, the updates to $C_u$ will race. (See Section~\ref{sync} for more on races in instrumentation.)
 
-If we remove the unnecessary increment, then there is no risk of races between joins: both threads read $C_u$, but only modify their own vector clocks, and simultaneous reads do not constitute a race. Without this increment, however, we must modify the invariants of the race detection algorithm; in particular, we must allow the basic invariant to be violated for terminated threads. One possible approach is to add an operation $\mathsf{exit}(t)$ produced when a thread terminates, and to extend the state with an additional component, a set $X$ of threads that have $\mathsf{exit}$ed. A thread can then only perform operations before it $\mathsf{exit}$s, and only be the target of a $\mathsf{join}$ after it $\mathsf{exit}$s. With these changes, we obtain a new vector clock race detection algorithm suitable for multiple-join approaches to concurrency, and the new algorithm is also sound and complete. We have verified this modified algorithm in Coq by modifying the proofs of \VCalg; note that since it accepts traces that are rejected by \VCalg (in the original presentation of \VCalg, multiple joins to the same thread are ill-formed), we cannot hope to prove its correctness by simulation.
+If we remove the unnecessary increment, then there is no risk of races between joins: both threads read $C_u$, but only modify their own vector clocks, and simultaneous reads do not constitute a race. Without this increment, however, we must modify the invariants of the race detection algorithm; in particular, we must allow the basic invariant to be violated for terminated threads. One possible approach is to add an operation $\mathsf{exit}(t)$ produced when a thread terminates, and to extend the state with an additional component, a set $X$ of threads that have $\mathsf{exit}$ed. A thread can then only perform operations before it $\mathsf{exit}$s, and only be the target of a $\mathsf{join}$ after it $\mathsf{exit}$s. With these changes, we obtain a new vector clock race detection algorithm suitable for multiple-join approaches to concurrency.
+\begin{theorem}\VCalg modified for multiple joins is sound and complete.\end{theorem}
+We have verified this modified algorithm in Coq by modifying the proofs of \VCalg; note that since it accepts traces that are rejected by \VCalg (in the original presentation of \VCalg, multiple joins to the same thread are ill-formed), we cannot hope to prove its correctness by simulation.
 
 \section{Race Detection Instrumentation}
 \label{language}
 
-In the previous section, we described the statement and verification of \emph{algorithms} for dynamic race detection. For dynamic race detection to be useful, it must be implemented as a tool that runs during the execution of a program. Most commonly, this is achieved by \emph{instrumenting} the program with additional instructions that carry out the algorithm. Instrumentation must be defined in terms of the instructions of some language instead of abstract arithmetic operations, and must take place within the flow of a program rather than alongside it. Because of this, the process of translating from algorithm to instrumentation is highly error-prone. We found that the implementation of \FT in the RoadRunner framework differs in several places from the rules of Figure~\ref{f:semft}: for instance, the release handler updates $L_m$ to $L_m \sqcup C_t$ rather than $C_t$. These differences can be shown not to affect the correctness of the algorithm (though they do represent unnecessary computations), but the fact that the algorithm implemented is different from the one described weakens the guarantee provided by the paper proof. In this and the following sections, we present an instrumentation pass in a simple language that is formally proven to implement the \VCalg algorithm of Section~\ref{vector-clocks}.
+In the previous section, we described the statement and verification of \emph{algorithms} for dynamic race detection. For dynamic race detection to be useful, it must be implemented as a tool that runs during the execution of a program. Most commonly, this is achieved by \emph{instrumenting} the program with additional instructions that carry out the algorithm. Instrumentation must be defined in terms of the instructions of some language instead of abstract arithmetic operations, and must take place within the flow of a program rather than alongside it. Because of this, the process of translating from algorithm to instrumentation is error-prone. For example, we found that the implementation of \FT in the RoadRunner framework differs in one place from the rules of Figure~\ref{f:semft}: the release handler updates $L_m$ to $L_m \sqcup C_t$ rather than $C_t$. In this case, the difference can be shown not to affect the correctness of the algorithm (though it does represent unnecessary computation), but the fact that the algorithm implemented is different from the one described weakens the guarantee provided by the paper proof. In this and the following sections, we present an instrumentation pass in a simple language that is formally proven to implement the \VCalg algorithm of Section~\ref{vector-clocks}.
 
 \subsection{The Language}
 We define a simple multithreaded language that is just complicated enough to have races and implement race detection instrumentation. The instructions of the language are defined as follows, where $n$ is a natural number, $a$ is a local variable, $e, e1, e2$ are expressions, $x$ is a memory location, $l$ is a lock, $t$ is a numeric thread id, and $i_j$ are instructions:
@@ -675,22 +679,20 @@ The instrumented version of a program $\mathit{prog}$ is then simply $\instrp{\m
 
 The instrumentation of the previous section cannot implement sound and complete race detection for one important reason: when a race does occur, the corresponding instrumentation also races. In instrumented programs such as that shown in Figure~\ref{instr-race}, depending on the order in which the updates to metadata locations occur, the instrumentation may fail to detect the race between the two threads. In general, poorly synchronized race detection instrumentation cannot hope to successfully detect all races. At the same time, adding too much synchronization could significantly hurt performance. Given the set of operations available in our language, we can show that it suffices to add a lock for each memory location, which is used to protect the instrumentation on that memory location. (Intuitively, locks prevent races on their associated metadata, and a thread cannot race with the thread that spawns it or waits for it to terminate.) To implement the necessary synchronization in our instrumentation, we add another designated area of memory, $X$, such that $X[x]$ holds the lock protecting the metadata for $x$. We then add locking to the \texttt{load} and \texttt{store} instrumentation:
 \begin{tabular}[t]{rcl}
-\instr{t}{\load{a}{x}} & $\triangleq$ & \lock{X[x]}\texttt{;}
+\instr{t}{\load{a}{x}} & $\triangleq$ & \lock{$X[x]$}\texttt{;}
 \\ & & \vcle{W[x]}{C[t]}\texttt{;} 
 \\ & & \move{(C[t], t)}{(R[x], t)}\texttt{;}
-\\ & &\load{a}{x}\texttt{;}
-\\ & & \unlock{X[x]}\texttt{;}
+\\ & &\load{$a$}{$x$}\texttt{;}
+\\ & & \unlock{$X[x]$}\texttt{;}
 \\
-\instr{t}{\store{x}{e}} & $\triangleq$ & \lock{X[x]}\texttt{;}
+\instr{t}{\store{x}{e}} & $\triangleq$ & \lock{$X[x]$}\texttt{;}
 \\ & & \vcle{W[x]}{C[t]}\texttt{;} 
 \\ & & \vcle{R[x]}{C[t]}\texttt{;}
 \\ & & \move{(C[t], t)}{(W[x], t)}\texttt{;} 
-\\ & & \store{x}{e}\texttt{;} 
-\\ & & \unlock{X[x]} \texttt{;} 
+\\ & & \store{$x$}{$e$}\texttt{;} 
+\\ & & \unlock{$X[x]$} \texttt{;} 
 \end{tabular}
 This guarantees that the instrumentation will never race with itself, which is sufficient to allow us to prove correctness of the instrumentation in the next section.
-\TODO{If this takes up too much space, we can put the locks directly
-  into Figure 7.}
 
 \section{Verifying Instrumentation}
 \label{verification}
@@ -708,7 +710,7 @@ We verify the correctness of the instrumentation by showing that the instrumenta
 \hline
 \cfg{P \uplus (t, \instr{t}{\load{a}{x}}\texttt{;} \mathit{li}, G)}{m}
 \Rightarrow_{t} \\
-\cfg{P \uplus (t, \mathit{li}, G[a \mapsto m(x), \texttt{tmp1} \mapsto ?, \texttt{tmp2} \mapsto ?])}{m'}
+\cfg{P \uplus (t, \mathit{li}, G[a \mapsto m(x), \texttt{tmp1} \mapsto\ ?, \texttt{tmp2} \mapsto\ ?])}{m'}
 \\\\
 
 \multicolumn{1}{c}{m(X[x]) = 0 \quad \exists o.\ m(W[x], o) > m(C[t], o)}
@@ -727,7 +729,7 @@ We verify the correctness of the instrumentation by showing that the instrumenta
 \hline
 \cfg{P \uplus (t, \instr{t}{\store{x}{e}}\texttt{;} \mathit{li}, G)}{m}
 \Rightarrow_{t} \\
-\cfg{P \uplus (t, \mathit{li}, G[\texttt{tmp1} \mapsto ?, \texttt{tmp2} \mapsto ?])}{m'}
+\cfg{P \uplus (t, \mathit{li}, G[\texttt{tmp1} \mapsto\ ?, \texttt{tmp2} \mapsto\ ?])}{m'}
 \\\\
 
 \multicolumn{1}{c}{m(X[x]) = 0}
@@ -741,46 +743,48 @@ We verify the correctness of the instrumentation by showing that the instrumenta
 
 \multicolumn{1}{c}{m(\ell) = 0 \quad m' = m[\ell \mapsto t + 1,}
 \\
-\multicolumn{1}{c}{ (C[t], o) \mapsto \mathsf{max}(m(L[m], o), m(C[t], o))]}
+\multicolumn{1}{c}{ C[t] \Mapsto \mathsf{max}(m(L[m]), m(C[t]))]}
 \\
 \hline
 \cfg{P \uplus (t, \instr{t}{\lock{\ell}}\texttt{;} \mathit{li}, G)}{m}
 \Rightarrow_{t} \\
-\cfg{P \uplus (t, \mathit{li}, G[\texttt{tmp1} \mapsto ?, \texttt{tmp2} \mapsto ?])}{m'}
+\cfg{P \uplus (t, \mathit{li}, G[\texttt{tmp1} \mapsto\ ?, \texttt{tmp2} \mapsto\ ?])}{m'}
 \\\\
 
 \multicolumn{1}{c}{m(\ell) = t + 1}
 \\
-\multicolumn{1}{c}{m' = m[\ell \mapsto 0, (L[m], o) \mapsto m(C[t], o),}
+\multicolumn{1}{c}{m' = m[\ell \mapsto 0, L[m] \Mapsto m(C[t]),}
 \\
 \multicolumn{1}{c}{(C[t], t) \mapsto m(C[t], t) + 1]}
 \\
 \hline
 \cfg{P \uplus (t, \instr{t}{\unlock{\ell}}\texttt{;} \mathit{li}, G)}{m}
 \Rightarrow_{t} \\
-\cfg{P \uplus (t, \mathit{li}, G[\texttt{tmp1} \mapsto ?, \texttt{tmp2} \mapsto ?])}{m'}
+\cfg{P \uplus (t, \mathit{li}, G[\texttt{tmp1} \mapsto\ ?, \texttt{tmp2} \mapsto\ ?])}{m'}
 \\\\
-\ignore{
-\multicolumn{1}{c}{m' = m[(C[u], o) \mapsto \mathsf{max}(m(C[u], o), m(C[t], o)), (C[t], t) \mapsto m(C[t], t) + 1]}
+
+\multicolumn{1}{c}{m' = m[C[u] \Mapsto \mathsf{max}(m(C[u]), m(C[t])),} 
+\\
+\multicolumn{1}{c}{ (C[t], t) \mapsto m(C[t], t) + 1]}
 \\
 \hline
 \cfg{P \uplus (t, \instr{t}{\spawn{u}{\mathit{li}'}}\texttt{;} \mathit{li}, G)}{m}
 \Rightarrow_{t} \\
-\cfg{P \uplus (t, \mathit{li}, G[\texttt{tmp1} \mapsto ?, \texttt{tmp2} \mapsto ?]) \uplus (u, \instr{u}{\mathit{li}'}, G_0)}{m'}
+\cfg{P \uplus (t, \mathit{li}, G[\texttt{tmp1} \mapsto\ ?, \texttt{tmp2} \mapsto\ ?]) \uplus (u, \instr{u}{\mathit{li}'}, G_0)}{m'}
 \\\\
 
 \multicolumn{1}{c}{(u, \cdot, G_0) \in P}
 \\
-\multicolumn{1}{c}{m' = m[(C[t], o) \mapsto \mathsf{max}(m(C[t], o), m(C[u], o)), (C[u], u) \mapsto m(C[u], u) + 1]}
+\multicolumn{1}{c}{m' = m[C[t] \Mapsto \mathsf{max}(m(C[t]), m(C[u])),} 
 \\
+\multicolumn{1}{c}{(C[u], u) \mapsto m(C[u], u) + 1]}\\
 \hline
 \cfg{P \uplus (t, \instr{t}{\wait{u}}\texttt{;} \mathit{li}, G)}{m}
 \Rightarrow_{t} \\
-\cfg{P \uplus (t, \mathit{li}, G[\texttt{tmp1} \mapsto ?, \texttt{tmp2} \mapsto ?]}{m'}
-}
+\cfg{P \uplus (t, \mathit{li}, G[\texttt{tmp1} \mapsto\ ?, \texttt{tmp2} \mapsto\ ?]}{m'}
+
 \end{array}
 \]
-\TODO{Which rules should we show? Also, some omitted ``iterate over o''s}
 \caption{Bigger-step semantics of instrumented programs}
 \label{iexec}
 \end{figure}
@@ -871,7 +875,7 @@ such as fork-join programs
 \section{Conclusions and Future Work}
 \label{conclusion}
 
-We have presented the first verified proofs of correctness of the \VCalg and \FT race detection algorithms, and a verified implementation of vector-clock race detection for a simple multithreaded language. Our verification efforts have revealed an issue in the original paper proof of correctness for \FT, and an instance of unnecessary computation in the \FT implementation. \TODO{Where do we mention the unnecessary work in FastTrack? We should make sure that it's called out explicitly.} Our work places dynamic data race detection on a formally verified foundation for the first time.
+We have presented the first verified proofs of correctness of the \VCalg and \FT race detection algorithms, and a verified implementation of vector-clock race detection for a simple multithreaded language. Our verification efforts have revealed an issue in the original paper proof of correctness for \FT, and an instance of unnecessary computation in the \FT implementation. Our work places dynamic data race detection on a formally verified foundation for the first time.
 
 We intend to expand our approach to verified race detection along three main lines. First, our approach should generalize easily to verifying more sophisticated algorithms and instrumentation passes, such as an implementation of \FT~\cite{fasttrack} or the ThreadSanitizer algorithm used in LLVM~\cite{serebryany_threadsanitizer:_2009}. The second and greater challenge will be to apply the same approach on more realistic languages, and ultimately to integrate it into high-assurance compilation frameworks like Vellvm~\cite{vellvm} or CompCert~\cite{compcert}. This would involve taking into account a wider range of program instructions and potential complications, including variable-size accesses and low-level atomics. Thirdly, our proofs thus far assume sequential consistency as the concurrent memory model; an interesting challenge would be to prove that the same instrumentation suffices under the relaxed memory models used in languages like C~\cite{boehm_foundations_2008} and Java~\cite{manson_java_2005}. By extending the reach of verified race detection, we aim to make it easier to design and justify increasingly sophisticated race detection algorithms and implementations.
 
