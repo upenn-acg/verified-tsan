@@ -820,9 +820,20 @@ Using Lemmas~\ref{iexec-exec}, \ref{exec-iexec}, and \ref{exec-fail-iexec}, we c
 \begin{lemma}If $P$ is a well-formed program, $(P, m) \sim (P', m')$, $m' \models \sigma$, and $\iexec{P}{m}{t}{\mathit{err}}$, then $\exec{P}{m}{t}{o}{(P_2, m_2)}$ and $s \not\xRightarrow{o}$.\end{lemma}
 
 The correctness of the instrumentation is expressed by the following theorems:
-\begin{theorem}\label{safe}For all well-formed programs $P$, $\execstar{\instrp{P}}{m_0}{}{(P_f', m_f')}$ for some final state $P_f'$ iff $\execstar{P}{m_0}{\alpha}{(P_f, m_f)}$, $\alpha$ is race-free, and $(P_f, m_f) \sim (P_f', m_f')$.\end{theorem}
+\begin{theorem}[Race-free bisimulation]\label{safe}For all well-formed programs $P$, $\execstar{\instrp{P}}{m_0}{}{(P_f', m_f')}$ for some final state $P_f'$ iff $\execstar{P}{m_0}{\alpha}{(P_f, m_f)}$, $\alpha$ is race-free, and $(P_f, m_f) \sim (P_f', m_f')$.\end{theorem}
 
-\begin{theorem}\label{race}For all well-formed programs $P$, $\execstar{\instrp{P}}{m_0}{}{(P_1', m_1')} \execs{t}{}{\mathit{err}}$ iff $\execstar{P}{m_0}{\alpha}{(P_1, m_1)} \execs{t}{o}{(P_2, G_2)}$, $(P_1, m_1) \sim (P_1', m_1')$, $\sigma_0 \xRightarrow{\alpha} \sigma$, and $\sigma \not\xRightarrow{o}$.\end{theorem}
+\begin{theorem}[Race-detected bisimulation]\label{race}For all well-formed programs $P$, 
+\[
+\begin{array}{c}
+\execstar{\instrp{P}}{m_0}{}{(P_1', m_1')} \execs{t}{}{\mathit{err}}\\ 
+\mathit{iff} \\ 
+\execstar{P}{m_0}{\alpha}{(P_1, m_1)} \execs{t}{o}{(P_2, G_2)}
+\end{array}
+\]
+%
+where $(P_1, m_1) \sim (P_1', m_1')$, and, according to the vector clock semantics of Figure~\ref{f:semvc}, $\sigma_0 \xRightarrow{\alpha} \sigma$, and $\sigma \not\xRightarrow{o}$.
+
+\end{theorem}
 Since $(P, m) \sim (P', m')$ implies that the memory and local environments agree on all locations except those involved in the instrumentation, these are strong correctness properties. Theorem~\ref{safe} guarantees that for each race-free execution of the original program, there is a successful instrumented execution that produces the same values in the environment and memory (and vice versa). Theorem~\ref{race} guarantees that for each racy execution of the original program, there is a corresponding instrumented execution that executes successfully up until the first race, then fails (and vice versa). While it is difficult to talk about ``the same'' execution across two different programs, these lemmas guarantee that in terms of observable results, the original and instrumented programs have the same behavior modulo race detection, and that all racy executions are successfully detected.
 
 \section{Related Work}
