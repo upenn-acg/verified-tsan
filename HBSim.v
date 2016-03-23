@@ -10336,6 +10336,41 @@ Fixpoint legal_spawn (p : prog) :=
 Definition legal_tids (P:list (tid * prog)) :=
   Forall (fun e => legal_spawn (snd e)) P /\ Forall (fun e => fst e < zt) P .
 
+
+Fixpoint spawn_wait_other_inst t i:=
+  let spawn_wait_other := fix f t' p:=
+                       match p with
+                         | [] => True
+                         | i'::insts => spawn_wait_other_inst t' i'/\ f t' insts
+                       end
+                         in
+  match i with
+    | Spawn u li => u <> t /\ spawn_wait_other u li
+    | Wait u     => u <> t                                           
+    | _ => True
+  end.
+
+Fixpoint spawn_wait_other t p:=
+  match p with
+    | [] => True
+    | i'::insts => spawn_wait_other_inst t i' /\ spawn_wait_other t insts
+  end.
+
+Definition spawn_wait_other_prog (tps: list (tid * list instr)):=
+  Forall (fun tp => spawn_wait_other (fst tp) (snd tp) ) tps. 
+  
+
+Lemma spawn_wait_other_prog_step : forall P G o c P' G' t
+                               (Hlegal: spawn_wait_other_prog P)
+                               (Hstep: exec P G t o c (Some P') G'),
+                          spawn_wait_other_prog P'.
+Proof.
+  intros. unfold spawn_wait_other_prog,spawn_wait_other in *.
+  inversion Hstep; clarify; rewrite Forall_app in * ; clarify;
+  inversion Hlegal2; clarify. 
+Qed.
+
+
 Lemma legal_tids_step : forall P G o c P' G' t
                                (Hlegal: legal_tids P)
                                (Hstep: exec P G t o c (Some P') G'),
@@ -12857,14 +12892,35 @@ Proof.
 Qed.
 
 
+Lemma spawn_wait_other_prog_nb : forall P
+  (Hspawn_wait_other_prog: spawn_wait_other_prog P),                             
+  Forall
+     (fun p : tid * list instr =>
+      let (t0, y) := p in
+      match y with
+      | [] => True
+      | Assign _ _ :: _ => True
+      | Load _ _ :: _ => True
+      | Store _ _ :: _ => True
+      | Lock _ :: _ => True
+      | Unlock _ :: _ => True
+      | Spawn u _ :: _ => u <> t0
+      | Wait u :: _ => u <> t0
+      | Assert_le _ _ :: _ => True
+      end) P.
+Proof.
+  clarify.
+  unfold spawn_wait_other_prog in *.
+  rewrite Forall_forall in *. clarify.
+  specialize(Hspawn_wait_other_prog x H).
+  destruct x; unfold spawn_wait_other in *; clarify.
+  destruct l; clarify. destruct i; clarify.
+Qed.
+
 Corollary instrument_sim_safe' : forall P P1 P2 G1 G2 h
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1) (Hdistinct : distinct P2)
   (Ht : legal_tids P1) 
-  (Ht_spawn: Forall (fun p =>  match p with
-                                 | (t0,Spawn u li::rest) => u <> t0
-                                 | (t0,Wait u ::rest) => u <> t0
-                                 | _ => True
-                               end) P1)
+  (Ht_spawn: spawn_wait_other_prog P1)
   (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2)
   m0 (Hinit: forall p: ptr, meta_loc p -> initialized m0 p)
   m1 (Hroot : exec_star (Some (init_state P)) init_env h m1 (Some P1) G1)
@@ -12915,7 +12971,7 @@ Proof.
     { auto. }
     { instantiate(1:=P2). auto. }
     { unfold legal_tids in Ht. clarify. }
-    { clarify. }
+    { apply spawn_wait_other_prog_nb. auto. }
     { auto. }
     { instantiate(1:=G2). instantiate(1:=G). auto. }
     { apply Hinit. }
@@ -12941,25 +12997,20 @@ Proof.
     assert(Hcon1':  consistent ((m0 ++ m1 ++ opt_to_list c) ++ lc)).
     { do 2 rewrite <- app_assoc. rewrite <- app_assoc in Hcon. auto. }
     assert(Hdistinct_P2i: distinct P2i).
-    { admit. }
+    { eapply distinct_steps; eauto. }
     assert(Hfresh_tmps_P1i: fresh_tmps P1i).
-    { admit. }
+    { exploit fresh_tmps_step; eauto.  }
     assert(Hsafe_locs_P1i: safe_locs P1i).
-    { admit. }
+    { exploit safe_locs_step; eauto. }
     assert(Hlegal_tids_P1i: legal_tids P1i).
-    { admit. }
-    assert(Hspawn_P1i:  Forall
-                          (fun p : tid * list instr =>
-                             let (t0, y) := p in
-                             match y with
-                               | Spawn u _ :: _ => u <> t0
-                               | Wait u :: _ => u <> t0
-                               | _ => True
-                             end) P1i).
-    { admit. }
+    { eapply legal_tids_step; eauto. }
+
+
+    assert(Hspawn_wait_otherP1i:  spawn_wait_other_prog P1i).
+    { eapply spawn_wait_other_prog_step; eauto. }
     assert(HP1i: Some P1i=Some P1i) by auto.
     specialize(IHHstep Hexec_starP1i Hcon1' Hmem_vals_m1c_m2lc2i G2' Henv_sim_G2' P2i Hdistinct_P2i P1i).
-    specialize(IHHstep Hfresh_tmps_P1i Hsafe_locs_P1i Hlegal_tids_P1i Hspawn_P1i Hstate_sim_P2i HP1i).
+    specialize(IHHstep Hfresh_tmps_P1i Hsafe_locs_P1i Hlegal_tids_P1i Hspawn_wait_otherP1i Hstate_sim_P2i HP1i).
     inversion IHHstep as (lo2 & lc2 & P2' & G2'' & Hexec_star_P2'
                               & Hcon_mlc2 & Hstate_sim_P2' & Henv_sim_G2'' & Hmem_vals_lc2
                               & Hclocks_sim_mlc2).
