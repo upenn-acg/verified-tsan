@@ -12935,9 +12935,11 @@ Proof.
     { eapply exec_star_trans; eauto. rewrite <- (app_nil_r (opt_to_list o)).
       rewrite <- (app_nil_r (opt_to_list c)). eapply exec_step; eauto. constructor. }
     assert(Hmem_vals_m1c_m2lc2i: mem_vals (m0++m1++opt_to_list c) (m0++m2++lc2i)).
-    { eapply mem_vals_sim_app; eauto. apply mem_sim_mem_sim'; auto. } 
-    assert(Hcon1':  consistent (m0 ++ (m1 ++ opt_to_list c) ++ lc)).
-    { rewrite <- app_assoc. auto. }
+    { do 2 rewrite app_assoc. 
+      eapply mem_vals_sim_app; eauto. eapply prog_steps.
+      rewrite <- (app_nil_r (opt_to_list c)). eapply exec_step. eauto. constructor. } 
+    assert(Hcon1':  consistent ((m0 ++ m1 ++ opt_to_list c) ++ lc)).
+    { do 2 rewrite <- app_assoc. rewrite <- app_assoc in Hcon. auto. }
     assert(Hdistinct_P2i: distinct P2i).
     { admit. }
     assert(Hfresh_tmps_P1i: fresh_tmps P1i).
@@ -12950,28 +12952,23 @@ Proof.
                           (fun p : tid * list instr =>
                              let (t0, y) := p in
                              match y with
-                               | [] => True
-                               | Assign _ _ :: _ => True
-                               | Load _ _ :: _ => True
-                               | Store _ _ :: _ => True
-                               | Lock _ :: _ => True
-                               | Unlock _ :: _ => True
                                | Spawn u _ :: _ => u <> t0
                                | Wait u :: _ => u <> t0
-                               | Assert_le _ _ :: _ => True
+                               | _ => True
                              end) P1i).
     { admit. }
     assert(HP1i: Some P1i=Some P1i) by auto.
-    specialize(IHHstep Hmem_sim'_m1c_m2lc2i Hcon1' G2' Henv_sim_G2' P2i Hdistinct_P2i P1i).
+    specialize(IHHstep Hexec_starP1i Hcon1' Hmem_vals_m1c_m2lc2i G2' Henv_sim_G2' P2i Hdistinct_P2i P1i).
     specialize(IHHstep Hfresh_tmps_P1i Hsafe_locs_P1i Hlegal_tids_P1i Hspawn_P1i Hstate_sim_P2i HP1i).
     inversion IHHstep as (lo2 & lc2 & P2' & G2'' & Hexec_star_P2'
-                              & Hcon_mlc2 & Hstate_sim_P2' & Henv_sim_G2'' & Hmem_sim_lc2
+                              & Hcon_mlc2 & Hstate_sim_P2' & Henv_sim_G2'' & Hmem_vals_lc2
                               & Hclocks_sim_mlc2).
     exists (lo2i++lo2), (lc2i++lc2), P2', G2''. rewrite <- app_assoc in *.
     split;[|split;[|split;[|split;[|split]]]]; clarify.
     *eapply exec_star_trans; eauto.
-    *apply mem_sim'_app; auto. apply mem_sim_mem_sim'; auto.
-   +inversion Hstep. *)
+    *rewrite <- app_assoc in Hcon_mlc2. auto.
+    *repeat rewrite <- app_assoc in *. auto.
+   +inversion Hstep. 
 Qed.         
   
 
