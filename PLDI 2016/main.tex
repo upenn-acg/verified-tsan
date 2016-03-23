@@ -12,7 +12,7 @@
 \usepackage{xspace}
 \usepackage{hyperref}
 \usepackage{stmaryrd}
-\usepackage{xy}
+\usepackage[all]{xy}
 
 \newcommand{\eg}{\textit{e.g.}\xspace}
 \newcommand{\ie}{\textit{i.e.}\xspace}
@@ -826,15 +826,99 @@ We must also consider the case in which the instrumented program fails an assert
 \begin{lemma}\label{exec-fail-iexec}Let $P_0$ be a well-formed uninstrumented state and $P$ its instrumented counterpart. If $\execstar{P}{m}{}{\mathit{err}}$, then there exists some $P'$ such that $\iexecstar{P}{m}{(P', m')} \iexecs{}{\mathit{err}}$.\end{lemma}
 \begin{proof}There must be some last good state $P''$ such that $\execstar{P}{m}{}{(P_2, m_2)} \execs{}{}{\mathit{err}}$. Then by Lemma~\ref{exec-iexec1}, there is some $P_1$ such that $P_2$ is an instrumented suffix of $P_1$ and $\iexecstar{P}{m}{(P_1, m_1)} \execstars{}{(P_2, m_2')}$. Adding the failing step to the end of this execution yields the desired result.\end{proof}
 
+\begin{figure*}[t]
+\begin{minipage}[t]{1.6in}
+  \begin{tabular}[t]{c}
+When $m' \models \sigma$ and $\sigma \xRightarrow{o} \sigma_1$
+\\
+\xymatrix@=1ex
+{
+(P,m) \ar[rr]^{o}_>{t} \ar@{-}[dd]_{\sim} & & (P_1, m_1) \ar@{.}[dd]^{\sim}\\
+\\
+(P',m') \ar@{:>}[rr]_>{t} & & (P_1',m_1) \\
+}
+\\
+such that $m_1' \models \sigma_1$.
+  \end{tabular}
+\end{minipage}
+\ 
+\rule[-1in]{1pt}{1.2in}
+\
+\begin{minipage}[t]{1.6in}
+  \begin{tabular}[t]{c}
+When $m' \models \sigma$ and $\sigma \not\xRightarrow{o}$
+\\
+\xymatrix@=1ex
+{
+(P,m) \ar[rr]^{o}_>{t} \ar@{-}[dd]_{\sim} & & (P_1, m_1) \\
+\\
+(P',m') \ar@{:>}[rr]_>{t} & & \mathit{err}\\
+}
+  \end{tabular}
+\end{minipage}
+\ 
+\rule[-1in]{1pt}{1.2in}
+\ 
+\begin{minipage}[t]{1.6in}
+  \begin{tabular}[t]{c}
+When $m' \models \sigma$ 
+\\
+\xymatrix@=1ex
+{
+(P,m) \ar@{.>}[rr]^{o}_>{t} \ar@{-}[dd]_{\sim} & & (P_1, m_1) \ar@{.}[dd]^{\sim}\\
+\\
+(P',m') \ar@{=>}[rr]_>{t} & & (P_1',m_1) \\
+}
+\\
+s.t. $\sigma \xRightarrow{o} \sigma_1$ and $m_1' \models \sigma_1$.
+  \end{tabular}
+\end{minipage}
+\
+\rule[-1in]{1pt}{1.2in}
+\
+\begin{minipage}[t]{1.6in}
+  \begin{tabular}[t]{c}
+When $m' \models \sigma$ 
+\\
+\xymatrix@=1ex
+{
+(P,m) \ar@{.>}[rr]^{o}_>{t} \ar@{-}[dd]_{\sim} & & (P_1, m_1) \\
+\\
+(P',m') \ar@{=>}[rr]_>{t} & & \mathit{err}\\
+}
+\\
+such that $\sigma \not\xRightarrow{o}$
+  \end{tabular}
+\end{minipage}
+
+
+\caption{Bisimulation lemmas needed to prove Theorems~\ref{safe} and
+  ~\ref{race}. Solid arrows denote assumptions that imply the
+  existence of the dotted arrows, assuming that $P$ is a well-formed
+  initial state.}
+\label{f:bisim}
+\end{figure*}
+
+
 \subsection{Simulation}
-Using Lemmas~\ref{iexec-exec}, \ref{exec-iexec}, and \ref{exec-fail-iexec}, we can reason entirely in terms of the bigger-step relation in which instrumentation executes atomically. At this point, the correctness of the instrumentation becomes a matter of simulation: we need only prove that there is a bisimulation between states of the uninstrumented and the instrumented program such that they mirror each other's behavior. For each of the two directions of bisimulation, we must consider the case in which the original program does not race (and the instrumented program matches its behavior), and the case in which it does race (and the instrumented program fails an assertion). We begin by defining the relationship between states of the abstract algorithm and memory configurations.
+
+Using Lemmas~\ref{iexec-exec}, \ref{exec-iexec}, and \ref{exec-fail-iexec}, we can reason entirely in terms of the bigger-step relation in which instrumentation executes atomically. At this point, the correctness of the instrumentation becomes a matter of simulation: we need only prove that there is a bisimulation between states of the uninstrumented and the instrumented program such that they mirror each other's behavior. We begin by defining the relationship between states of the abstract algorithm and memory configurations.
+
 \begin{definition}A block $b$ in a memory $m$ \emph{encodes} a vector clock $V$ if for all $t \le z$, the value at $(b, t)$ in $m$ is equal to $V(t)$. A \VCalg state $\sigma = (C, L, R, W)$ is encoded by a memory $m$, written $m \models (C, L, R, W)$, if $C[t]$ encodes $C_t$ for every $t$, $L[m]$ encodes $L_m$ for every $m$, and $R[x]$ and $W[x]$ encode $R_x$ and $W_x$ respectively for every $x$.\end{definition}
 
 \begin{definition}The relation $\sim$ relates an uninstrumented state $P$ to an instrumented state $P'$ if the same thread ids exist in $P$ and $P'$, and for each pair of corresponding threads $(t, \mathit{li}, G), (t, \mathit{li}', G')$, $\mathit{li}' = \instr{t}{\mathit{li}}$ and $G'(a) = G(a)$ for all non-\texttt{tmp} variables $a$. We write $(P, m) \sim (P', m')$ if $P \sim P'$ and $m \sim m'$.\end{definition}
-\begin{lemma}If $P$ is a well-formed state, $(P, m) \sim (P', m')$, $m' \models \sigma$, $\exec{P}{m}{t}{o}{(P_2, m_2)}$, and $\sigma \xRightarrow{o} \sigma'$, then $\iexec{P'}{m'}{t}{(P_2', m_2')}$ such that $(P_2, m_2) \sim (P_2', m_2')$ and $m_2' \models \sigma'$.\end{lemma}
-\begin{lemma}If $P$ is a well-formed state, $(P, m) \sim (P', m')$, $m' \models \sigma$, $\exec{P}{m}{t}{o}{(P_2, m_2)}$, and $\sigma \not\xRightarrow{o}$, then $\iexec{P'}{m'}{t}{\mathit{err}}$.\end{lemma}
-\begin{lemma}If $P$ is a well-formed state, $(P, m) \sim (P', m')$, $m' \models \sigma$, and $\iexec{P'}{m'}{t}{(P_2', m_2')}$, then $\exec{P}{m}{t}{o}{(P_2, m_2)}$ such that $(P_2, m_2) \sim (P_2', m_2')$, $\sigma \xRightarrow{o} \sigma'$, and $m_2' \models \sigma'$.\end{lemma}
-\begin{lemma}If $P$ is a well-formed state, $(P, m) \sim (P', m')$, $m' \models \sigma$, and $\iexec{P}{m}{t}{\mathit{err}}$, then $\exec{P}{m}{t}{o}{(P_2, m_2)}$ and $s \not\xRightarrow{o}$.\end{lemma}
+
+For each of the two directions of bisimulation, we must consider the
+case in which the original program does not race (and the instrumented
+program matches its behavior), and the case in which it does race (and
+the instrumented program fails an assertion).  The lemmas summarizing
+these relationships are given in Figure~\ref{f:bisim}.
+
+% \begin{lemma}If $P$ is a well-formed state, $(P, m) \sim (P', m')$, $m' \models \sigma$, $\exec{P}{m}{t}{o}{(P_2, m_2)}$, and $\sigma \xRightarrow{o} \sigma'$, then $\iexec{P'}{m'}{t}{(P_2', m_2')}$ such that $(P_2, m_2) \sim (P_2', m_2')$ and $m_2' \models \sigma'$.\end{lemma}
+% \begin{lemma}If $P$ is a well-formed state, $(P, m) \sim (P', m')$, $m' \models \sigma$, $\exec{P}{m}{t}{o}{(P_2, m_2)}$, and $\sigma \not\xRightarrow{o}$, then $\iexec{P'}{m'}{t}{\mathit{err}}$.\end{lemma}
+% \begin{lemma}If $P$ is a well-formed state, $(P, m) \sim (P', m')$, $m' \models \sigma$, and $\iexec{P'}{m'}{t}{(P_2', m_2')}$, then $\exec{P}{m}{t}{o}{(P_2, m_2)}$ such that $(P_2, m_2) \sim (P_2', m_2')$, $\sigma \xRightarrow{o} \sigma'$, and $m_2' \models \sigma'$.\end{lemma}
+% \begin{lemma}If $P$ is a well-formed state, $(P, m) \sim (P', m')$, $m' \models \sigma$, and $\iexec{P}{m}{t}{\mathit{err}}$, then $\exec{P}{m}{t}{o}{(P_2, m_2)}$ and $s \not\xRightarrow{o}$.\end{lemma}
+
 
 The correctness of the instrumentation is expressed by the following theorems:
 
