@@ -856,11 +856,11 @@ Lockset-based race detection \cite{dinning_detecting_1991,savage_eraser:_1997}, 
 
 Several forms of sampling-based dynamic race detection have been proposed. Such schemes trade soundness \cite{greathouse_demand-driven_2011,bond_pacer:_2010,marino_literace:_2009,erickson_effective_2010,effinger-dean_ifrit:_2012} for reduced performance overheads.
 
-There have been several proposals for static race detection \cite{engler_racerx:_2003,naik_effective_2006} or static analysis \cite{flanagan_redcard:_2013,joserenau} to prune race detection instrumentation and metadata at compile time, which can serve as a complement to our dynamic approach. Others have proposed type systems \cite{abadi_types_2006,bocchino_type_2009,rust} and implicitly parallel languages \cite{rinard_design_1998,guy_blelloch_nesl:_1992} that eliminate data races by construction, though these systems sacrifice expressiveness to obtain race-freedom guarantees.
+There have been several proposals for static race detection \cite{engler_racerx:_2003,naik_effective_2006} or static analysis \cite{flanagan_redcard:_2013,Das:2015:SPA:2775085.2766451} to prune race detection instrumentation and metadata at compile time, which can serve as a complement to our dynamic approach. Others have proposed type systems \cite{abadi_types_2006,bocchino_type_2009} and implicitly parallel languages \cite{rinard_design_1998,guy_blelloch_nesl:_1992} that eliminate data races by construction, though these systems sacrifice expressiveness to obtain race-freedom guarantees.
 
 Several systems exist for detecting data races in structured parallel programs
 such as fork-join programs
-\cite{john_mellor-crummey_--fly_1991,feng_efficient_1997,mai_zheng_grace:_2011,michael_boyer_automated_2008,raman:spd3} or programs with asynchronous callbacks \cite{petrov_race_2012,raychev_effective_2013,hsiao_race_2014,vechev_oopsla_2015}. Structured parallelism admits more time- and space-efficient data race detection than the general multithreaded programs we support. None of these prior algorithms or implementations have been formally verified, however, so they represent a potentially fruitful area for future work.
+\cite{john_mellor-crummey_--fly_1991,Bender:2004:sporder:1007912.1007933,mai_zheng_grace:_2011,michael_boyer_automated_2008,raman:spd3} or programs with asynchronous callbacks \cite{petrov_race_2012,raychev_effective_2013,hsiao_race_2014,Bielik:2015:SRD:2814270.2814303}. Structured parallelism admits more time- and space-efficient data race detection than the general multithreaded programs we support. None of these prior algorithms or implementations have been formally verified, however, so they represent a potentially fruitful area for future work.
 
 \section{Conclusions and Future Work}
 \label{conclusion}
@@ -870,7 +870,7 @@ We have presented the first verified proofs of correctness of the vector clock a
 We intend to expand our approach to verified race detection along three main lines. First, our approach should generalize easily to verifying more sophisticated algorithms and instrumentation passes, such as an implementation of FastTrack~\cite{fasttrack} or the ThreadSanitizer algorithm used in LLVM~\cite{serebryany_threadsanitizer:_2009}. The second and greater challenge will be to apply the same approach on more realistic languages, and ultimately to integrate it into high-assurance compilation frameworks like Vellvm~\cite{vellvm} or CompCert~\cite{compcert}. This would involve taking into account a wider range of program instructions and potential complications, including variable-size accesses and low-level atomics. Thirdly, our proofs thus far assume sequential consistency as the concurrent memory model; an interesting challenge would be to prove that the same instrumentation suffices under the relaxed memory models used in languages like C and Java \TODO{cite memory models?}. By extending the reach of verified race detection, we aim to make it easier to design and justify increasingly sophisticated race detection algorithms and implementations.
 
 
-\bibliographystyle{abbrvnat}
+\bibliographystyle{plain}
 \bibliography{sources}
 
 % !! The bibliography should be embedded for final submission.
