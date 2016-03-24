@@ -12700,25 +12700,6 @@ Corollary instrument_sim_safe' : forall P P1 P2 G1 G2 h
   exists lo2 lc2 P2' G2', exec_star (Some P2) G2 lo2 lc2 (Some P2') G2' /\
     consistent ( (m0++m2) ++ lc2) /\ state_sim P1' P2' /\ env_sim G1' G2' /\
     mem_vals ((m0++m1)++lc) ((m0++m2)++lc2) /\ clocks_sim (m0++m2++lc2) s'.
-(*
-Corollary instrument_sim_safe' : forall (* P*) P1 P2 G1 G2 (*h*)
-  (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1) (Hdistinct : distinct P2)
-  (Ht : legal_tids P1) 
-  (Ht_spawn: Forall (fun p =>  match p with
-                                 | (t0,Spawn u li::rest) => u <> t0
-                                 | (t0,Wait u ::rest) => u <> t0
-                                 | _ => True
-                               end) P1)
-  (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2)
-  m0 m1 m2 (*(Hroot : exec_star (Some (init_state P)) init_env h m (Some P1) G1)*)
-  (Hmemsim': mem_sim' m1 m2)
-  (Hinit: forall p: ptr, meta_loc p -> initialized m0 p)
-  lo lc P1' G1' (Hstep : exec_star (Some P1) G1  lo lc (Some P1') G1')
-  (Hcon1 : consistent (m0++m1 ++ lc))  (Hcon2 : consistent (m0 ++ m2))
-  s (Hs : clocks_sim (m0++m2) s) s' (Hsafe : step_star s lo s'),
-  exists lo2 lc2 P2' G2', exec_star (Some P2) G2 lo2 lc2 (Some P2') G2' /\
-    consistent (m0++m2 ++ lc2) /\ state_sim P1' P2' /\ env_sim G1' G2' /\
-    mem_sim' lc lc2 /\ clocks_sim (m0++m2++lc2) s' .*)
 Proof. 
   intros. remember (Some P1) as Pa; remember (Some P1') as Pb;
   generalize dependent P1; generalize dependent P2;
@@ -13059,6 +13040,7 @@ Qed.
 
 
 
+
 Theorem instrument_correct : forall P (Hsafe_locs: safe_locs (init_state P))
   (Hfresh: fresh_tmps (init_state P)) m0 (Hcon0 : consistent m0)
   (Ht: legal_tids (init_state P))
@@ -13251,12 +13233,15 @@ Proof.
                 Hstate_simP2good & Henv_simG2good & Hmem_vals_m012 & Hclocks_sims_good).
    rewrite app_assoc, app_nil_r in Hclocks_sims_good.
    exploit instrument_sim_race. Check instrument_sim_race.
-   { instantiate (1:=P1_good). admit. (* apply fresh_tmp_steps. *) }
+   { instantiate(1:=P). clarify. }
+   { clarify. }
+   { clarify. }
+   {  instantiate (1:=P1_good). admit. (* apply fresh_tmp_steps. *) }
    { admit. (*apply safe_locs_steps. *) }
-   { eapply legal_tids_steps in Ht; eauto. unfold legal_tids in Ht. clarify. }
+   { eapply legal_tids_steps in Ht; eauto. }
    { instantiate (1:=P2_good). eapply distinct_steps; eauto.
      unfold distinct, init_state. clarify. constructor; auto. }
-   { admit. (*may not need this in instruent_sim_race*) }
+   { auto. }
    { auto. }
    { apply Henv_simG2good. }
    { eauto. }
