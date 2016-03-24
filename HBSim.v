@@ -1639,7 +1639,7 @@ Lemma instrument_single : forall i t i', instrument_instr i t = [i'] ->
 Proof.
   destruct i; clarify; try destruct x; destruct zt; clarify.
 Qed.
-
+*)
 Lemma Forall2_nth : forall A (l1 l2 : list A) P (Hforall : Forall2 P l1 l2)
   i x (Hi : nth_error l1 i = Some x),
   exists x', nth_error l2 i = Some x' /\ P x x'.
@@ -1674,7 +1674,7 @@ Proof.
       exploit IHP1a; eauto; clarify.
       constructor; auto.
 Qed.
-
+(*
 Lemma removelast_length : forall A (l : list A) (Hnnil : l <> []),
   length (removelast l) = length l - 1.
 Proof.
@@ -5199,7 +5199,7 @@ Proof.
     { eauto. }
     clarify; exploit skip_cons_neq; eauto; clarify.
 Qed.*)
-
+*)
 Lemma list_fresh_iff : forall v li, (fix list_fresh l :=
   match l with [] => True | i :: rest => fresh v i /\ list_fresh rest end) li
   <-> Forall (fresh v) li.
@@ -5246,7 +5246,7 @@ Proof.
   constructor; auto.
   rewrite safe_instrs in *; auto.
 Qed.
-*)
+
 Fixpoint instrument_prog P :=
   match P with
   | [] => []
@@ -8637,13 +8637,98 @@ Proof.
     repeat rewrite app_assoc in *; apply mem_ext_app; auto.*)
 Qed.
 
+
+Fixpoint legal_spawn_instr (i: instr) :=
+  let legal_spawn := fix f p :=
+   match p with
+     | [] => True
+     | instr1::ins=> legal_spawn_instr instr1 /\ (f ins)
+   end
+  in 
+  match i with
+   | Spawn u li => u < zt /\ legal_spawn li 
+   | _          => True
+  end.
+
+Fixpoint legal_spawn (p : prog) :=
+  match p with
+    | [] => True
+    | instr1::ins => legal_spawn_instr instr1 /\ legal_spawn ins
+  end.                 
+
+Definition legal_tids (P:list (tid * prog)) :=
+  Forall (fun e => legal_spawn (snd e)) P /\ Forall (fun e => fst e < zt) P .
+
+
+Fixpoint spawn_wait_other_inst t i:=
+  let spawn_wait_other := fix f t' p:=
+                       match p with
+                         | [] => True
+                         | i'::insts => spawn_wait_other_inst t' i'/\ f t' insts
+                       end
+                         in
+  match i with
+    | Spawn u li => u <> t /\ spawn_wait_other u li
+    | Wait u     => u <> t                                           
+    | _ => True
+  end.
+
+Fixpoint spawn_wait_other t p:=
+  match p with
+    | [] => True
+    | i'::insts => spawn_wait_other_inst t i' /\ spawn_wait_other t insts
+  end.
+
+Definition spawn_wait_other_prog (tps: list (tid * list instr)):=
+  Forall (fun tp => spawn_wait_other (fst tp) (snd tp) ) tps. 
+  
+
+Lemma spawn_wait_other_prog_step : forall P G o c P' G' t
+                               (Hlegal: spawn_wait_other_prog P)
+                               (Hstep: exec P G t o c (Some P') G'),
+                          spawn_wait_other_prog P'.
+Proof.
+  intros. unfold spawn_wait_other_prog,spawn_wait_other in *.
+  inversion Hstep; clarify; rewrite Forall_app in * ; clarify;
+  inversion Hlegal2; clarify. 
+Qed.
+
+
+Lemma legal_tids_step : forall P G o c P' G' t
+                               (Hlegal: legal_tids P)
+                               (Hstep: exec P G t o c (Some P') G'),
+                          legal_tids P'.
+Proof.
+  intros. unfold legal_tids in *; split.
+  -inversion Hstep; clarify; rewrite Forall_app in * ; clarify;
+   inversion Hlegal12; clarify; inversion H1; clarify;
+   apply Forall_cons; clarify.
+  -inversion Hstep; clarify; rewrite Forall_app in *; clarify;
+   inversion Hlegal22; clarify.
+   inversion Hlegal12; clarify.
+Qed.
+
+Lemma legal_tids_steps : forall P G lo lc P' G'
+                                (Hlegal : legal_tids P)
+                                (Hsteps: exec_star (Some P) G lo lc (Some P') G'),
+                           legal_tids P'.
+Proof.
+  intros. remember (Some P) as Pa; remember (Some P') as Pb;
+  generalize dependent P; induction Hsteps; clarify.
+  (* base case discharged automatically *)
+  destruct P'0; clarify.
+  -specialize(IHHsteps s). apply IHHsteps; auto.
+   eapply legal_tids_step with (P:=P0); eauto.
+  -inversion Hsteps.
+Qed.
+                     
+
 Lemma state_sim_step' : forall P1 P2 G2 t lo lc P2' G2'
   (Hdistinct : distinct P2) (HPsim : state_sim P1 P2) (Hsafe : safe_locs P1)
-  (Htmps : fresh_tmps P1) (Hiexec : iexec P2 G2 t lo lc P2' G2'),
+  (Htmps : fresh_tmps P1) (Hiexec : iexec P2 G2 t lo lc P2' G2') ,
   exists P1', state_sim P1' P2' /\ safe_locs P1' /\ fresh_tmps P1'.
 Proof.
-  admit.
-(*  intros.
+   intros.
   inversion Hiexec; subst; exploit state_sim_inv'; eauto 2;
     intros (P1a & [|??] & P1b & ? & ? & ? & ?); clarify;
     try (exploit app_eq_nil; eauto; clarify; exploit instrument_nonnil; eauto;
@@ -8711,7 +8796,84 @@ Proof.
       [apply Forall2_app; try (apply (Forall2_cons (t, l))); eauto|].
     unfold safe_locs, fresh_tmps in *; repeat rewrite Forall_app in *; clarify.
     inversion Hsafe2 as [|?? Hsafei]; inversion Htmps2 as [|?? Hfreshi];
-      inversion Hsafei; inversion Hfreshi; clarify.*)
+      inversion Hsafei; inversion Hfreshi; clarify.
+Qed.
+
+
+Lemma state_sim_step_legal : forall P1 P2 G2 t lo lc P2' G2'
+  (Hdistinct : distinct P2) (HPsim : state_sim P1 P2) (Hsafe : safe_locs P1)
+  (Htmps : fresh_tmps P1) (Hiexec : iexec P2 G2 t lo lc P2' G2') (Hlegal: legal_tids P1),
+  exists P1', state_sim P1' P2' /\ safe_locs P1' /\ fresh_tmps P1' /\ legal_tids P1'.
+Proof.
+   intros.
+  inversion Hiexec; subst; exploit state_sim_inv'; eauto 2;
+    intros (P1a & [|??] & P1b & ? & ? & ? & ?); clarify;
+    try (exploit app_eq_nil; eauto; clarify; exploit instrument_nonnil; eauto;
+         contradiction); exploit state_sim_inv; eauto; clarify.
+  - exploit (instrument_incom (Assign a e)); simpl; eauto; clarify.
+    eexists; split;
+      [apply Forall2_app; try (apply (Forall2_cons (t, l))); eauto|].
+    unfold safe_locs, fresh_tmps, legal_tids in *; repeat rewrite Forall_app in *; clarify.
+    inversion Hsafe2 as [|?? Hsafei]; inversion Htmps2 as [|?? Hfreshi];inversion Hlegal12 as [|?? Hlegal1i]; inversion Hlegal22 as [|?? Hlegal2i];
+    inversion Hsafei; inversion Hfreshi; clarify. 
+  - exploit (instrument_incom (Load a (x, o))).
+    { simpl; rewrite <- app_assoc; simpl; eauto. }
+    clarify.
+    eexists; split;
+      [apply Forall2_app; try (apply (Forall2_cons (t, l))); eauto|].
+    unfold safe_locs, fresh_tmps, legal_tids in *; repeat rewrite Forall_app in *; clarify.
+    inversion Hsafe2 as [|?? Hsafei]; inversion Htmps2 as [|?? Hfreshi];inversion Hlegal12 as [|?? Hlegal1i]; inversion Hlegal22 as [|?? Hlegal2i];
+      inversion Hsafei; inversion Hfreshi; clarify.
+  - exploit (instrument_incom (Store (x, o) e)).
+    { simpl; rewrite <- app_assoc; simpl; eauto. }
+    clarify.
+    eexists; split;
+      [apply Forall2_app; try (apply (Forall2_cons (t, l))); eauto|].
+    unfold safe_locs, fresh_tmps, legal_tids in *; repeat rewrite Forall_app in *; clarify.
+    inversion Hsafe2 as [|?? Hsafei]; inversion Htmps2 as [|?? Hfreshi];inversion Hlegal12 as [|?? Hlegal1i]; inversion Hlegal22 as [|?? Hlegal2i];
+      inversion Hsafei; inversion Hfreshi; clarify.
+  - exploit (instrument_incom (Lock m)); simpl; eauto; clarify.
+    eexists; split;
+      [apply Forall2_app; try (apply (Forall2_cons (t, l))); eauto|].
+    unfold safe_locs, fresh_tmps, legal_tids in *; repeat rewrite Forall_app in *; clarify.
+    inversion Hsafe2 as [|?? Hsafei]; inversion Htmps2 as [|?? Hfreshi];inversion Hlegal12 as [|?? Hlegal1i]; inversion Hlegal22 as [|?? Hlegal2i];
+      inversion Hsafei; inversion Hfreshi; clarify.
+  - exploit (instrument_incom (Unlock m)).
+    { simpl; rewrite <- app_assoc; simpl; eauto. }
+    clarify.
+    eexists; split;
+      [apply Forall2_app; try (apply (Forall2_cons (t, l))); eauto|].
+    unfold safe_locs, fresh_tmps, legal_tids in *; repeat rewrite Forall_app in *; clarify.
+    inversion Hsafe2 as [|?? Hsafei]; inversion Htmps2 as [|?? Hfreshi];inversion Hlegal12 as [|?? Hlegal1i]; inversion Hlegal22 as [|?? Hlegal2i];
+      inversion Hsafei; inversion Hfreshi; clarify.
+  - exploit spawn_in_instrument.
+    { instantiate (2 := (i :: l)); simpl.
+      setoid_rewrite <- H2; rewrite in_app; clarify. }
+    clarify.
+    exploit (instrument_incom (Spawn u x)).
+    { simpl; rewrite <- app_assoc; simpl; eauto. }
+    clarify.
+    eexists; split;
+      [apply Forall2_app; try (apply (Forall2_cons (t, l))); eauto|].
+    { apply (Forall2_cons (u, x)); eauto. }
+    unfold safe_locs, fresh_tmps,legal_tids in *; repeat rewrite Forall_app in *; clarify.
+    inversion Hsafe2 as [|?? Hsafei]; inversion Htmps2 as [|?? Hfreshi];inversion Hlegal12 as [|?? Hlegal1i]; inversion Hlegal22 as [|?? Hlegal2i];
+      inversion Hsafei; inversion Hfreshi; clarify.
+    rewrite safe_instrs in *.
+    repeat split; auto; repeat constructor; auto.
+    apply Forall_and; split; rewrite <- list_fresh_iff; auto.
+  - exploit (instrument_incom (Wait u)); simpl; eauto; clarify.
+    eexists; split;
+      [apply Forall2_app; try (apply (Forall2_cons (t, l))); eauto|].
+    unfold safe_locs, fresh_tmps, legal_tids in *; repeat rewrite Forall_app in *; clarify.
+    inversion Hsafe2 as [|?? Hsafei]; inversion Htmps2 as [|?? Hfreshi];inversion Hlegal12 as [|?? Hlegal1i]; inversion Hlegal22 as [|?? Hlegal2i];
+      inversion Hsafei; inversion Hfreshi; clarify.
+  - exploit (instrument_incom (Assert_le e1 e2)); simpl; eauto; clarify.
+    eexists; split;
+      [apply Forall2_app; try (apply (Forall2_cons (t, l))); eauto|].
+    unfold safe_locs, fresh_tmps, legal_tids in *; repeat rewrite Forall_app in *; clarify.
+    inversion Hsafe2 as [|?? Hsafei]; inversion Htmps2 as [|?? Hfreshi];inversion Hlegal12 as [|?? Hlegal1i]; inversion Hlegal22 as [|?? Hlegal2i];
+      inversion Hsafei; inversion Hfreshi; clarify.
 Qed.
 
 Instance mem_ext_sym : RelationClasses.Symmetric mem_ext.
@@ -9349,6 +9511,19 @@ Proof.
   exploit distinct_steps; eauto.
   { eapply iexec_exec; eauto. }
   exploit state_sim_step'; eauto; clarify; eauto.
+Qed.
+
+
+Lemma state_sim_steps' : forall P1 P2 G2 lo lc P2' G2'
+  (Hdistinct : distinct P2) (HPsim : state_sim P1 P2) (Hsafe : safe_locs P1)
+  (Htmps : fresh_tmps P1) (Hiexec : iexec_star P2 G2 lo lc P2' G2') (Hlegal_tids: legal_tids P1),
+  exists P1', state_sim P1' P2' /\ safe_locs P1' /\ fresh_tmps P1' /\ legal_tids P1'.
+Proof.
+  intros.
+  generalize dependent P1; induction Hiexec; clarify; eauto.
+  exploit distinct_steps; eauto.
+  { eapply iexec_exec; eauto. }
+  exploit state_sim_step_legal; eauto. clarify; eauto.
 Qed.
 
 Lemma iexec_execs : forall P G lo lc P' G', iexec_star P G lo lc P' G' ->
@@ -10322,91 +10497,6 @@ Proof.
 Qed.
 
 
-Fixpoint legal_spawn_instr (i: instr) :=
-  let legal_spawn := fix f p :=
-   match p with
-     | [] => True
-     | instr1::ins=> legal_spawn_instr instr1 /\ (f ins)
-   end
-  in 
-  match i with
-   | Spawn u li => u < zt /\ legal_spawn li 
-   | _          => True
-  end.
-
-Fixpoint legal_spawn (p : prog) :=
-  match p with
-    | [] => True
-    | instr1::ins => legal_spawn_instr instr1 /\ legal_spawn ins
-  end.                 
-
-Definition legal_tids (P:list (tid * prog)) :=
-  Forall (fun e => legal_spawn (snd e)) P /\ Forall (fun e => fst e < zt) P .
-
-
-Fixpoint spawn_wait_other_inst t i:=
-  let spawn_wait_other := fix f t' p:=
-                       match p with
-                         | [] => True
-                         | i'::insts => spawn_wait_other_inst t' i'/\ f t' insts
-                       end
-                         in
-  match i with
-    | Spawn u li => u <> t /\ spawn_wait_other u li
-    | Wait u     => u <> t                                           
-    | _ => True
-  end.
-
-Fixpoint spawn_wait_other t p:=
-  match p with
-    | [] => True
-    | i'::insts => spawn_wait_other_inst t i' /\ spawn_wait_other t insts
-  end.
-
-Definition spawn_wait_other_prog (tps: list (tid * list instr)):=
-  Forall (fun tp => spawn_wait_other (fst tp) (snd tp) ) tps. 
-  
-
-Lemma spawn_wait_other_prog_step : forall P G o c P' G' t
-                               (Hlegal: spawn_wait_other_prog P)
-                               (Hstep: exec P G t o c (Some P') G'),
-                          spawn_wait_other_prog P'.
-Proof.
-  intros. unfold spawn_wait_other_prog,spawn_wait_other in *.
-  inversion Hstep; clarify; rewrite Forall_app in * ; clarify;
-  inversion Hlegal2; clarify. 
-Qed.
-
-
-Lemma legal_tids_step : forall P G o c P' G' t
-                               (Hlegal: legal_tids P)
-                               (Hstep: exec P G t o c (Some P') G'),
-                          legal_tids P'.
-Proof.
-  intros. unfold legal_tids in *; split.
-  -inversion Hstep; clarify; rewrite Forall_app in * ; clarify;
-   inversion Hlegal12; clarify; inversion H1; clarify;
-   apply Forall_cons; clarify.
-  -inversion Hstep; clarify; rewrite Forall_app in *; clarify;
-   inversion Hlegal22; clarify.
-   inversion Hlegal12; clarify.
-Qed.
-
-Lemma legal_tids_steps : forall P G lo lc P' G'
-                                (Hlegal : legal_tids P)
-                                (Hsteps: exec_star (Some P) G lo lc (Some P') G'),
-                           legal_tids P'.
-Proof.
-  intros. remember (Some P) as Pa; remember (Some P') as Pb;
-  generalize dependent P; induction Hsteps; clarify.
-  (* base case discharged automatically *)
-  destruct P'0; clarify.
-  -specialize(IHHsteps s). apply IHHsteps; auto.
-   eapply legal_tids_step with (P:=P0); eauto.
-  -inversion Hsteps.
-Qed.
-                     
-
 Definition mem_vals m1 m2 := forall x (Hmeta : ~meta_loc x)
   (Hinit1 : initialized m1 x) v,
   can_read m1 x v <-> can_read m2 x v.
@@ -10553,6 +10643,7 @@ Proof.
      specialize(IHP2 P3 P1 H4 H10). clarify.
 Qed.
 
+(* may not need this 
 Lemma mem_sim_mem_sim': forall c m1
   (Hsim: mem_sim c m1), mem_sim' (opt_to_list c) m1.
 Proof.
@@ -10561,12 +10652,8 @@ Proof.
   destruct c; clarify.
   -admit.
   -admit.
-Qed.
+Qed.*)
 
-Lemma state_sim_steps' : forall P1 P2 G2 lo lc P2' G2'
-  (Hdistinct : distinct P2) (HPsim : state_sim P1 P2) (Hsafe : safe_locs P1)
-  (Htmps : fresh_tmps P1) (Hiexec : iexec_star P2 G2 lo lc P2' G2') (Hlegal_tids: legal_tids P1),
-  exists P1', state_sim P1' P2' /\ safe_locs P1' /\ fresh_tmps P1' /\ legal_tids P1'.
 Admitted.
 
 
