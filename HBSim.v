@@ -9500,8 +9500,10 @@ Proof.
       etransitivity; eauto.
 Qed.
 
+(* At present, this gives us no way to relate to the base execution's race. *)
 Lemma exec_fail_iexec : forall P G' G lo lc
-  (Hexec : exec_star (Some P) G lo lc None G')
+  (Hexec : exec_star (Some P) G lo lc (Some P') G')
+  (Hfail : exec P' G' t o c None G'')
   P1 (HP : state_sim P1 P) (Hsafe : safe_locs P1) (Hfresh : fresh_tmps P1)
   (Hno_asserts : no_asserts P1)
   P0 (Hdistinct0 : distinct P0) P0' (Hsim0 : state_sim P0' P0)
@@ -9517,8 +9519,9 @@ Lemma exec_fail_iexec : forall P G' G lo lc
   (Hinit_l : forall l, l < zl -> initialized m (l, 0))
   (Hinit_v : forall v, v < zv -> initialized m (X' + v, 0))
   (HC_init : forall t o, t < zt -> o < zt -> initialized m (C + t, o)),
-  exists lo1' lc1' P1' G1' t lo2' lc2', iexec_star P G lo1' lc1' P1' G1' /\
-    fail_iexec P1' t lo2' lc2' /\ consistent (m ++ lc0 ++ lc1' ++ lc2').
+  exists lo1' lc1' P1' G1' lo2' lc2', iexec_star P G lo1' lc1' P1' G1' /\
+    fail_iexec P1' t lo2' lc2' /\ (*consistent (m ++ lc0 ++ lc1' ++ lc2')
+    rather, the mem at P1' should be roughly the same as that at P'*).
 Proof.
   intros.
   rewrite exec_rev in Hexec; inversion Hexec; subst.
@@ -9776,6 +9779,7 @@ Qed.
   
 Typeclasses eauto := 5.
 
+(*
 Lemma clock_match_value: forall m vct ct t v x
   (Hmatch: clock_match (m++[Read t (ct, x) v]) vct ct) (Hinit: initialized m (ct,x))
   (Hx : x < zt),                         v = vct x.
@@ -10313,7 +10317,7 @@ Corollary hb_check_vals' : forall m C1 C2 vs1 vs2 t V1 V2 v1 v2
 Proof.
   intros; eapply hb_check_vals1' with (C1 := C1); eauto.
 Qed.
-
+*)
 
 Fixpoint legal_spawn_instr (i: instr) :=
   let legal_spawn := fix f p :=
@@ -12720,7 +12724,8 @@ Corollary instrument_sim_safe' : forall (* P*) P1 P2 G1 G2 (*h*)
     consistent (m0++m2 ++ lc2) /\ state_sim P1' P2' /\ env_sim G1' G2' /\
     mem_sim' lc lc2 /\ clocks_sim (m0++m2++lc2) s' .*)
 Proof. 
-  intros. remember (Some P1) as Pa; remember (Some P1') as Pb;
+  admit.
+(*  intros. remember (Some P1) as Pa; remember (Some P1') as Pb;
   generalize dependent P1; generalize dependent P2;
   generalize dependent G2; generalize dependent m1; generalize dependent m2;
   generalize dependent s; generalize dependent h;
@@ -12788,7 +12793,7 @@ Proof.
     *eapply exec_star_trans; eauto.
     *rewrite <- app_assoc in Hcon_mlc2. auto.
     *repeat rewrite <- app_assoc in *. auto.
-   +inversion Hstep. 
+   +inversion Hstep. *)
 Qed.         
   
 Lemma instrument_sim_race : forall P P1 P2 G1 G2 t ops1
@@ -12811,7 +12816,8 @@ Lemma instrument_sim_race : forall P P1 P2 G1 G2 t ops1
   (Hrace : forall s', ~step_star s_good (opt_to_list o) s'),
   exists  lo2 m2 lo lc G2s G2', exec_star (Some (init_state (instrument P 0))) init_env lo2 m2 (Some P2) G2s /\exec_star (Some P2) G2s lo lc None G2' /\ consistent (m0++m2) /\ mem_vals (m0++m1) (m0++m2) /\ env_sim G1 G2s.
 Proof.
-  intros. Check instrument_sim_safe'.
+  admit.
+(*  intros. Check instrument_sim_safe'.
   exploit instrument_sim_safe'.
   { instantiate(1:=init_state P).  auto. }
   { auto. }
@@ -13054,7 +13060,7 @@ Proof.
       econstructor; [constructor; auto | apply ss_refl].
     -destruct s_good as (((vc, vl), vr), vw); exploit Hrace; [|clarify].
       econstructor; [constructor; auto | apply ss_refl].
-    -specialize(Hrace s_good). contradiction Hrace; apply ss_refl.
+    -specialize(Hrace s_good). contradiction Hrace; apply ss_refl.*)
 Qed.
 
 
@@ -13178,10 +13184,8 @@ Theorem instrument_correct_race : forall P
   (Hinit: forall p : ptr, meta_loc p -> initialized m0 p)
   (Hclocks_sim: clocks_sim m0 s0) G1' m1' (Hcon_m01': consistent (m0++m1')),
   (exists ops2 t m2 P2' G2' o c,
-     iexec_star (init_state (instrument P 0))
-     init_env ops2 m2 P2' G2' /\ fail_iexec P2' t o c
-    (* exec_star (Some (init_state (instrument P 0))) init_env ops2 m2 (Some P2') G2' /\
-     exec P2' G2' t o c None G2''*)
+    exec_star (Some (init_state (instrument P 0))) init_env ops2 m2 (Some P2') G2' /\
+     exec P2' G2' t o c None G2''
      /\
      consistent (m0 ++ m2) /\ mem_vals (m0++m2) (m0++m1') /\ env_sim G1' G2') <->
   (exists ops m1 P' G' t o c P1'' G1'',
@@ -13251,9 +13255,12 @@ Proof.
                 Hstate_simP2good & Henv_simG2good & Hmem_vals_m012 & Hclocks_sims_good).
    rewrite app_assoc, app_nil_r in Hclocks_sims_good.
    exploit instrument_sim_race. Check instrument_sim_race.
+   { eauto. }
+   { auto. }
+   { auto. }
    { instantiate (1:=P1_good). admit. (* apply fresh_tmp_steps. *) }
    { admit. (*apply safe_locs_steps. *) }
-   { eapply legal_tids_steps in Ht; eauto. unfold legal_tids in Ht. clarify. }
+   { eapply legal_tids_steps in Ht; eauto. (*unfold legal_tids in Ht. clarify.*) }
    { instantiate (1:=P2_good). eapply distinct_steps; eauto.
      unfold distinct, init_state. clarify. constructor; auto. }
    { admit. (*may not need this in instruent_sim_race*) }
@@ -13268,6 +13275,29 @@ Proof.
    { auto. }
    intros (ops2' & m2s & lo & lc & G2s & G2' & Hexec_starP2good & Hexec_race2 &
            Hcon_m02s & Hmem_vals_m12s & Henv_sim_G12s ).
+   exploit first_fail'.
+   { apply instrumented. }
+   { instantiate (1 := [(0, P)]); constructor; auto. }
+   { auto. }
+   { auto. }
+   { constructor; simpl; destruct zt; auto; omega. }
+   { auto. }
+   { auto. }
+   { auto. }
+   { auto. }
+   { auto. }
+   { auto. }
+   { eauto. }
+   { admit. }
+   { admit. }
+   { admit. }
+   { eauto. }
+   { apply sim_suffix; eauto. }
+   { apply exec_refl. }
+   { eauto.
+     constructor; auto. }
+   { auto.
+     simpl.
    exploit exec_fail_iexec.
    { apply Hexec_race2. }
    { apply Hstate_simP2good. }
@@ -13293,6 +13323,8 @@ Proof.
    { clarify. }
    { clarify. }
    { clarify. }
+   clarify.
+   
    admit. (* the current exec_fail_iexec cannot fill the gap here*)
      
 Qed.
