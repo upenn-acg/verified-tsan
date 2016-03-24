@@ -2636,7 +2636,7 @@ Proof.
   - rewrite app_assoc, loc_valid_SC; clarify.
     repeat rewrite <- app_assoc in *; clarify.
 Qed.
-
+*)
 Lemma ARW_can_read : forall p m v v' t, consistent (m ++ [ARW t p v v']) ->
   can_read m p v.
 Proof.
@@ -2652,7 +2652,7 @@ Proof.
   apply (can_read_thread' _ _ _ t).
   rewrite read_arwritten_SC; auto.
 Qed.
-
+(*
 Lemma rel_inv : forall t x P G lo lc P' G' (Hdistinct : distinct P)
   (Hsteps : exec_star (Some P) G lo lc P' G') li (Hin : In (t, li) P)
   (Hrel : In (Rel t x) lc), exists li1 li2, li = li1 ++ Unlock x :: li2 /\
@@ -10042,7 +10042,7 @@ Qed.
   
 Typeclasses eauto := 5.
 
-(*
+
 Lemma clock_match_value: forall m vct ct t v x
   (Hmatch: clock_match (m++[Read t (ct, x) v]) vct ct) (Hinit: initialized m (ct,x))
   (Hx : x < zt),                         v = vct x.
@@ -10580,7 +10580,7 @@ Corollary hb_check_vals' : forall m C1 C2 vs1 vs2 t V1 V2 v1 v2
 Proof.
   intros; eapply hb_check_vals1' with (C1 := C1); eauto.
 Qed.
-*)
+
 
 
 
@@ -10683,7 +10683,13 @@ Proof.
   -admit.
 Qed.*)
 
-  
+Lemma init_can_write: forall m x 
+   (Hinit : initialized m x),                 
+                        can_write m x.
+Proof.
+  admit.
+Qed.
+
 Lemma consistent_mem_vals: forall m1 m2 c
      (Hinit: initialized m1 (loc_of c)) (Hcon: consistent (m2++[c])) (Hmem_vals: mem_vals m1 m2) (Hmeta: ~ meta_loc (loc_of c)) (Hprog: prog_op c),
                                      consistent (m1++[c]).
@@ -10693,24 +10699,36 @@ Proof.
   specialize (Hmem_vals (loc_of c) Hmeta Hinit).
   destruct c; clarify.
   -apply can_read_thread. rewrite Hmem_vals. eapply can_read_thread'. eauto.
-  -unfold can_read in *. clarify. 
-    apply can_write_thread. admit.
-  -admit.
+  -apply can_write_thread. apply init_can_write. auto.
+  -apply can_arw_SC.
+   +apply ARW_can_read in Hcon. rewrite Hmem_vals. auto.
+   +apply init_can_write. auto.
 Qed.
 
 
 Lemma consistent_mem_vals': forall m1 m2 c
-     (Hinit: initialized m1 (loc_of c)) (Hcon: consistent (m1++[c])) (Hmem_vals: mem_vals m1 m2) (Hmeta: ~ meta_loc (loc_of c)) (Hprog: prog_op c),
+     (Hinit1: initialized m1 (loc_of c)) (Hinit2: initialized m2 (loc_of c)) (Hcon: consistent (m1++[c])) (Hmem_vals: mem_vals m1 m2) (Hmeta: ~ meta_loc (loc_of c)) (Hprog: prog_op c),
                               consistent (m2++[c]).
-Admitted.
+Proof.
+  intros.
+  unfold mem_vals in *.
+  specialize (Hmem_vals (loc_of c) Hmeta Hinit1).
+  destruct c; clarify.
+  -apply can_read_thread. rewrite <- Hmem_vals. eapply can_read_thread'. eauto.
+  -apply can_write_thread. apply init_can_write. auto.
+  -apply can_arw_SC.
+   +apply ARW_can_read in Hcon. rewrite <- Hmem_vals. auto.
+   +apply init_can_write. auto.
+Qed.
 
 Lemma instrument_sim_safe2 : forall (*P*) P1 P2 G1 G2 t (*h*)
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1)
   (Ht : Forall (fun e => fst e < zt) P1) (Hdistinct: distinct P2)
   (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2)
   m0 (*(Hroot : exec_star (Some (init_state P)) init_env h m (Some P1) G1)*)
-  (Hinit : forall p, meta_loc p -> initialized m0 p)
-  o2 c2 P2' G2' (Hstep : iexec P2 G2 t o2 c2 P2' G2') m1 m2 (Hprog_m2: Forall prog_op m2)
+  (Hinit : forall p,(* meta_loc p ->*) initialized m0 p)
+  o2 c2 P2' G2' (Hstep : iexec P2 G2 t o2 c2 P2' G2') m1 m2
+  (Hprog_m1: Forall prog_op m1) (Hprog_m2: Forall prog_op m2)
   (Hmem_vals: mem_vals (m0++m1) (m0++m2)) (Hcon1: consistent (m0++m1))
   (Hcon2 : consistent ( (m0++m2) ++ c2)) s (Hs : clocks_sim (m0++m2) s),
   exists o c P1' G1', exec P1 G1 t o c (Some P1') G1' /\
@@ -10719,7 +10737,6 @@ Lemma instrument_sim_safe2 : forall (*P*) P1 P2 G1 G2 t (*h*)
         exists s', step_star s (opt_to_list o) s' /\
                    clocks_sim ((m0++m2) ++ c2) s'.
 Proof.
-  admit. (*
   intros.
   destruct s as (((vc, vl), vr), vw);clarify.
   destruct Hs as [ Hs_c (Hs_l,Hs_rw)].
@@ -10768,7 +10785,7 @@ Proof.
       rewrite Hlist_silly1 in Hcon2; auto. rewrite loc_valid_ops_SC in Hcon2.
       {
         apply consistent_mem_vals with (m2:=m0++m2); auto.
-        { admit. (*must be true: otherwise m0++m2 ++...++c should've been inconsistent*)}
+        { apply init_steps; auto. }
         {
           inversion Hcon2; clarify. 
           rewrite loc_valid_ops2_SC in Hcon22.
@@ -11010,9 +11027,8 @@ Proof.
       repeat rewrite <- app_assoc. simpl. auto. }
      rewrite Hlist_silly1 in Hcon2; auto. rewrite loc_valid_ops_SC in Hcon2.
      {
-       apply consistent_mem_vals' with (m1:=m0++m2); auto.
-       { admit. 
-        inversion Hcon2; clarify. 
+       apply consistent_mem_vals' with (m1:=m0++m2); auto; try apply init_steps; auto. 
+       { inversion Hcon2; clarify. 
         rewrite loc_valid_ops2_SC in Hcon22.
         -inversion Hcon22; clarify. rewrite <- app_assoc in Hcon222. rewrite loc_valid_ops_SC in Hcon222.
          +inversion Hcon222; clarify.
@@ -11034,6 +11050,13 @@ Proof.
          rewrite <- H1; omega.
         - simpl; auto.
         - constructor; clarify.
+       }
+       { apply mem_vals_cond_symm; auto.
+         intros. split; clarify; apply init_steps; auto. }
+       { unfold safe_locs in Hlocs. 
+         rewrite Forall_app in Hlocs. inversion Hlocs as (?&Hlocs2).
+         inversion Hlocs2. inversion H3. clarify. }
+       { clarify. }
       }
       { rewrite Forall_forall; intros ? Hin; clarify.
         rewrite Forall_forall; intros ? Hin2; clarify.
@@ -11072,12 +11095,12 @@ Proof.
                                                                  Write t (x, o) (eval (G2 t) e)])++ [Rel t (X' + x)] ).
       { clarify. }
       
-      assert(Hhbs : consistent (m ++ mops_hb_check (W' + x) (C' + t) vs1 vs2 zt t ++ mops_hb_check (R' + x) (C' + t) vs3 vs2 zt t )).
+      assert(Hhbs : consistent ((m0++m2) ++ mops_hb_check (W' + x) (C' + t) vs1 vs2 zt t ++ mops_hb_check (R' + x) (C' + t) vs3 vs2 zt t )).
       {
-        rewrite app_comm_cons in Hcon. do 2 rewrite app_assoc in Hcon.
-        apply consistent_app_SC in Hcon.
-        rewrite <- app_assoc in Hcon. rewrite <- app_comm_cons in Hcon. 
-        rewrite loc_valid_ops2_SC in Hcon; clarify.
+        rewrite app_comm_cons in Hcon2. do 2 rewrite app_assoc in Hcon2.
+        apply consistent_app_SC in Hcon2.
+        rewrite <- app_assoc in Hcon2. rewrite <- app_comm_cons in Hcon2. 
+        rewrite loc_valid_ops2_SC in Hcon2; clarify.
         -rewrite Forall_forall.  intros c Hin. rewrite in_app in Hin.
          destruct Hin as [Hin | Hin]; clarify; apply in_mops_hb_check in Hin; destruct c; clarify; destruct x0 as (x0,off); intro Heq; inversion Heq; clarify.
          +specialize(Hmetalocs_disjoint_WX H52 H52). specialize (Hmetalocs_disjoint_CX H3 H52). destruct Hin; clarify.
