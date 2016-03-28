@@ -1699,7 +1699,7 @@ Corollary to_mem_le : forall G t li vs lc G' vs'
 Proof.
   intros; exploit to_mem_suffix; eauto; clarify; rewrite app_length; omega.
 Qed.
-*)
+*)*)
 Typeclasses eauto := 2.
 
 (* up *)
@@ -1810,7 +1810,7 @@ Proof.
   rewrite last_write in Hlast; clarify.
   split; clarsimp; eauto.
 Qed.
-*)
+
 Lemma can_read_unique : forall m p v v' (Hcon : consistent m)
   (Hinit : initialized m p) (Hv : can_read m p v) (Hv' : can_read m p v'),
   v' = v.
@@ -1939,8 +1939,6 @@ Proof.
   exploit in_split; eauto; clarify.
   inversion Hexec; exploit distinct_thread; eauto; clarify; split; clarify.
 Qed.
-
-Typeclasses eauto := 5.
 
 Lemma hb_check_instr : forall C1 C2 z tmp1 tmp2 i
   (Hi : In i (hb_check C1 C2 z tmp1 tmp2)) l (Haccess : accesses i = Some l),
@@ -2154,6 +2152,8 @@ Proof.
   admit.
 (*  exploit spawn_in_handler; eauto; clarify; eauto.*)
 Qed.
+
+Typeclasses eauto := 5.
 
 Lemma safe_instrs : forall l, (fix list_safe l := match l with [] => True |
   i :: rest => safe_instr i /\ list_safe rest end) l <->
@@ -9424,7 +9424,7 @@ Proof.
   -reflexivity.
   -rewrite Hinit. auto.
 Qed.
-(*
+
 Lemma can_read_iff_SC: forall p ops m v
   (Hcon : consistent (m ++ ops)) (Hprog : Forall prog_op ops)
   (Hno_write : Forall (fun c => match c with Write _ x _ | ARW _ x _ _ => p <> x
@@ -9447,7 +9447,22 @@ Proof.
       eapply consistent_app_SC; rewrite <- app_assoc; simpl; eauto.
     + constructor; clarify.
 Qed.
-*)
+
+Typeclasses eauto := 2.(*!!*)
+
+Lemma can_read_write_SC: forall p ops m v
+  (Hcon : consistent (m ++ ops)) (Hprog : Forall prog_op ops) c v'
+  (Hin : In c ops) (Hp : writesb c p = true) (Hv : write_val c = Some v')
+  (Hwrite : Forall (fun c => writesb c p = true -> write_val c = Some v') ops),
+  can_read (m ++ ops) p v <-> v = v'.
+Proof.
+  intros.
+  unfold can_read, consistent, SC; rewrite lower_app, lower_single; simpl.
+  rewrite read_last; auto; try reflexivity.
+  generalize (has_last_op _ _ Hcon).
+  rewrite lower_app, last_op_app; left.
+  
+Qed.
 
 (* |- admit #1 *)
 Lemma mem_vals_sim_app : forall m1 m2 c1 c2
@@ -9457,8 +9472,7 @@ Lemma mem_vals_sim_app : forall m1 m2 c1 c2
   (Hcon : consistent (m1 ++ opt_to_list c1)) (Hcon2 : consistent (m2 ++ c2)),
   mem_vals (m1++(opt_to_list c1)) (m2++c2).
 Proof.
-  admit.
-(*  intros.
+  intros.
   unfold mem_sim, mem_vals in *. clarify.
   destruct c1; clarify.
   - destruct (eq_dec (loc_of c) x).
