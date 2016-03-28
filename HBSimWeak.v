@@ -10474,7 +10474,16 @@ Lemma filter_split: forall (X:Type) l1 l2 l3 (f:X->bool)
   (Happ: filter f l3=l1++l2),
   exists l31 l32, l3=l31++l32 /\ filter f l31=l1 /\ filter f l32=l2.
 Proof.
-  admit.
+  intros ????; revert l1 l2; induction l3; clarify.
+  - exploit app_eq_nil; eauto; clarify.
+    exists [], []; auto.
+  - destruct (f a) eqn: Ha.
+    + destruct l1; clarify.
+      * exists [], (a :: l3); clarify.
+      * exploit IHl3; eauto; intros (l31 & l32 & ?).
+        exists (x :: l31), l32; clarify.
+    + exploit IHl3; eauto; intros (l31 & l32 & ?).
+      exists (a :: l31), l32; clarify.
 Qed.
 
 Lemma mem_sim'_split': forall m1 m2 m3
@@ -10557,11 +10566,28 @@ Proof.
   -admit.
 Qed.*)
 
-Lemma init_can_write: forall m x 
-   (Hinit : initialized m x),                 
-                        can_write m x.
+Lemma init_can_write: forall m x (Hinit : initialized m x)
+  (Hcon : consistent m), can_write m x.
 Proof.
-  admit.
+  unfold initialized, can_write; clarify.
+  unfold consistent, SC in *; destruct Hinit as (i & Hlast & Hi).
+  rewrite lower_app, lower_single; simpl.
+  rewrite inth_nth_error in Hi; exploit nth_error_split'; eauto;
+    intros (m1 & m2 & ? & Heq); rewrite Heq in *.
+  rewrite <- app_assoc; simpl.
+  rewrite split_app, not_mod_ops_write.
+  - rewrite <- app_assoc; simpl.
+    rewrite write_not_read_single; clarify.
+    rewrite split_app in Hcon.
+    generalize (consistent_app _ _ Hcon); intro Hcon'; clarify.
+    rewrite write_any_value in Hcon'; eauto.
+  - rewrite Forall_forall; intros a ?.
+    exploit in_nth_error; eauto; intros (i' & ?).
+    inversion Hlast.
+    specialize (Hlast0 (length m1 + S i') a).
+    rewrite inth_nth_error, nth_error_plus in Hlast0; clarify.
+    destruct a; clarify; omega.
+  - rewrite <- app_assoc; simpl; auto.
 Qed.
 
 Lemma consistent_mem_vals: forall m1 m2 c
