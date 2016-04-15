@@ -421,16 +421,7 @@ Qed.
 Definition instr_size := instr_rect'' _ _ (fun _ => 1) (fun _ li r => S r)
   0 (fun _ _ r1 r2 => r1 + r2).
 
-(*Fixpoint instr_size i :=
-  let instr_list_size := fix f l :=
-    match l with
-    | [] => 0
-    | i :: rest => instr_size i + f rest
-    end
-  in match i with
-  | Spawn _ li => S (instr_list_size li)
-  | _ => 1
-  end.*)
+
 
 Fixpoint instr_list_size l :=
   match l with
@@ -8993,20 +8984,20 @@ Proof.
   intros; eapply exec_iexec with (lc0 := []); eauto; apply exec_refl.
 Qed.
 
-Inductive fail_iexec P (*G*) t :
+Inductive fail_iexec P t :
   list operation -> list conc_op -> (*state -> env -> *)Prop :=
   | fail_raw P1 P2 a x o v1 v2 rest vs1 vs2
     (Hload: P=P1++(t, load_handler t x zt ++
                                    Load a (x, o) :: Unlock (X + x) :: rest) :: P2)
       (Hgt : first_gt vs1 vs2 = Some (v1,v2) )  (Hlen1: length vs1 <=zt) (Hlen2: length vs2 <=zt):
-      fail_iexec P (*G*) t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t )
+      fail_iexec P  t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t )
                   (Acq t (X + x) ::
                    mops_hb_check (W + x) (C + t) vs1 vs2 zt t)
   | fail_waw P1 P2 x o e v1 v2 rest vs1 vs2
       (Hstore : P = P1 ++ (t, store_handler t x zt ++
                               Store (x, o) e :: Unlock (X + x) :: rest) :: P2)
       (Hgt : first_gt vs1 vs2 = Some (v1,v2) ) (Hlen1: length vs1 <=zt) (Hlen2: length vs2 <=zt)  :
-      fail_iexec P (*G*) t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t )
+      fail_iexec P  t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t )
                   (Acq t (X + x) ::
                    mops_hb_check (W + x) (C + t) vs1 vs2 zt t )
   | fail_war P1 P2 x o e v1 v2 rest vs1 vs2 vs3
@@ -9014,7 +9005,7 @@ Inductive fail_iexec P (*G*) t :
                               Store (x, o) e :: Unlock (X + x) :: rest) :: P2)
       (Hle : first_gt vs1 vs2 = None ) (Hgt: first_gt vs3 vs2 = Some (v1, v2) )
       (Hlen3: length vs3 = zt) (Hlen2: length vs2 = zt):
-      fail_iexec P (*G*) t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t ++
+      fail_iexec P  t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t ++
                        events_hb_check (R + x) (C + t) vs3 vs2 t)
                   (Acq t (X + x) ::
                        mops_hb_check (W + x) (C + t) vs1 vs2 zt t ++
@@ -9369,8 +9360,7 @@ Lemma first_fail : forall P P0 (Hsim0 : state_sim P P0)
   lo0' lc0' P1 G1
   (Hsteps0 : exec_star_t t (Some P0') G0' lo0' lc0' (Some P1) G1)
   lo lc  (Hsteps1 : exec_star_minus t (Some P1) G1 lo lc (Some P2) G2)
-  o c G4(* i li (Hin0 : In (t, i :: li) P')
-  (Hin : In (t, last (instrument_instr i t) (Lock 0) :: instrument li t) P3)*)
+  o c G4
   (Hstep : exec P3 G3 t o c None G4)
   m (Hcon : consistent (m ++ lc0 ++ lc0' ++ lc ++ lc' ++ opt_to_list c))
   (Hinit : forall l, l < zl -> initialized m (l, 0))
@@ -10219,9 +10209,6 @@ Lemma exec_fail_iexec : forall P P' G'' G' G lo lc o c t
   (Hspawns : safe_spawns P0) (Hwaits : safe_waits P0)
   G0 lo0 lc0 (Hroot : exec_star (Some P0) G0 lo0 lc0 (Some P) G)
   m0 (Hcon : consistent (m0 ++ lc0 ++ lc ++ opt_to_list c))
-(*  (Hinit_l : forall l, l < zl -> initialized m0 (l, 0))
-  (Hinit_v : forall v, v < zv -> initialized m0 (X' + v, 0))
-  (HC_init : forall t o, t < zt -> o < zt -> initialized m0 (C + t, o))*)
   (Hinit : forall p, initialized m0 p),
   exists lo1' lc1' P1' G1' lo2' lc2', iexec_star P G lo1' lc1' P1' G1' /\
     fail_iexec P1' t lo2' lc2' /\ consistent (m0 ++ lc0 ++ lc1' ++ lc2').
@@ -10230,11 +10217,7 @@ Proof.
   exploit exec_iexec1'; try apply Hexec; try apply Hroot; eauto.
   { eapply consistent_app_SC; do 2 rewrite <- app_assoc; eauto. }
   intros (? & lc'1 & ? & P2 & ? & lc'2 & ? & ? & ? & ? & Hiexec & Hrest & Hext);
-    clarify.
-(*  exploit state_sim_steps; try apply Hiexec; eauto.
-  { eapply distinct_steps; eauto. }
-  intros (? & Hsim' & ? & ?).
-  rewrite instrumented_iff in Hsim'.*)
+  clarify.
   exploit first_fail'; try apply Hfail.
   { eauto. }
   { auto. }
@@ -10683,7 +10666,6 @@ Definition clock_match_z m V x z:= forall t,
    
 Lemma clock_match_mods_z: forall m vr r t t' v x f z (Hclock_match_m: clock_match_z m (vr x) (r+x) z)
                               (Hcon: consistent (m++[Write t' (r+x,t ) v])) (Ht: t < z)
-                          (* (Hbounded: bounded f z)*)
                            (Hf: forall y, y< z -> f y = (upd vr x (upd (vr x) t v) x) y),
                            clock_match_z (m++[Write t' (r+x,t) v]) f (r+x) z.
 Proof.
@@ -10808,7 +10790,6 @@ Lemma clock_match_z_max_vc : forall m VC1 VC2 vc1 vc2 t1 t2 t z
   (Hmatch1: clock_match_z m (vc1 t1) (VC1+ t1) z)
   (Hmatch2: clock_match_z m (vc2 t2) (VC2 + t2) z)
   (Hdistinct:  VC1 + t1 <> VC2 + t2)
-  (*(Hbounded1: bounded (vc1 t1) z) (Hbounded2: bounded (vc2 t2) z)*)
   (Hcon: consistent (m ++ mops_max_vc (VC1+t1) (VC2 + t2) (map (vc1 t1) (rev (interval 0 z))) (map (vc2 t2) (rev (interval 0 z ))) t z )) (* (Hz: z <> 0)  (Ht2: t2 < z)*),
                              clock_match_z (m ++ mops_max_vc (VC1+t1) (VC2+t2) (map (vc1 t1) (rev (interval 0 z))) (map (vc2 t2) (rev (interval 0 z))) t z) (upd vc2 t2 (vc_join (vc2 t2) (vc1 t1)) t2) (VC2+t2) z.
 Proof.
@@ -11178,11 +11159,10 @@ Lemma hb_check_vals1' : forall m C1 C2 z vs1 vs2 t V1 V2 v1 v2
   (Hinit1 : forall z, z < zt -> initialized m (C1, z))
   (Hinit2 : forall z, z < zt -> initialized m (C2, z))
   (Hcon : consistent (m ++ mops_hb_check C1 C2 vs1 vs2 z t))
-  (Hvs1 : length vs1 <= z) (Hvs2 : length vs2 <= z) (*(Hlens: length vs1 = length vs2)*) (Hz : z <= zt)
+  (Hvs1 : length vs1 <= z) (Hvs2 : length vs2 <= z) (Hz : z <= zt)
   (Hmatch1 : clock_match m V1 C1) (Hmatch2 : clock_match m V2 C2)
   (Hgt : first_gt  vs1 vs2 = Some (v1, v2)),
-   ~ vc_le V1 V2         
-  (*vs1 = map V1 (rev (interval 0 z)) /\ vs2 = map V2 (rev (interval 0 z))*).
+   ~ vc_le V1 V2        .
 Proof.
   induction z; destruct vs1, vs2; clarify.
   inversion Hvs1.
@@ -11307,17 +11287,6 @@ Proof.
      rewrite <- H22 in H82. rewrite H81 in H21. destruct p,a; clarify.
      specialize(IHP2 P3 P1 H4 H10). clarify.
 Qed.
-
-(* may not need this 
-Lemma mem_sim_mem_sim': forall c m1
-  (Hsim: mem_sim c m1), mem_sim' (opt_to_list c) m1.
-Proof.
-  intros.
-  unfold mem_sim, mem_sim' in *. 
-  destruct c; clarify.
-  -admit.
-  -admit.
-Qed.*)
 
 Lemma init_can_write: forall m x (Hinit : initialized m x)
   (Hcon : consistent m), can_write m x.
@@ -11474,12 +11443,11 @@ Proof.
   induction a; clarify.
 Qed.
 
-Lemma instrument_sim_safe2 : forall (*P*) P1 P2 G1 G2 t (*h*)
+Lemma instrument_sim_safe2 : forall P1 P2 G1 G2 t
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1)
   (Ht : Forall (fun e => fst e < zt) P1) (Hdistinct: distinct P2)
   (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2)
-  m0 (*(Hroot : exec_star (Some (init_state P)) init_env h m (Some P1) G1)*)
-  (Hinit : forall p,(* meta_loc p ->*) initialized m0 p)
+  m0 (Hinit : forall p, initialized m0 p)
   o2 c2 P2' G2' (Hstep : iexec P2 G2 t o2 c2 P2' G2') m1 m2
   (Hprog_m1: Forall prog_op m1) (Hprog_m2: Forall prog_op m2)
   (Hmem_vals: mem_vals (m0++m1) (m0++m2)) (Hcon1: consistent (m0++m1))
@@ -12388,7 +12356,7 @@ Lemma instrument_sim_safe : forall P P1 P2 G1 G2 t h
                                  | _ => True
                                end) P1)
   (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2)
-  m0 (Hinit: forall p: ptr, (*meta_loc p ->*) initialized m0 p)
+  m0 (Hinit: forall p: ptr, initialized m0 p)
   m1 (Hroot : exec_star (Some (init_state P)) init_env h m1 (Some P1) G1)
   o c P1' G1' (Hstep : exec P1 G1 t o c (Some P1') G1')
   (Hcon : consistent ((m0 ++m1)++ opt_to_list c))
@@ -12413,7 +12381,7 @@ Proof.
     + unfold mem_sim; split; clarify.
     + inversion Hsafe.
       rewrite app_nil_r; clarify.
-  -admit. (*load*) (*
+  -(*load*) 
    destruct x as (x, o).
     inversion Hsafe; clarify.
     inversion Hstep0; clarify.
@@ -12549,8 +12517,8 @@ Proof.
      { repeat constructor; clarify.
        -intro Habsurd. contradiction Hx1. unfold meta_loc' in Habsurd. unfold meta_loc.
         clarify. omega.
-       -apply notmeta_loc'_X; auto. } *)
-  -admit. (* destruct x as (x,o). (* store *)
+       -apply notmeta_loc'_X; auto. } 
+  -destruct x as (x,o). (* store *)
    inversion Hsafe; clarify.
    inversion Hstep0; clarify.
    exploit store_tmps_fresh.
@@ -12728,8 +12696,8 @@ Proof.
      { repeat constructor; clarify.
        -intro Habsurd. contradiction Hx1. unfold meta_loc' in Habsurd. unfold meta_loc.
         clarify. omega.
-       -apply notmeta_loc'_X; auto. } *)
-  -(*lock*) admit. (*
+       -apply notmeta_loc'_X; auto. } 
+  -(*lock*) 
   inversion Hsafe; clarify.
    inversion Hstep0; clarify.
    do 5 eexists.
@@ -12777,8 +12745,8 @@ Proof.
           destruct Habsurd as [? |[?|[?|?]]]; unfold meta_loc; clarify; omega. }
        { simpl. auto. }
        { simpl. auto. }
-       { rewrite <- split_app.  auto. }*)
- -(*unlock*) admit. (*
+       { rewrite <- split_app.  auto. }
+ -(*unlock*) 
    inversion Hsafe; clarify.
    inversion Hstep0; clarify.
    do 5 eexists.
@@ -12875,8 +12843,8 @@ Proof.
      { rewrite <- app_assoc. simpl. rewrite <-app_assoc. auto. }
      { repeat constructor; clarify. intro Habsurd. contradiction H21.
        unfold meta_loc', meta_loc in *; clarify.
-       do 3 right. left. split; auto. } *)
- -(*spawn*)  admit. (*
+       do 3 right. left. split; auto. } 
+ -(*spawn*) 
    inversion Hsafe; clarify.
    inversion Hstep0; clarify.
    rewrite <- app_assoc; simpl; do 5 eexists.
@@ -12988,8 +12956,8 @@ Proof.
         intro tx'. destruct (eq_dec tx' tx); clarify.
         -omega.
         -destruct (eq_dec tx tx'); clarify. rewrite max_self. auto.
-      }*)
- -(*wait*) admit. (*
+      }
+ -(*wait*) 
    inversion Hsafe; clarify.
    inversion Hstep0; clarify.
    apply in_split in Hdone. inversion Hdone; clarify.
@@ -13084,7 +13052,7 @@ Proof.
         - omega.
         - rewrite max_self. auto.
       }
-      { repeat rewrite <- app_assoc. clarify. } *)
+      { repeat rewrite <- app_assoc. clarify. } 
  -(*assert_le*) 
    clarify. do 5 eexists.
    +eapply iexec_assert; eauto.
@@ -13117,8 +13085,8 @@ Lemma instrument_sim_race2 : forall P P1 P2 G1 G2 t ops2
   (Ht : Forall (fun e => fst e < zt) P1) (Hdistinct: distinct P2)
   (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2) 
   m0 m2 (Hroot : iexec_star (init_state (instrument P 0)) init_env ops2 m2 P2 G2)
-  (Hinit : forall p, (*meta_loc p ->*) initialized m0 p)
-  o2 c2 (Hstep : fail_iexec P2 t o2 c2) (*(Hmem_sim': mem_sim' m1 m2)*)
+  (Hinit : forall p, initialized m0 p)
+  o2 c2 (Hstep : fail_iexec P2 t o2 c2) 
   (Hcon2 : consistent (m0++m2 ++ c2)) s (Hs : clocks_sim m0 s) ,               
   exists o1 ops1 m1 c1 P1' G1s G1', exec_star (Some (init_state P)) init_env ops1 m1 (Some P1) G1s/\ env_sim G1s G1 /\ exec P1 G1s t o1 c1 (Some P1') G1' /\ consistent (m0++m1(* the load/store hasn't been executed in m2*) (* ++(opt_to_list c1) *)) /\ mem_vals (m0++m1) (m0++m2) /\
    ( exists s', step_star s ops1 s' /\ (forall s'', ~step_star s' (opt_to_list o1) s'')).
@@ -13323,7 +13291,7 @@ Qed.
 Lemma step_star_inv : forall s1 s2 lo,
   step_star s1 lo s2 -> exists lo1 lo2 s', step_star s1 lo1 s' /\ step_star s' lo2 s2.
 Proof.
-  intros s1 s2 lo Hstep_star. (*generalize dependent s1.*)
+  intros s1 s2 lo Hstep_star. 
   destruct lo;clarify.
   -inversion Hstep_star. 
    exists [], [], s1. clarify. 
@@ -13378,7 +13346,7 @@ Corollary instrument_sim_safe' : forall P P1 P2 G1 G2 h
   (Ht : legal_tids P1) 
   (Ht_spawn: spawn_wait_other_prog P1)
   (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2)
-  m0 (Hinit: forall p: ptr,(* meta_loc p ->*) initialized m0 p)
+  m0 (Hinit: forall p: ptr, initialized m0 p)
   m1 (Hroot : exec_star (Some (init_state P)) init_env h m1 (Some P1) G1)
   lo lc P1' G1' (Hstep : exec_star (Some P1) G1 lo lc (Some P1') G1')
   (Hcon : consistent ((m0 ++m1)++ lc)) (Hprog_m1: Forall prog_op m1)
@@ -13472,22 +13440,16 @@ Lemma instrument_sim_race : forall P P1 P2 G1 G2 t ops1
   (HfreshP: fresh_tmps (init_state P)) (HlocsP: safe_locs (init_state P))                       (HtP: legal_tids (init_state P))          
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1)
   (Ht : legal_tids P1)  (Hdistinct : distinct P2)
- (*
-  (Ht_spawn: Forall (fun p =>  match p with
-                                 | (t0,Spawn u li::rest) => u <> t0
-                                 | _ => True
-                               end) P1)*)
   (Hspawn_wait_other: spawn_wait_other_prog (init_state P))
   (HPsim : state_sim P1 P2) (HGsim : env_sim G1 G2)
   m1 (Hroot : exec_star (Some (init_state P)) init_env ops1 m1 (Some P1) G1)
   o c P1' G1' (Hstep : exec P1 G1 t o c (Some P1') G1') m0
-  (Hinit : forall p, (*meta_loc p ->*) initialized m0 p) 
-  (Hcon : consistent (m0 ++ m1 (*++ opt_to_list c*))) s (*m2*) (Hs : clocks_sim m0 s)
-  (*(Hmem_vals: mem_vals (m0++m1) (m0++m2))*) s_good
-  (Hsafe:  step_star s ops1 s_good)   
+  (Hinit : forall p, initialized m0 p) 
+  (Hcon : consistent (m0 ++ m1 (*++ opt_to_list c*))) s (Hs : clocks_sim m0 s)
+   s_good (Hsafe:  step_star s ops1 s_good)   
   (Hrace : forall s', ~step_star s_good (opt_to_list o) s'),
-                            exists  lo2 m2 lo lc (*o2 c2*) G2s G2', exec_star (Some (init_state (instrument P 0))) init_env lo2 m2 (Some P2) G2s /\exec_star (Some P2) G2s lo lc None G2'
-   (* exec P2 G2s t o2 c2 None G2' *)                                                     /\ consistent (m0 ++ m2 ++ lc) /\ mem_vals (m0++m1) (m0++m2) /\ env_sim G1 G2s.
+                            exists  lo2 m2 lo lc G2s G2', exec_star (Some (init_state (instrument P 0))) init_env lo2 m2 (Some P2) G2s /\exec_star (Some P2) G2s lo lc None G2'
+                                                   /\ consistent (m0 ++ m2 ++ lc) /\ mem_vals (m0++m1) (m0++m2) /\ env_sim G1 G2s.
 Proof.
   intros. 
   exploit instrument_sim_safe'.
@@ -13502,7 +13464,7 @@ Proof.
   { instantiate(1:=m0). clarify. }
   { constructor. }
   { apply Hroot. }
-  { rewrite app_nil_r. (*eapply consistent_app_SC; rewrite <- app_assoc. *)eauto. }
+  { rewrite app_nil_r. eauto. }
   { constructor. }
   { instantiate(1:=[]). constructor. }
   { rewrite app_nil_r. eapply consistent_app_SC;  eauto. }
@@ -13790,7 +13752,7 @@ Theorem instrument_correct : forall P (Hsafe_locs: safe_locs (init_state P))
    locks l (init_state (instrument P 0)) ->
    good_lock (l, 0) (init_state (instrument P 0)))
   (Hspawn_wait_other: spawn_wait_other_prog (init_state P))
-  (Hinit: forall p : ptr, (*meta_loc p ->*) initialized m0 p)
+  (Hinit: forall p : ptr, initialized m0 p)
   (Hclocks_sim: clocks_sim m0 s0) G1' m1' (Hprog_m1': Forall prog_op m1'),
   (exists ops2 m2 P2' G2', exec_star (Some (init_state (instrument P 0)))
      init_env ops2 m2 (Some P2') G2' /\ final_state (Some P2') /\
@@ -13998,7 +13960,7 @@ Proof.
    exploit instrument_sim_race; try apply Hexec_race; eauto.
    { eapply fresh_tmps_steps; eauto. }
    { eapply safe_locs_steps; eauto. }
-   { eapply legal_tids_steps in Ht; eauto. (*unfold legal_tids in Ht. clarify.*) }
+   { eapply legal_tids_steps in Ht; eauto.  }
    { rewrite <- distinct_suffix; [|apply sim_suffix, instrumented].
      eapply distinct_steps; eauto.
      constructor; auto. }
