@@ -1733,7 +1733,6 @@ Corollary to_mem_le : forall G t li vs lc G' vs'
 Proof.
   intros; exploit to_mem_suffix; eauto; clarify; rewrite app_length; omega.
 Qed.
-
 Typeclasses eauto := 2.
 
 (* up *)
@@ -1972,8 +1971,6 @@ Proof.
   inversion Hexec; exploit distinct_thread; eauto; clarify; split; clarify.
 Qed.
 
-Typeclasses eauto := 5.
-
 Lemma hb_check_instr : forall C1 C2 z tmp1 tmp2 i
   (Hi : In i (hb_check C1 C2 z tmp1 tmp2)) l (Haccess : accesses i = Some l),
   exists n, n < z /\ (l = (C1, n) \/ l = (C2, n)).
@@ -2185,6 +2182,8 @@ Proof.
   rewrite in_app in *; destruct H; clarify; eauto.
   exploit spawn_in_handler; eauto; clarify; eauto.
 Qed.
+
+Typeclasses eauto := 5.
 
 Lemma safe_instrs : forall l, (fix list_safe l := match l with [] => True |
   i :: rest => safe_instr i /\ list_safe rest end) l <->
@@ -9747,6 +9746,155 @@ Proof.
   -reflexivity.
   -rewrite Hinit. auto.
 Qed.
+Lemma can_read_iff_SC: forall p ops m v
+  (Hcon : consistent (m ++ ops)) (Hprog : Forall prog_op ops)
+  (Hno_write : Forall (fun c => match c with Write _ x _ | ARW _ x _ _ => p <> x
+     | _ => True end) ops),
+  can_read (m ++ ops) p v <-> can_read m p v.
+Proof.
+  induction ops; clarify.
+  { rewrite app_nil_r; reflexivity. }
+  specialize (IHops (m ++ [a]) v); rewrite <- app_assoc in *;
+    inversion Hprog; inversion Hno_write; clarify.
+  rewrite IHops.
+  destruct (eq_dec (loc_of a) p).
+  - destruct a; clarify.
+    unfold can_read; rewrite <- app_assoc.
+    simpl; rewrite read_noop_SC; [reflexivity|].
+    eapply consistent_app_SC; rewrite <- app_assoc; simpl; eauto.
+  - unfold can_read; rewrite <- app_assoc.
+    simpl; rewrite loc_valid_ops2_SC; auto.
+    + split; clarify.
+      eapply consistent_app_SC; rewrite <- app_assoc; simpl; eauto.
+    + constructor; clarify.
+Qed.
+
+Lemma writesb_write : forall c p v (Hwrite : writesb c p = true)
+  (Hval : write_val c = Some v),
+  exists i, nth_error (to_seq c) i = Some (MWrite p v).
+Proof.
+  destruct c; clarify.
+  - unfold beq in Hwrite; exists 0; clarify.
+  - unfold beq in Hwrite; exists 1; clarify.
+Qed.
+
+Lemma writesb_val : forall c p (Hwrite : writesb c p = true)
+  (Hprog : prog_op c), exists v, write_val c = Some v.
+Proof.
+  destruct c; clarify; eauto.
+Qed.
+
+Notation lower := (@lower _ _ _ _ _ Base).
+
+Typeclasses eauto := 4.
+
+Lemma lift_last : forall ops p a
+  (Hlast : last_op (lower ops) (Ptr p) a) (Hprog : Forall prog_op ops),
+  exists i w, nth_error ops i = Some w /\ last_op (to_seq w) (Ptr p) a /\
+    forall i2 w2, nth_error ops i2 = Some w2 -> writesb w2 p = true -> i2 <= i.
+Proof.
+  intros.
+  assert (exists i, last_mod_op (lower ops) (Ptr p) i /\
+    inth (lower ops) i = Some a) as (i & Hlast_mod & Hnth) by eauto.
+  inversion Hlast_mod; setoid_rewrite Hop1 in Hnth; clarify.
+  rewrite inth_nth_error in Hop1; generalize (nth_lower_split _ _ Hop1); 
+    intros (ops1 & c & ops2 & i' & ? & Hi' & ?); clarify.
+  exists (length ops1); rewrite nth_error_split; do 2 eexists; eauto.
+  rewrite lower_app, lower_cons in Hlast.
+  repeat setoid_rewrite last_op_app in Hlast.
+  destruct Hlast as [[Hlast | Hlast] | Hlast].
+  - destruct Hlast as (i2 & Hi2).
+    specialize (Hlast0 (length (lower ops1) + (length (to_seq c) + i2))).
+    rewrite inth_nth_error, lower_app, lower_cons in Hlast0.
+    repeat rewrite nth_error_plus in Hlast0; specialize (Hlast0 a); clarsimp.
+    generalize (nth_error_lt _ _ Hi'); intro; exfalso.
+    apply plus_le_reg_l in Hlast0.
+    assert (length (to_seq c) <= i') by omega.
+    rewrite Nat.le_ngt in *; contradiction.
+  - split; [clarify | intros i2 w2 Hw2 Hmods2].
+    rewrite nth_error_app in *; destruct (lt_dec i2 (length ops1)); [omega|].
+    destruct (i2 - length ops1) eqn: Hminus; [omega | clarify].
+    rewrite Forall_app in Hprog; destruct Hprog as [_ Hprog];
+      inversion Hprog as [|??? Hprog2]; subst.
+    exploit nth_error_split'; eauto; clarify.
+    rewrite Forall_app in Hprog2; clarify; inversion Hprog22; subst.
+    exploit writesb_val; eauto; intros (v & ?).
+    exploit writesb_write; eauto; intros (i2' & ?).
+    specialize (Hlast0 (length (lower ops1) + (length (to_seq c) +
+      (length (lower x) + i2')))).
+    rewrite inth_nth_error in Hlast0; repeat rewrite lower_app in Hlast0.
+    rewrite nth_error_plus, lower_cons, nth_error_plus in Hlast0.
+    setoid_rewrite lower_app in Hlast0; rewrite nth_error_plus in Hlast0.
+    setoid_rewrite lower_cons in Hlast0; rewrite nth_error_app in Hlast0.
+    exploit nth_error_lt; eauto; clarify.
+    specialize (Hlast0 (MWrite p v)); clarify.
+    rewrite <- NPeano.Nat.add_le_mono_l in Hlast0.
+    assert (i' < length (to_seq c) + (length (lower x) + i2')) as Hlt.
+    { generalize (nth_error_lt _ _ Hi'); intro.
+      eapply lt_le_trans; [eauto | apply le_plus_l]. }
+    omega.
+  - rewrite Forall_app in *; clarify.
+    generalize (nth_error_in _ _ Hi'); intro.
+    rewrite Forall_forall in Hlast21; specialize (Hlast21 a); clarify.
+Qed.
+(* /up *)
+
+Lemma can_read_write_SC: forall p ops m v
+  (Hcon : consistent (m ++ ops)) (Hprog : Forall prog_op ops) c v'
+  (Hin : In c ops) (Hp : writesb c p = true) (Hv : write_val c = Some v')
+  (Hwrite : Forall (fun c => writesb c p = true -> write_val c = Some v') ops),
+  can_read (m ++ ops) p v <-> v = v'.
+Proof.
+  intros.
+  unfold can_read, consistent, SC; rewrite lower_app, lower_single; simpl.
+  rewrite read_last; auto; try reflexivity.
+  assert (exists a, last_op (lower (m ++ ops)) (Ptr p) a) as (a & Hlast).
+  { exploit in_split; eauto; intros (ops1 & ops2 & ?); subst.
+    exploit writesb_write; eauto; intros (i & Hi).
+    generalize (has_last_op(op := MWrite p v') _ (length (lower m) +
+      (length (lower ops1) + i)) Hcon); intro X; use X.
+    destruct X as (i' & Hlast); inversion Hlast.
+    exists op, i'; auto.
+    { rewrite lower_app, nth_error_plus, lower_app, nth_error_plus.
+      rewrite lower_cons, nth_error_app; exploit nth_error_lt; eauto; clarify. }
+  }
+  rewrite lower_app, last_op_app in Hlast; destruct Hlast as [Hlast | Hlast].
+  - rewrite lower_app, last_op_app; left.
+    exploit lift_last; eauto; intros (? & w & ? & Hlast' & ?); clarify.
+    exploit nth_error_in; eauto; intro.
+    rewrite Forall_forall in *; exploit Hprog; eauto; intro.
+    destruct w; clarify; try rewrite last_single in Hlast'; clarify.
+    + destruct (eq_dec x0 p); clarify.
+      exploit Hwrite; eauto; simpl; unfold beq; clarify.
+    + destruct Hlast' as (i & Hlast' & ?); destruct i; inversion Hlast';
+        clarsimp.
+      destruct i; clarify; [|rewrite inth_nil in *; clarify].
+      destruct (eq_dec x0 p); clarify.
+      exploit Hwrite; eauto; simpl; unfold beq; clarify.
+  - clarify.
+    rewrite Forall_forall in Hlast2; exploit Hlast2.
+    { exploit writesb_write; eauto; clarify.
+      eapply flatten_in; setoid_rewrite in_map_iff; do 2 eexists; eauto.
+      eapply nth_error_in; eauto. }
+    clarify.
+Qed.
+
+Lemma writesb_loc : forall w p (Hwrite : writesb w p = true)
+  (Hprog : prog_op w), loc_of w = p.
+Proof.
+  destruct w; clarify; unfold beq in *; clarify.
+Qed.
+
+Lemma init_snoc : forall m c p (Hinit : initialized (m ++ [c]) p),
+  writesb c p = true \/ initialized m p.
+Proof.
+  unfold initialized in *; clarify.
+  rewrite lower_app, last_op_app in Hinit; destruct Hinit; [|clarify; eauto].
+  destruct H as (i & Hlast & ?); inversion Hlast; clarsimp.
+  rewrite lower_single in H; destruct c; simpl in *;
+    try rewrite nth_error_single in *; unfold beq; clarify.
+  destruct i; clarify; rewrite nth_error_single in *; clarify.
+Qed.
 
 Lemma mem_vals_sim_app : forall m1 m2 c1 c2
   (Hmem_vals: mem_vals m1 m2) (Hsim: mem_sim c1 c2) (Hprog: Forall prog_op (opt_to_list c1)),                              
@@ -9755,9 +9903,52 @@ Proof.
   intros.
   unfold mem_sim, mem_vals in *. clarify.
   destruct c1; clarify.
-  -admit.
-  -rewrite app_nil_r in *.
-   admit. 
+  - destruct (eq_dec (loc_of c) x).
+    + inversion Hprog; destruct c; clarify.
+      * rewrite can_read_iff_SC; auto.
+        rewrite can_read_iff_SC; auto.
+        apply Hmem_vals; auto.
+        { exploit init_snoc; eauto; clarify. }
+        { rewrite Forall_forall; intros c' ?.
+          specialize (Hsim c'); destruct Hsim; clarify.
+          destruct (meta_loc_dec (loc_of c')); clarify.
+          destruct c'; clarify; intro; clarify. }
+      * rewrite can_read_write_SC; simpl; eauto; simpl; unfold beq; clarify.
+        generalize (Hsim (Write t x v0)); intros [? _]; clarify.
+        symmetry; eapply can_read_write_SC; eauto; simpl; unfold beq; clarify.
+        rewrite Forall_forall in *; intros a ?.
+        exploit Hprog2; eauto; intro.
+        intro; exploit writesb_loc; eauto.
+        specialize (Hsim a); destruct Hsim as [_ ?]; clarify.
+        rewrite <- H4; auto.
+      * rewrite can_read_write_SC; simpl; eauto; simpl; unfold beq; clarify.
+        generalize (Hsim (ARW t x v0 v')); intros [? _]; clarify.
+        symmetry; eapply can_read_write_SC; eauto; simpl; unfold beq; clarify.
+        rewrite Forall_forall in *; intros a ?.
+        exploit Hprog2; eauto; intro.
+        intro; exploit writesb_loc; eauto.
+        specialize (Hsim a); destruct Hsim as [_ ?]; clarify.
+        rewrite <- H4; auto.
+    + inversion Hprog; subst.
+      destruct (writesb c x) eqn: Hwrite.
+      { exploit writesb_loc; eauto; clarify. }
+      rewrite can_read_iff_SC; auto.
+      rewrite can_read_iff_SC; auto.
+      apply Hmem_vals; auto.
+      { exploit init_snoc; eauto; clarify. }
+      { rewrite Forall_forall in *; intros a ?.
+        destruct (meta_loc_dec (loc_of a)).
+        { destruct a; auto; intro; clarify. }
+        specialize (Hsim a); destruct Hsim as [_ ?]; clarify.
+        destruct a; clarify. }
+      { constructor; auto.
+        specialize (Hsim c); destruct Hsim as [? _]; clarify.
+        destruct c; clarify. }
+  - rewrite app_nil_r in *.
+    rewrite can_read_iff_SC; auto.
+    rewrite Forall_forall in *; intros a ?.
+    specialize (Hsim a); destruct Hsim; clarify.
+    destruct a; auto; intro; clarify.
 Qed.
 
 Lemma mem_vals_app_meta : forall m1 m2 (Hvals : mem_vals m1 m2)
@@ -11035,6 +11226,30 @@ Proof.
   intros; eapply hb_check_vals1' with (C1 := C1); eauto.
 Qed.
 
+Lemma filter_split: forall (X:Type) l1 l2 l3 (f:X->bool)
+  (Happ: filter f l3=l1++l2),
+  exists l31 l32, l3=l31++l32 /\ filter f l31=l1 /\ filter f l32=l2.
+Proof.
+  intros ????; revert l1 l2; induction l3; clarify.
+  - exploit app_eq_nil; eauto; clarify.
+    exists [], []; auto.
+  - destruct (f a) eqn: Ha.
+    + destruct l1; clarify.
+      * exists [], (a :: l3); clarify.
+      * exploit IHl3; eauto; intros (l31 & l32 & ?).
+        exists (x :: l31), l32; clarify.
+    + exploit IHl3; eauto; intros (l31 & l32 & ?).
+      exists (a :: l31), l32; clarify.
+Qed.
+
+Lemma mem_sim'_split': forall m1 m2 m3
+  (Hsim12: mem_sim' (m1++m2) m3),
+  exists m31 m32, m3=m31++m32 /\ mem_sim' m1 m31 /\ mem_sim' m2 m32.
+Proof.
+  intros.
+  unfold mem_sim' in *. apply filter_split. auto.
+Qed.
+
 Lemma instrument_eq_inv: forall P1 P2 t
                              (Hinst: instrument P1 t=instrument P2 t),
                         P1=P2.
@@ -11104,11 +11319,28 @@ Proof.
   -admit.
 Qed.*)
 
-Lemma init_can_write: forall m x 
-   (Hinit : initialized m x),                 
-                        can_write m x.
+Lemma init_can_write: forall m x (Hinit : initialized m x)
+  (Hcon : consistent m), can_write m x.
 Proof.
-  admit.
+  unfold initialized, can_write; clarify.
+  unfold consistent, SC in *; destruct Hinit as (i & Hlast & Hi).
+  rewrite lower_app, lower_single; simpl.
+  rewrite inth_nth_error in Hi; exploit nth_error_split'; eauto;
+    intros (m1 & m2 & ? & Heq); rewrite Heq in *.
+  rewrite <- app_assoc; simpl.
+  rewrite split_app, not_mod_ops_write.
+  - rewrite <- app_assoc; simpl.
+    rewrite write_not_read_single; clarify.
+    rewrite split_app in Hcon.
+    generalize (consistent_app _ _ Hcon); intro Hcon'; clarify.
+    rewrite write_any_value in Hcon'; eauto.
+  - rewrite Forall_forall; intros a ?.
+    exploit in_nth_error; eauto; intros (i' & ?).
+    inversion Hlast.
+    specialize (Hlast0 (length m1 + S i') a).
+    rewrite inth_nth_error, nth_error_plus in Hlast0; clarify.
+    destruct a; clarify; omega.
+  - rewrite <- app_assoc; simpl; auto.
 Qed.
 
 Lemma consistent_mem_vals: forall m1 m2 c
