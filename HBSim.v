@@ -13388,6 +13388,105 @@ Proof.
    +clarify.
   -clarify.
 Qed.
+
+Lemma store_handler_race_waw_spec': forall n x t P G P1 P2 rest v1 v2 vs1 vs2
+ (Hstore_handler_spec: P= P1++(t,store_handler t x  n++rest)::P2) 
+ (Hvs1: length vs1 = n) (Hvs2: length vs2 = n) 
+ (Hfirst_gt: first_gt vs1 vs2 = Some (v1,v2))
+ Ggood (HGgood : Ggood= (upd_env (upd_env G t tmp1 v1) t tmp2 v2) ),
+                                    exists c Pgood, c < n /\
+   Pgood=P1++(t,Assert_le (V tmp1) (V tmp2)::hb_check (W'+x) (C' + t) (n -c-1) tmp1 tmp2++
+                          hb_check (R' + x) (C' + t) (length vs1) tmp1 tmp2 ++
+                          Load tmp1 (C' + t, t) :: Store (W' + x, t) (V tmp1) :: rest )::P2 /\
+ exec_star (Some P) G (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t)
+           (Acq t (X + x) :: mops_hb_check (W + x) (C + t) vs1 vs2 n t) 
+           (Some Pgood) Ggood /\
+ exec Pgood Ggood t None None None Ggood.
+Proof.
+  intros. unfold store_handler in *. clarify.
+  exploit hb_check_fail_spec'.
+  { instantiate(1:= P2). instantiate(1:=hb_check (R' + x) (C' + t) (length vs1) tmp1 tmp2 ++
+                                                 move (C' + t, t) (W' + x, t) tmp1 ++ rest).
+    instantiate(1:=tmp2). instantiate(1:=tmp1). instantiate(1:=length vs1).
+    instantiate(1:= C'+ t). instantiate(1:= W' + x). instantiate(1:=t).
+    instantiate(1:= P1). eauto. }
+  { eauto. }
+  { instantiate(1:=vs1). auto. }
+  { eauto. }
+  { eauto. }
+  { instantiate (1:= G). eauto. }
+  intros ( c & Pgood & Hc & HPgood & Hexecs & Hexec).
+  exists c, Pgood.
+  split; [|split]; clarify.
+  eapply exec_step'; eauto.
+  -eapply exec_lock. do 2 rewrite <- app_assoc. eauto.
+  -clarify.
+  -clarify.
+Qed.
+
+Lemma store_handler_race_war_spec': forall n x t P G P1 P2 rest v2 v3 vs1 vs2 vs3
+ (Hstore_handler_spec: P= P1++(t,store_handler t x n ++rest)::P2) 
+ (Hvs1: length vs1 = n) (Hvs2: length vs2 = n) (Hvs3: length vs3 = n) 
+ (Hfirst_gt12: first_gt vs1 vs2 = None)
+ (Hfirst_gt32: first_gt vs3 vs2 = Some (v3,v2))
+Ggood (HGgood : Ggood= (upd_env (upd_env G t tmp1 v3) t tmp2 v2) ),
+                                   exists c Pgood, c < n /\
+ Pgood=P1++(t,Assert_le (V tmp1) (V tmp2)::hb_check (R'+x) (C' + t) (n -c-1) tmp1 tmp2++
+                          Load tmp1 (C' + t, t) :: Store (W' + x, t) (V tmp1) :: rest )::P2 /\
+ exec_star (Some P) G 
+           (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t ++
+            events_hb_check (R + x) (C + t) vs3 vs2 t)
+           (Acq t (X + x) :: mops_hb_check (W + x) (C + t) vs1 vs2 n t ++
+            mops_hb_check (R + x) (C + t) vs3 vs2 n t) 
+           (Some Pgood) Ggood /\
+ exec Pgood Ggood t None None None Ggood.
+Proof.
+  intros. unfold store_handler in *. clarify.
+  assert(Hves: exists ve1 ve2 ve3 vss1 vss2 vss3, vs1=vss1++[ve1]/\ vs2=vss2++[ve2] /\ vs3=vss3++[ve3]).
+  { destruct vs1, vs2, vs3; clarify.
+    do 6 eexists.
+    instantiate(1:=last (n1::vs3) n1). instantiate (1:=removelast (n1::vs3)).
+    instantiate(1:=last (n0::vs2) n0). instantiate (1:=removelast (n0::vs2)).
+    instantiate(1:=last (n::vs1) n). instantiate (1:=removelast (n::vs1)).
+    repeat rewrite <- app_removelast_last; clarify. }
+  inversion Hves as (ve1 & ve2 & ve3 & vss1 & vss2 & vss3 & Hvss1 & Hvss2 & Hvss3); clarify.
+  rewrite Hvss3, Hvss2, Hvss1 in *. clear Hvss1. clear Hvss2. clear Hvss3.
+  assert(Hupd: upd_env (upd_env G t tmp1 v3) t tmp2 v2 =
+                 upd_env (upd_env (upd_env (upd_env G t tmp1 ve1) t tmp2 ve2) t tmp1 v3) t tmp2 v2).
+  { symmetry. rewrite upd_assoc. rewrite upd_overwrite. rewrite upd_assoc.
+    rewrite upd_overwrite. eauto. eauto. eauto. }
+  exploit hb_check_fail_spec'.
+  { instantiate(1:=P2). instantiate(1:=move(C'+t,t) (W' + x, t) tmp1 ++ rest).
+    instantiate(1:=tmp2). instantiate(1:=tmp1). instantiate(1:= length (vss3 ++ [ve3])).
+    instantiate(1:=C'+ t). instantiate(1:=R'+x). instantiate(1:=t).
+    instantiate(1:= P1). eauto. }
+  { eauto. }
+  { instantiate(1:=vss3++[ve3]). eauto. }
+  { instantiate(1:=vss2++[ve2]). omega. }
+  { eauto. }
+  { instantiate(1:=(upd_env (upd_env G t tmp1 ve1) t tmp2 ve2)). eauto. }
+  intros ( c & Pgood & Hc & HPgood & Hexecs & Hexec).
+  exists c, Pgood. rewrite Hvs3 in *.
+  split;[|split;[|split]];clarify.
+  eapply (exec_step' (exec_lock _ _ _ _ _ _ eq_refl)); clarify.
+  rewrite <- app_assoc. eapply exec_star_trans.
+  -apply hb_check_pass_spec; try (apply Hfirst_gt12); eauto.
+  -rewrite <- app_assoc. repeat rewrite last_snoc. clarify.
+Qed.
+
+
+
+Lemma clocks_sim_allreads: forall m1 m2 s
+   (Hsim1: clocks_sim m1 s) (Hcon: consistent (m1++m2)) (Hprog: Forall prog_op m2)
+   (Hnmods: Forall (fun c => match c with | Read _ _ _ => True | _ => False end) m2),
+                                   clocks_sim (m1++m2) s.
+Proof.
+  unfold clocks_sim. clarify. 
+  split;[|split]; clarify; try split; 
+  apply clock_match_nomod; auto; try solve [eapply Forall_impl; eauto; clarify; destruct a; clarify];
+  try specialize(Hsim122 v H); clarify.
+Qed.
+
   
 Corollary instrument_sim_safe' : forall P P1 P2 G1 G2 h
   (Hfresh : fresh_tmps P1) (Hlocs : safe_locs P1) (Hdistinct : distinct P2)
@@ -13405,9 +13504,9 @@ Corollary instrument_sim_safe' : forall P P1 P2 G1 G2 h
     consistent ( (m0++m2) ++ lc2) /\ state_sim P1' P2' /\ env_sim G1' G2' /\
     mem_vals ((m0++m1)++lc) ((m0++m2)++lc2) /\ clocks_sim (m0++m2++lc2) s'.
 Proof.
-  admit. (*need to take the proof in HBSimWeak.v*)
+  admit. (*need to take the most recent proof in HBSimWeak.v*)
 Qed.         
-Print hb_check.
+
 Lemma skipn_hb_check: forall c z C1 C2 tmp1 tmp2
                              (Hc: c <= z), skipn (3*c) (hb_check C1 C2 z tmp1 tmp2) = hb_check C1 C2 (z-c) tmp1 tmp2.
 Proof.
@@ -13419,6 +13518,8 @@ Proof.
    assert(c + S (c + S (c + 0))=S ( S (c + (c + (c+0))))) as Hlen by omega.
    rewrite Hlen. simpl. apply IHc. omega.
 Qed.
+
+
 
 Lemma instrument_sim_race : forall P P1 P2 G1 G2 t ops1
   (HfreshP: fresh_tmps (init_state P)) (HlocsP: safe_locs (init_state P))                       (HtP: legal_tids (init_state P))          
@@ -13570,7 +13671,7 @@ Proof.
        destruct s_good as (((?, ?), ?), ?); exploit Hrace; [|clarify].
        econstructor; [constructor; auto | apply ss_refl]. }
      { (*WAR*)
-      exploit store_handler_race_war_spec.
+      exploit store_handler_race_war_spec'.
       { eauto. }
       { eauto. }
       { instantiate (2 := map (clock_of s_good t0) (rev (interval 0 zt))).
@@ -13605,36 +13706,53 @@ Proof.
           rewrite (map_nth_error _ _ _ Hnth) in Hj2'; clarify.
         apply Hclock; omega. 
       }
-      rewrite plus_0_r; intro Hstore.
-      instantiate(1:=t0) in Hstore.
-      instantiate(1:=G2_good) in Hstore. instantiate(1:=x) in Hstore. 
-      instantiate(1:= l') in Hstore.
-      instantiate(1:=[Store (x, o) e; Unlock (X' + x)] ++ instrument rest t0) in Hstore.
-      instantiate(1:=P0') in Hstore.
-      rewrite <- app_assoc. unfold store_handler in Hstore.
-      rewrite map_length, rev_length, interval_length, <- minus_n_O in Hstore.
-      simpl in Hstore. simpl.
-      rewrite <- app_assoc in Hexec_starP2good.
-      do 6 eexists. split;[|split;[|split;[|split]]]; eauto.
-      rewrite app_assoc, split_app, app_assoc.
-      destruct Ht as (Ht1 & Ht2). rewrite Forall_app in Ht2.
-      inversion Ht2 as (Ht21  & Ht22). inversion Ht22.
-      assert (Hcon_hb:   consistent
-     (((m0 ++ m2) ++ [Acq t0 (X' + x)]) ++
-      mops_hb_check (W' + x) (C' + t0)
+      { eauto. }
+      intros ( c & Pgood & Hc & HPgood & Hexecs & Hexec).
+      instantiate(1:=t0) in Hexecs.
+      instantiate(1:=G2_good) in Hexecs. instantiate(1:=x) in Hexecs. 
+      instantiate(1:= l') in Hexecs.
+      instantiate(1:=[Store (x, o) e; Unlock (X' + x)] ++ instrument rest t0) in Hexecs.
+      instantiate(1:=P0') in Hexecs.
+      rewrite <- app_assoc. unfold store_handler in Hexecs.
+      rewrite map_length, rev_length, interval_length, <- minus_n_O, plus_0_r in *.
+      clarify.
+      do 10 eexists. split;[|split;[|split;[|split;[|split;[|split]]]]]; eauto.
+      -rewrite <- app_assoc in Hexec_starP2good. apply Hexec_starP2good.
+      -apply Forall2_app.
+       +apply sim_suffix. auto.
+       +apply Forall2_cons; clarify.
+        *exists (S (3*zt +(3*c+2))).
+         split; clarify.
+         { repeat rewrite app_length. repeat rewrite hb_check_len. clarify. omega. }
+         { repeat rewrite <- app_assoc. rewrite <- skipn_skipn. rewrite skipn_app.
+           assert(forall x, (x + (x + (x + 0)))= 3*x) as H3x by (intros; omega).
+           rewrite (H3x zt), (H3x c) . rewrite skipn_hb_check; auto.
+           rewrite hb_check_len. rewrite <- (minus_n_n zt), <- (minus_n_n (3*zt)) .
+           simpl. rewrite <- skipn_skipn. rewrite (H3x c).
+           rewrite skipn_app'; auto.
+           -rewrite skipn_hb_check; auto.
+            +assert(zt-c = S (zt-c-1)) as Hztc by omega.
+             rewrite Hztc. simpl.  rewrite <- minus_n_O. auto.
+            +omega.
+           -rewrite hb_check_len. omega. }
+        *apply sim_suffix. auto.
+      -clarify. rewrite app_nil_r, app_assoc, split_app, app_assoc.
+       destruct Ht as (Ht1 & Ht2). rewrite Forall_app in Ht2.
+       inversion Ht2 as (Ht21  & Ht22). inversion Ht22. clarify.
+       assert (Hcon_hb:   consistent (((m0 ++ m2) ++ [Acq t0 (X' + x)]) ++
+         mops_hb_check (W' + x) (C' + t0)
         (map (write_of s_good x) (rev (interval 0 zt)))
         (map (clock_of s_good t0) (rev (interval 0 zt))) zt t0)).
-      { apply mops_hb_check_con; clarify.
+       { apply mops_hb_check_con; clarify.
         - apply clocks_sim_acq; clarify.
         - apply can_arw_SC; specialize(Hs_x (m0++m2) H22); clarify. }
-      apply mops_hb_check_conR; clarify.
-      apply clocks_sim_allreads; clarify.
-        -apply clocks_sim_acq; clarify.
-        -apply mops_hb_check_read.
-      
+       apply mops_hb_check_conR; clarify.
+       apply clocks_sim_allreads; clarify.
+       +apply clocks_sim_acq; clarify.
+       +apply mops_hb_check_read.
     }
     {(*WAW*)
-      exploit store_handler_race_waw_spec.
+      exploit store_handler_race_waw_spec'.
       { eauto. }
       { eauto. }
       { instantiate (2 := map (clock_of s_good t0) (rev (interval 0 zt))).
@@ -13665,26 +13783,45 @@ Proof.
           rewrite (map_nth_error _ _ _ Hnth) in Hj2'; clarify.
         apply Hclock; omega. 
       }
-      rewrite plus_0_r; intro Hstore.
-      instantiate(1:=t0) in Hstore.
-      instantiate(1:=G2_good) in Hstore. instantiate(1:=x) in Hstore. 
-      instantiate(1:= l') in Hstore.
-      instantiate(1:=[Store (x, o) e; Unlock (X' + x)] ++ instrument rest t0) in Hstore.
-      instantiate(1:=P0') in Hstore.
-      rewrite <- app_assoc. unfold store_handler in Hstore.
-      rewrite map_length, rev_length, interval_length, <- minus_n_O in Hstore.
-      simpl in Hstore. simpl.
+      { eauto. }
+      intros (c & Pgood & Hc & HPgood & Hexecs & Hexec).
+      rewrite plus_0_r in Hexecs. 
+      instantiate(1:=t0) in Hexecs.
+      instantiate(1:=G2_good) in Hexecs. instantiate(1:=x) in Hexecs. 
+      instantiate(1:= l') in Hexecs.
+      instantiate(1:=[Store (x, o) e; Unlock (X' + x)] ++ instrument rest t0) in Hexecs.
+      instantiate(1:=P0') in Hexecs.
+      rewrite <- app_assoc. unfold store_handler in Hexecs.
+      rewrite map_length, rev_length, interval_length, <- minus_n_O in Hexecs.
+      simpl in Hexecs. simpl.
       rewrite <- app_assoc in Hexec_starP2good.
-      do 6 eexists. split;[|split;[|split;[|split]]]; eauto.
       destruct Ht as (Ht1 & Ht2). rewrite Forall_app in Ht2.
       inversion Ht2 as (Ht21  & Ht22). inversion Ht22.
-      rewrite app_assoc, split_app.
-     apply mops_hb_check_con; clarify.
-        - apply clocks_sim_acq; clarify.
-        - apply can_arw_SC; specialize(Hs_x (m0++m2) H22); clarify. 
+      do 10 eexists. split;[|split;[|split;[|split;[|split;[|split]]]]]; eauto.
+      -rewrite HPgood.
+       rewrite plus_0_r, map_length, rev_length, interval_length, <- minus_n_O in *.
+       apply Forall2_app.
+       +apply sim_suffix; auto.
+       +apply Forall2_cons; clarify.
+        *exists (S (3*c +2)). split.
+         { repeat rewrite <- app_assoc. repeat rewrite app_length, hb_check_len. simpl.
+           omega. }
+         { simpl. repeat rewrite <- app_assoc. rewrite <- skipn_skipn.
+           rewrite skipn_app'; auto.
+           -assert((c + (c + (c + 0)))=3*c) as H3c by omega.
+            rewrite H3c. rewrite skipn_hb_check.
+            +assert (zt -c = S (zt -c -1)) as Hztc by omega.
+             rewrite Hztc. clarify. rewrite <- minus_n_O. auto.
+            +omega.
+           -rewrite hb_check_len. omega. }
+        *apply sim_suffix; auto.
+      -clarify. rewrite app_assoc, split_app. rewrite app_nil_r.
+       apply mops_hb_check_con; clarify.
+       +apply clocks_sim_acq; clarify.
+       +apply can_arw_SC; specialize(Hs_x (m0++m2) H22); clarify. 
      }
     {(*both WAW&WAR, equilvalent to WAW*)
-      exploit store_handler_race_waw_spec.
+      exploit store_handler_race_waw_spec'.
       { eauto. }
       { eauto. }
       { instantiate (2 := map (clock_of s_good t0) (rev (interval 0 zt))).
@@ -13715,23 +13852,42 @@ Proof.
           rewrite (map_nth_error _ _ _ Hnth) in Hj2'; clarify.
         apply Hclock; omega. 
       }
-      rewrite plus_0_r; intro Hstore.
-      instantiate(1:=t0) in Hstore.
-      instantiate(1:=G2_good) in Hstore. instantiate(1:=x) in Hstore. 
-      instantiate(1:= l') in Hstore.
-      instantiate(1:=[Store (x, o) e; Unlock (X' + x)] ++ instrument rest t0) in Hstore.
-      instantiate(1:=P0') in Hstore.
-      rewrite <- app_assoc. unfold store_handler in Hstore.
-      rewrite map_length, rev_length, interval_length, <- minus_n_O in Hstore.
-      simpl in Hstore. simpl.
+      { eauto. }
+      intros (c & Pgood & Hc & HPgood & Hexecs & Hexec).
+      rewrite plus_0_r in Hexecs. 
+      instantiate(1:=t0) in Hexecs.
+      instantiate(1:=G2_good) in Hexecs. instantiate(1:=x) in Hexecs. 
+      instantiate(1:= l') in Hexecs.
+      instantiate(1:=[Store (x, o) e; Unlock (X' + x)] ++ instrument rest t0) in Hexecs.
+      instantiate(1:=P0') in Hexecs.
+      rewrite <- app_assoc. unfold store_handler in Hexecs.
+      rewrite map_length, rev_length, interval_length, <- minus_n_O in Hexecs.
+      simpl in Hexecs. simpl.
       rewrite <- app_assoc in Hexec_starP2good.
-      do 6 eexists. split;[|split;[|split;[|split]]]; eauto.
       destruct Ht as (Ht1 & Ht2). rewrite Forall_app in Ht2.
       inversion Ht2 as (Ht21  & Ht22). inversion Ht22.
-      rewrite app_assoc, split_app.
-      apply mops_hb_check_con; clarify.
-      - apply clocks_sim_acq; clarify.
-      - apply can_arw_SC; specialize(Hs_x (m0++m2) H22); clarify. 
+      do 10 eexists. split;[|split;[|split;[|split;[|split;[|split]]]]]; eauto.
+      -rewrite HPgood.
+       rewrite plus_0_r, map_length, rev_length, interval_length, <- minus_n_O in *.
+       apply Forall2_app.
+       +apply sim_suffix; auto.
+       +apply Forall2_cons; clarify.
+        *exists (S (3*c +2)). split.
+         { repeat rewrite <- app_assoc. repeat rewrite app_length, hb_check_len. simpl.
+           omega. }
+         { simpl. repeat rewrite <- app_assoc. rewrite <- skipn_skipn.
+           rewrite skipn_app'; auto.
+           -assert((c + (c + (c + 0)))=3*c) as H3c by omega.
+            rewrite H3c. rewrite skipn_hb_check.
+            +assert (zt -c = S (zt -c -1)) as Hztc by omega.
+             rewrite Hztc. clarify. rewrite <- minus_n_O. auto.
+            +omega.
+           -rewrite hb_check_len. omega. }
+        *apply sim_suffix; auto.
+      -clarify. rewrite app_assoc, split_app. rewrite app_nil_r.
+       apply mops_hb_check_con; clarify.
+       +apply clocks_sim_acq; clarify.
+       +apply can_arw_SC; specialize(Hs_x (m0++m2) H22); clarify. 
      }
     - destruct s_good as (((vc, vl), vr), vw); exploit Hrace; [|clarify].
       econstructor; [constructor; auto | apply ss_refl].
