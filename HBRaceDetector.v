@@ -32,7 +32,6 @@ Lemma move_spec : forall src tgt i j tmp P P1 P2 G t rest v
             (events_move src tgt t) (mops_move (src, i) (tgt, j) t v)
     (Some (P1 ++ (t, rest) :: P2)) (upd_env G t tmp v).
 Proof.
-    
   intros. 
   eapply exec_step'.
   - apply exec_load.
@@ -750,8 +749,16 @@ Qed.
 Class metadata := { C : var; L : var; R : var; W : var; X : var;
   zt : nat; zl : nat; zv : nat; tmp1 : local; tmp2 : local;
   Htmp : tmp1 <> tmp2;
-  Hnonoverlap : forall t l x,   t < zt -> l < zl -> x < zv -> 
-    C+t <> X+x /\ R+t <> X+x /\ W + t<> X+x /\ L+l <> X+x }.
+  Hmetalocs_disjoint_CX: forall t x, (t < zt -> x < zv -> C + t <> X + x);
+  Hmetalocs_disjoint_RX: forall z x,   (z < zv -> x < zv -> R + z <> X + x);
+  Hmetalocs_disjoint_CR: forall t x, (t < zt -> x < zv -> C + t <> R + x);
+  Hmetalocs_disjoint_CW: forall t x, (t < zt -> x < zv -> C + t <> W + x);
+  Hmetalocs_disjoint_LR: forall l x, (l < zl -> x < zv -> L +l  <> R + x);
+  Hmetalocs_disjoint_LW: forall l x, (l < zl -> x < zv -> L + l <> W + x);
+  Hmetalocs_disjoint_WX: forall y x,  (y < zv -> x < zv -> W + y <> X + x);
+  Hmetalocs_disjoint_WR: forall y x, (y < zv -> x < zv -> W + y <> R + x);
+  Hmetalocs_disjoint_LX: forall l x,  (l < zl -> x < zv -> L + l <> X + x);
+  Hmetalocs_disjoint_CL: forall l t,  (l < zl -> t < zt -> C + t <> L + l) }.
 
 Section Instrumentation.
 
@@ -1221,6 +1228,12 @@ Proof.
   rewrite lower_app in Hcon; eapply consistent_app; eauto.
 Qed.
 
+Lemma consistent_drop : forall m c1 c2, consistent (m ++ [c1; c2]) ->
+  consistent (m ++ [c1]).
+Proof.
+  intros; eapply consistent_app_SC; rewrite <- app_assoc; simpl; eauto.
+Qed.
+
 Lemma loc_valid_SC : forall m c1 c2 (Hindep : loc_of c1 <> loc_of c2)
   (Hc1 : prog_op c1) (Hc2 : prog_op c2),
   consistent (m ++ [c1; c2]) <->
@@ -1462,7 +1475,8 @@ Fixpoint safe_instr (i : instr) :=
   | Store p _ => ~meta_loc p /\ fst p < zv
   | Lock m => ~meta_loc (m, 0) /\ m < zl
   | Unlock m => ~meta_loc (m, 0) /\ m < zl
-  | Spawn u li => u<zt /\ list_safe li
+  | Spawn u li => u < zt /\ list_safe li
+  | Wait u => u < zt
   | _ => True
   end.
 

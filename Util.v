@@ -1040,6 +1040,100 @@ Proof.
     exists (a :: x); repeat eexists; constructor; auto.
 Qed.
 
+Lemma partition_filter : forall A f (l : list A),
+  partition f l = (filter f l, filter (fun x => negb (f x)) l).
+Proof.
+  induction l; clarsimp.
+Qed.
+
+Lemma filter_negb_all : forall A f (l : list A)
+  (Hall : Forall (fun x => f x = false) l),
+  filter (fun x => negb (f x)) l = l.
+Proof.
+  intros; rewrite filter_all; auto.
+  eapply Forall_impl; eauto 2; unfold negb; clarify.
+Qed.
+
+Lemma filter_negb_none : forall A f (l : list A)
+  (Hall : Forall (fun x => f x = true) l),
+  filter (fun x => negb (f x)) l = [].
+Proof.
+  intros; rewrite filter_none; auto.
+  eapply Forall_impl; eauto 2; unfold negb; clarify.
+Qed.
+
+Lemma split_in : forall A (l1 l2 : list A) x, In x (l1 ++ x :: l2).
+Proof. intros; rewrite in_app; clarify. Qed.
+
+Lemma skipn_in : forall A n (l : list A) x, In x (skipn n l) -> In x l.
+Proof.
+  intros; exploit in_nth_error; eauto; clarify.
+  rewrite skipn_nth in *; eapply nth_error_in; eauto.
+Qed.
+
+Lemma Forall2_in1 : forall A P (l1 l2 : list A) x1 (Hall : Forall2 P l1 l2)
+  (Hin : In x1 l1), exists x2, In x2 l2 /\ P x1 x2.
+Proof.
+  intros.
+  exploit in_split; eauto; clarify.
+  exploit Forall2_app_inv_l; eauto; intros (? & ? & ? & Hall' & ?).
+  inversion Hall'; clarify.
+  setoid_rewrite in_app; simpl; eauto.
+Qed.
+
+Lemma Forall2_in2 : forall A P (l1 l2 : list A) x2 (Hall : Forall2 P l1 l2)
+  (Hin : In x2 l2), exists x1, In x1 l1 /\ P x1 x2.
+Proof.
+  intros.
+  exploit in_split; eauto; clarify.
+  exploit Forall2_app_inv_r; eauto; intros (? & ? & ? & Hall' & ?).
+  inversion Hall'; clarify.
+  setoid_rewrite in_app; simpl; eauto.
+Qed.
+
+Lemma list_ext : forall A (l1 l2 : list A)
+  (Hnth : forall n, nth_error l1 n = nth_error l2 n), l1 = l2.
+Proof.
+  induction l1; destruct l2; clarify.
+  - specialize (Hnth 0); clarify.
+  - specialize (Hnth 0); clarify.
+  - exploit IHl1.
+    { intro n; specialize (Hnth (S n)); simpl in Hnth; apply Hnth. }
+    specialize (Hnth 0); clarify.
+Qed.
+
+Lemma le_minus_0 : forall n m, n <= m -> n - m = 0.
+Proof. intros; omega. Qed.
+
+Lemma Forall_firstn : forall A (P : A -> Prop) n l, Forall P l ->
+  Forall P (firstn n l).
+Proof.
+  intros; rewrite <- (firstn_skipn n), Forall_app in H; clarify.
+Qed.
+
+Lemma nth_error_app' : forall A n (l l' : list A) r
+  (Hn : nth_error (l ++ l') n = r),
+  n < length l /\ nth_error l n = r \/
+  n >= length l /\ nth_error l' (n - length l) = r.
+Proof.
+  intros; rewrite nth_error_app in Hn; clarify.
+  right; clarify; omega.
+Qed.
+
+Lemma nth_error_two : forall A n (x y z : A),
+  nth_error [x; y] n = Some z <-> n = 0 /\ z = x \/ n = 1 /\ z = y.
+Proof.
+  destruct n; [split|]; clarify.
+  rewrite nth_error_single; destruct n; simpl; split; clarify.
+Qed.
+
+Lemma rev_filter : forall A (l : list A) f, rev (filter f l) = filter f (rev l).
+Proof.
+  induction l; clarify.
+  rewrite filter_app; simpl.
+  destruct (f a); clarify; rewrite IHl; clarsimp.
+Qed.
+
 Fixpoint find_index A (f : A -> bool) l :=
   match l with
   | [] => None
