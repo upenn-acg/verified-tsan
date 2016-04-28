@@ -21,6 +21,9 @@ Inductive expr : Set :=
 
 Definition ptr := (var * nat)%type.
 
+Instance ptr_dec : EqDec_eq ptr.
+Proof. eq_dec_inst. Qed.
+
 Inductive instr : Set :=
 | Assign (a : local) (e : expr)
 | Load (a : local) (x : ptr)
@@ -32,6 +35,25 @@ Inductive instr : Set :=
 | Assert_le (e1 e2 : expr)
 (*| Nop*).
 
+Instance expr_eq : EqDec_eq expr.
+Proof. eq_dec_inst. Qed.
+
+Lemma instr_eq_dec : forall i j, match j with Spawn _ _ => False | _ => True end
+  -> i = j \/ i <> j.
+Proof.
+  destruct i, j; try solve [right; intro; clarify].
+  - destruct (eq_dec a a0); [|right; intro X; inversion X]; clarify.
+    destruct (eq_dec e e0); [left | right; intro X; inversion X]; clarify.
+  - destruct (eq_dec a a0); [|right; intro X; inversion X]; clarify.
+    destruct (eq_dec x x0); [left | right; intro X; inversion X]; clarify.
+  - destruct (eq_dec x x0); [|right; intro X; inversion X]; clarify.
+    destruct (eq_dec e e0); [left | right; intro X; inversion X]; clarify.
+  - destruct (eq_dec m m0); [left | right; intro X; inversion X]; clarify.
+  - destruct (eq_dec m m0); [left | right; intro X; inversion X]; clarify.
+  - destruct (eq_dec t t0); [left | right; intro X; inversion X]; clarify.
+  - destruct (eq_dec e1 e0); [|right; intro X; inversion X]; clarify.
+    destruct (eq_dec e2 e3); [left | right; intro X; inversion X]; clarify.
+Qed.
 
 Definition prog := list instr.
 
@@ -83,6 +105,22 @@ Section Semantics.
     | ARW _ x _ _ => x
     | Alloc _ b _ => (b, 0)
     | Free _ b => (b, 0)
+    end.
+
+  Definition write_val c :=
+    match c with
+    | Write _ _ v => Some v
+    | ARW _ _ _ v => Some v
+    | _ => None
+    end.
+
+  Definition writesb c p :=
+    match c with
+    | Write _ p' _ => beq p' p
+    | ARW _ p' _ _ => beq p' p
+    | Alloc _ b _ => beq b (fst p)
+    | Free _ b => beq b (fst p)
+    | _ => false
     end.
 
   Definition synchronizes_with c1 c2 := loc_of c1 = loc_of c2 /\
@@ -194,6 +232,29 @@ Section Semantics.
     clarify; eapply exec_step; eauto.
   Qed.
 
+  Lemma exec_star_trans : forall P G P' S G' G'' e1 m1 e2 m2,
+    exec_star (Some P) G e1 m1 (Some P') G' ->
+    exec_star (Some P') G' e2 m2 S G''->
+    exec_star (Some P) G (e1++e2) (m1++m2) S G''.
+  Proof.
+    intros ?????????? Hexec; induction Hexec; clarify.
+    eapply exec_step'; eauto; clarsimp.
+  Qed.
+
+  Lemma exec_step_inv : forall P G t lo lc P' G' rd mops
+    (Hexec : exec_star (Some P) G lo lc (Some P') G') o c P'' G''
+    (Hexec' : exec P' G' t o c P'' G'')
+    (Hrd : rd = lo ++ opt_to_list o)
+    (Hmops : mops = lc ++ opt_to_list c),
+    exec_star (Some P) G rd mops P'' G''.
+  Proof.
+    clarify; eapply exec_star_trans; eauto.
+    eapply exec_step'; eauto.
+    - apply exec_refl.
+    - rewrite app_nil_r; auto.
+    - rewrite app_nil_r; auto.
+  Qed.
+
   Definition distinct (P : state) := NoDup (map fst P).
 
   Lemma distinct_init : forall P, distinct (init_state P).
@@ -262,3 +323,80 @@ End Semantics.
 
 Notation Acq t x := (ARW t%nat (x, 0) 0 (S t)).
 Notation Rel t x := (ARW t%nat (x, 0) (S t) 0).
+
+(* Proper nested recursion (fold) for instr. *)
+Fixpoint instr_rect' (P : instr -> Type) (Q : list instr -> Type)
+  (f1 : forall a e, P (Assign a e))
+  (f2 : forall a x, P (Load a x)) (f3 : forall x e, P (Store x e))
+  (f4 : forall m, P (Lock m)) (f5 : forall m, P (Unlock m))
+  (f6 : forall u, P (Wait u)) (f7 : forall e1 e2, P (Assert_le e1 e2))
+  (f : forall u li, Q li -> P (Spawn u li)) (g : Q nil)
+  (h : forall i li, P i -> Q li -> Q (i :: li)) (i : instr) :=
+  match i as i0 return (P i0) with
+    | Assign a e => f1 a e
+    | Load a x => f2 a x
+    | Store x e => f3 x e
+    | Lock m => f4 m
+    | Unlock m => f5 m
+    | Spawn u li => f u li (list_rect Q g
+        (fun u r => h u r (instr_rect' P Q f1 f2 f3 f4 f5 f6 f7 f g h u)) li)
+    | Wait u => f6 u
+    | Assert_le e1 e2 => f7 e1 e2
+  end.
+
+Notation instr_rect'' P Q base := (instr_rect' P Q
+  (fun a e => base (Assign a e)) (fun a x => base (Load a x))
+  (fun x e => base (Store x e)) (fun m => base (Lock m))
+  (fun m => base (Unlock m)) (fun u => base (Wait u))
+  (fun e1 e2 => base (Assert_le e1 e2))).
+
+Notation instr_list_rect P Q f1 f2 g h := (list_rect Q g
+  (fun u r => h u r (instr_rect'' P Q f1 f2 g h u))).
+
+Definition instr_forall P i := instr_rect'' (fun _ => Prop) _ P
+  (fun u li r => r) True (fun i li r1 r2 => r1 /\ r2) i.
+
+Lemma instr_forall_list : forall P u li, instr_forall P (Spawn u li) <->
+  Forall (instr_forall P) li.
+Proof.
+  unfold instr_forall; induction li; split; clarify.
+  - constructor; auto.
+    apply IHli; auto.
+  - inversion H; clarify.
+    apply IHli; auto.
+Qed.
+
+Definition state_forall P :=
+  Forall (fun (e : tid * list instr) => Forall (instr_forall P) (snd e)).
+
+Fixpoint instr_ind' (P : instr -> Prop) (Q : list instr -> Prop)
+  (Hbase : forall i, match i with Spawn _ _ => True | _ => P i end)
+  (IHi : forall u li (IHli : Q li), P (Spawn u li)) (Hnil : Q nil)
+  (Hcons : forall i li (IHi : P i) (IHli : Q li), Q (i :: li)) i : P i :=
+  match i as i0 return (P i0) with
+    | Assign a e => Hbase (Assign a e)
+    | Load a x => Hbase (Load a x)
+    | Store x e => Hbase (Store x e)
+    | Lock m => Hbase (Lock m)
+    | Unlock m => Hbase (Unlock m)
+    | Spawn u li => IHi u li (list_rect Q Hnil (fun u r => Hcons u r
+        (instr_ind' P Q Hbase IHi Hnil Hcons u)) li)
+    | Wait u => Hbase (Wait u)
+    | Assert_le e1 e2 => Hbase (Assert_le e1 e2)
+  end.
+
+Lemma distinct_thread : forall P1 P2 t li P1' P2' li'
+  (Hdistinct : distinct (P1 ++ (t, li) :: P2))
+  (Heq : P1 ++ (t, li) :: P2 = P1' ++ (t, li') :: P2'),
+  P1' = P1 /\ P2' = P2 /\ li' = li.
+Proof.
+  intros.
+  generalize (NoDup_inj(x := t) (length (map fst P1)) (length (map fst P1'))
+    Hdistinct); intro Heq'; use Heq'; [use Heq'|].
+  - repeat rewrite map_length in Heq'.
+    exploit app_eq_inv; eauto; clarify.
+  - rewrite Heq, map_app; simpl.
+    apply nth_error_split.
+  - rewrite map_app; simpl.
+    apply nth_error_split.
+Qed.

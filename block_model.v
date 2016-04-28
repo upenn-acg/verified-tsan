@@ -3042,4 +3042,43 @@ Section Simple.
         destruct (r - length m) eqn: Hminus; [clarsimp | omega].
   Qed.
 
+  Lemma read_last : forall (m : list (mem_op block val)) p v (Hm : consistent m)
+    (Hlast : last_op m (Ptr p) (MWrite p v)) v',
+    consistent (m ++ [MRead p v']) <-> v' = v.
+  Proof.
+    split; intro; subst.
+    - destruct Hlast as (i & ? & ?).
+      symmetry; eapply read_last_val; eauto.
+      + rewrite inth_nth_error; apply nth_error_split.
+      + rewrite itake_firstn, firstn_app, firstn_length, minus_diag, app_nil_r;
+          eauto.
+      + rewrite inth_nth_error in *; exploit nth_error_lt; eauto;
+          rewrite nth_error_app; clarify.
+    - induction m using rev_ind.
+      + generalize (last_nil Hlast); clarify.
+      + generalize (consistent_app _ _ Hm); clarify.
+        rewrite <- app_assoc.
+        rewrite last_op_app in Hlast; destruct Hlast as [Hlast | [Hlast Hx]].
+        * destruct Hlast as (i & ?); destruct i; clarsimp.
+          apply read_written; auto.
+        * inversion Hx; clarify.
+          destruct H2.
+          { destruct x; clarify.
+            rewrite read_noop_single; auto. }
+          { apply loc_valid; auto. }
+  Qed.
+
+  Lemma last_single : forall a l a',
+    last_op (icons a inil) l a' <->
+    a' = a /\ ~independent (loc_of a) l /\ not_read a = true.
+  Proof.
+    split; clarify.
+    - destruct H as (? & Hlast & ?).
+      destruct x; clarsimp.
+      inversion Hlast; clarify.
+    - exists 0; clarify.
+      econstructor; simpl; eauto 2; clarify.
+      destruct j; clarsimp.
+  Qed.
+
 End Simple.
