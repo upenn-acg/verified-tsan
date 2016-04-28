@@ -1,4 +1,4 @@
-MODULES := CoqEqDec Coqlib Util VectorClocks block_model conc_model Lang HBRaceDetector HBSim Programs TSan
+MODULES := CoqEqDec Coqlib Util VectorClocks block_model conc_model Lang HBRaceDetector HBSim SCFacts ExecFacts HBReorder
 VS := $(MODULES:%=%.v)
 
 #COQFLAGS := -R /cygdrive/c/Users/William/Documents/GitHub/compcomp compcert

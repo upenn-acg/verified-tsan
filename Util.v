@@ -228,6 +228,30 @@ Hint Resolve lt_0_Sn lt_n_S lt_irrefl.
 Lemma nth_error_single : forall A (x : A) i,
   nth_error [x] i = match i with 0 => Some x | _ => None end.
 Proof. destruct i; clarsimp. Qed.
+Hint Rewrite nth_error_single : util.
+
+Lemma Forall2_nth : forall A (l1 l2 : list A) P (Hforall : Forall2 P l1 l2)
+  i x (Hi : nth_error l1 i = Some x),
+  exists x', nth_error l2 i = Some x' /\ P x x'.
+Proof.
+  induction l1; clarsimp.
+  inversion Hforall; clarify.
+  destruct i; clarify; eauto.
+Qed.
+
+Lemma removelast_length : forall A (l : list A) (Hnnil : l <> []),
+  length (removelast l) = length l - 1.
+Proof.
+  induction l; auto.
+  intro; simpl.
+  destruct (nil_dec l); clarify.
+Qed.
+
+Lemma beq_negb : forall A (A_eq : EqDec_eq A) B (a : A) (b c : B),
+  (if negb (beq a a) then b else c) = c.
+Proof.
+  unfold negb, beq; clarify.
+Qed.
 
 Ltac use H := lapply H; clear H; [intro H | clarify].
 
@@ -383,6 +407,18 @@ Proof.
   - specialize (IHl _ _ H); omega.
 Qed.
 
+Lemma removelast_nth : forall A (l : list A) i x,
+  nth_error (removelast l) i = Some x <->
+  nth_error l i = Some x /\ i < length l - 1.
+Proof.
+  intros; destruct (nil_dec l); clarify.
+  { split; clarsimp. }
+  rewrite (app_removelast_last x n) at 2; rewrite nth_error_app.
+  rewrite removelast_length; auto.
+  destruct (lt_dec i (length l - 1)); split; clarify.
+  exploit nth_error_lt; eauto; rewrite removelast_length; clarify.
+Qed.
+
 Lemma skipn_nth : forall A n (l : list A) i, nth_error (skipn n l) i =
   nth_error l (i + n).
 Proof.
@@ -418,6 +454,13 @@ Qed.
 Hint Rewrite firstn_app skipn_app : list.
 
 Hint Rewrite plus_0_r : util.
+
+Lemma skipn_app' : forall A n (l1 l2 : list A) (Hn : n <= length l1),
+  skipn n (l1 ++ l2) = skipn n l1 ++ l2.
+Proof.
+  intros; rewrite skipn_app.
+  rewrite <- Nat.sub_0_le in Hn; rewrite Hn; auto.
+Qed.
 
 Lemma firstn_firstn : forall A n n' (l : list A), firstn n (firstn n' l) =
   firstn (min n n') l.
@@ -1065,11 +1108,92 @@ Qed.
 Lemma split_in : forall A (l1 l2 : list A) x, In x (l1 ++ x :: l2).
 Proof. intros; rewrite in_app; clarify. Qed.
 
+Lemma firstn_in : forall A n (l : list A) x, In x (firstn n l) -> In x l.
+Proof.
+  induction n; clarify.
+  destruct l; clarify.
+Qed.
+
 Lemma skipn_in : forall A n (l : list A) x, In x (skipn n l) -> In x l.
 Proof.
   intros; exploit in_nth_error; eauto; clarify.
   rewrite skipn_nth in *; eapply nth_error_in; eauto.
 Qed.
+
+Lemma removelast_in : forall A (l : list A) x, In x (removelast l) -> In x l.
+Proof. induction l; clarify. Qed.
+
+Lemma tl_in : forall A (l : list A) x, In x (tl l) -> In x l.
+Proof. destruct l; clarify. Qed.
+
+Lemma Forall_and : forall A P1 P2 (l : list A),
+  Forall (fun x => P1 x /\ P2 x) l <-> Forall P1 l /\ Forall P2 l.
+Proof.
+  induction l; split; clarify.
+  - inversion H; rewrite IHl in *; split; constructor; clarify.
+  - inversion H1; inversion H2; constructor; auto; rewrite IHl; auto.
+Qed.  
+
+Lemma skipn_all_iff : forall A n (l : list A), skipn n l = [] <-> length l <= n.
+Proof.
+  split; try apply skipn_all.
+  revert l; induction n; clarify.
+  destruct l; clarify.
+  apply le_n_S; auto.
+Qed.
+
+Lemma length_firstn : forall A n (l : list A), n <= length l ->
+  length (firstn n l) = n.
+Proof.
+  intros.
+  rewrite List.firstn_length, Min.min_l; auto.
+Qed.
+
+Lemma app_eq_skip : forall A (l1 l2 l3 : list A), l1 ++ l2 = l3 ->
+  l2 = skipn (length l1) l3.
+Proof.
+  intros.
+  assert (length l1 <= length l3).
+  { rewrite <- H, app_length; omega. }
+  rewrite <- (firstn_skipn (length l1) l3) in H.
+  exploit app_eq_inv; try apply H; clarify.
+  rewrite length_firstn; auto.
+Qed.  
+
+Transparent minus.
+Lemma removelast_firstn_eq : forall A (l : list A),
+  removelast l = firstn (length l - 1) l.
+Proof.
+  induction l; clarify.
+Qed.
+
+Lemma removelast_2 : forall A (x y : A) l, removelast (x :: y :: l) =
+  x :: removelast (y :: l).
+Proof. auto. Qed.
+
+Lemma last_nil : forall A (d : A), last [] d = d.
+Proof. auto. Qed.
+
+Lemma match_false : forall A (a : option A) P,
+  match a with Some x => P x | None => False end <->
+  exists b, a = Some b /\ P b.
+Proof.
+  destruct a; split; clarify; eauto.
+Qed.
+
+Lemma skipn_S_tl : forall A (l : list A) n, skipn (S n) l = skipn n (tl l).
+Proof.
+  intros; rewrite <- Nat.add_1_l, <- skipn_skipn; auto.
+Qed.
+
+Lemma tl_app : forall A (l1 l2 : list A), l1 <> [] ->
+  tl (l1 ++ l2) = tl l1 ++ l2.
+Proof.
+  destruct l1; clarify.
+Qed.
+
+Lemma conjI1 : forall (A B : Prop), A -> (A -> B) -> A /\ B.
+Proof. auto. Qed.
 
 Lemma Forall2_in1 : forall A P (l1 l2 : list A) x1 (Hall : Forall2 P l1 l2)
   (Hin : In x1 l1), exists x2, In x2 l2 /\ P x1 x2.
@@ -1389,6 +1513,37 @@ Proof.
   intros; rewrite removelast_app; clarsimp.
 Qed.
         
+Lemma last_cons' : forall A (l : list A) x d, last (x :: l) d = last l x.
+Proof.
+  intros; destruct (nil_dec l).
+  - subst; simpl; auto.
+  - simpl; destruct l; auto.
+    rewrite (app_removelast_last d), last_snoc, last_snoc; auto.
+Qed.
+
+Lemma last_def : forall A (l : list A) d d', l <> [] -> last l d = last l d'.
+Proof.
+  intros; rewrite (app_removelast_last d H); repeat rewrite last_snoc; auto.
+Qed.
+
+Lemma list_cons_plus_assoc: forall (T:Type) (x:T) (x0 y: list T),
+ (x::x0)++y=x::(x0++y).
+Proof.
+  intros.
+  auto.
+Qed.
+
+Opaque last.
+Lemma last_app : forall A (l1 l2 : list A) d, last (l1 ++ l2) d =
+  match l2 with [] => last l1 d | _ => last l2 d end.
+Proof.
+  induction l2 using rev_ind.
+  - rewrite app_nil_r; auto.
+  - intro; rewrite app_assoc, last_snoc.
+    destruct l2; clarify.
+    rewrite <- list_cons_plus_assoc, last_snoc; auto.
+Qed.  
+
 Lemma Permutation_NoDup : forall A (l l' : list A) (Hdistinct : NoDup l)
   (Hperm : Permutation l l'), NoDup l'.
 Proof.
@@ -1415,6 +1570,91 @@ Qed.
 Corollary interval_perm_in : forall i j l
   (Hperm : Permutation (interval i j) l) k (Hk : i <= k < j), In k l.
 Proof. intros; rewrite interval_perm_nth; eauto. Qed.
+
+Lemma NoDup_id_inj : forall A B l (x y : A * B) (Hids : NoDup (map fst l))
+ (Hx : In x l) (Hy : In y l) (Heq : fst x = fst y), x = y.
+Proof.
+  intros.
+  exploit in_split; eauto; clarify.
+  rewrite map_app in Hids; clarify.
+  generalize (NoDup_remove_2 _ _ _ Hids); rewrite in_app in *; intro H.
+  destruct Hx; clarify; contradiction H; repeat rewrite in_map_iff; eauto.
+Qed.
+
+Lemma cons_neq : forall A (x : A) l, x :: l <> l.
+Proof.
+  repeat intro.
+  assert (length (x :: l) = length l) by (rewrite H; auto); clarify.
+  exploit n_Sn; eauto.
+Qed.
+
+Lemma skip_cons_neq : forall A (x : A) l n, x :: l <> skipn n l.
+Proof.
+  repeat intro.
+  assert (length (x :: l) = length (skipn n l)) by (rewrite H; auto).
+  rewrite skipn_length in *; clarify; omega.
+Qed.
+
+Lemma skipn_cons : forall A l (x y : A) l' n, skipn n (x :: l) = y :: l' ->
+  skipn n l = l'.
+Proof.
+  induction l; clarify.
+  - destruct n; simpl in *; [|rewrite skipn_nil in *]; clarify.
+  - destruct n; clarify; eauto.
+Qed.
+
+Lemma app_neq : forall A (l l' : list A) a, a :: l ++ l' <> l'.
+Proof.
+  repeat intro.
+  assert (length (a :: l ++ l') = length l') by (rewrite H; auto).
+  simpl in *; rewrite app_length in *; omega.
+Qed.
+
+Transparent last.
+Lemma last_cons : forall A (x d : A) l (Hnonnil : l <> []), last (x :: l) d =
+  last l d.
+Proof. clarify. Qed.
+
+Opaque last.
+Lemma skipn_last : forall A (l l' : list A) x d n,
+  skipn n (l ++ l') = x :: l' -> n = length l - 1 /\ x = last l d.
+Proof.
+  induction l; clarify.
+  { exploit skip_cons_neq; eauto; clarify. }
+  destruct (nil_dec l).
+  - subst; destruct n; simpl in *.
+    + clarify.
+    + exploit skip_cons_neq; eauto; clarify.
+  - rewrite last_cons; auto.
+    destruct n; clarify.
+    { destruct l; clarify.
+      exploit app_neq; eauto; clarify. }
+    exploit IHl; eauto; clarify.
+    split; [|eauto].
+    assert (length l <> 0) by (destruct l; clarify); omega.
+Qed.    
+
+Lemma NoDup_filter : forall A f (l : list A) (Hnodup : NoDup l),
+  NoDup (filter f l).
+Proof.
+  induction l; clarify.
+  inversion Hnodup; clarify.
+  constructor; auto.
+  rewrite filter_In; intro; clarify.
+Qed.
+
+Lemma app_nil_inv : forall A (l1 l2 : list A), l1 ++ l2 = l2 -> l1 = []. 
+Proof.
+  intros; assert (length (l1 ++ l2) = length l2) by (rewrite H; auto).
+  rewrite app_length in *; destruct l1; clarify; omega.
+Qed.
+
+Lemma cons_app_neq : forall A (x : A) l1 l2, x :: l1 ++ l2 <> l2.
+Proof.
+  repeat intro.
+  assert (length (x :: l1 ++ l2) = length l2) by (rewrite H; auto).
+  simpl in *; rewrite app_length in *; omega.
+Qed.
 
 (* Potentially infinite lists - better than streams? *)
 Section IList.
