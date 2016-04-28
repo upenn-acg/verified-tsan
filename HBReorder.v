@@ -11,9 +11,9 @@ Set Implicit Arguments.
 
 Section Reordering.
 
-Context (ML : @Memory_Layout var nat _).
+Context {ML : @Memory_Layout var nat _}.
 
-Context (meta : metadata).
+Context {meta : metadata}.
 
 Hint Resolve zt_non_zero.
 
