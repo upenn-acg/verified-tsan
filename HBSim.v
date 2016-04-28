@@ -4455,7 +4455,16 @@ Lemma first_gt_decompose: forall vs1 vs2 v1 v2 ,first_gt vs1 vs2 = Some (v1, v2)
                                                   length pre_vs1 = length pre_vs2 /\
                                                   first_gt pre_vs1 pre_vs2 = None.
 Proof.
-  admit.
+  clarify.
+  generalize dependent vs2.
+  induction vs1; clarify.
+  destruct vs2; clarify.
+  destruct (a <=? n) eqn: Hle; clarify.
+  -specialize(IHvs1 vs2 H).
+   destruct IHvs1 as (pre_vs1 & pre_vs2 & suf_vs1 & suf_vs2 & Hnb).
+   destruct Hnb as (Hvs1 & Hvs2 & Hlen & Hfg_pre).
+   exists (a::pre_vs1), (n::pre_vs2), suf_vs1, suf_vs2. clarify.
+  -exists [],[],vs1, vs2. clarify.
 Qed.
 
 Lemma first_gt_ignore: forall vs1 vs2 pre_vs1 pre_vs2 suf_vs1 suf_vs2
