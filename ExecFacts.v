@@ -902,17 +902,18 @@ Qed.
 Lemma exec_t_steps : forall P G lo lc P' G'
   (Hexec : exec_star P G lo lc (Some P') G') t,
   exists n lo1 lc1 P1 G1 lo2 lc2, exec_star_minus t P G lo1 lc1 (Some P1) G1 /\
-    t_steps P1 G1 t n lo2 lc2 (Some P') G'.
+    t_steps P1 G1 t n lo2 lc2 (Some P') G' /\
+    lo = lo1 ++ lo2 /\ lc = lc1 ++ lc2.
 Proof.
   intros; remember (Some P') as P2; generalize dependent P'; induction Hexec;
     clarify.
-  - exists 0; repeat eexists; apply exec_refl_m.
+  - exists 0; repeat eexists; try apply exec_refl_m; auto.
   - specialize (IHHexec _ eq_refl); destruct IHHexec as (n & ?); clarify.
     destruct (eq_dec t0 t).
-    + subst; exists (S n); repeat eexists; eauto; [apply exec_refl_m|].
-      simpl; eauto.
-    + repeat eexists; eauto.
-      eapply exec_step_m; eauto.
+    + subst; exists (S n); do 7 eexists; [apply exec_refl_m | clarify].
+      repeat eexists; eauto; simpl; eauto.
+    + do 8 eexists; [eapply exec_step_m; eauto|].
+      split; eauto; clarsimp.
 Qed.
 
 Lemma t_steps_extend' : forall P' G' lo lc P'' G''
@@ -1318,6 +1319,50 @@ Proof.
     + inversion Hminus; clarify.
       inversion H; clarify.
       right; simpl; repeat eexists; eauto.
+Qed.
+
+Lemma t_steps_mem_Some : forall t n P G lo lc P' G' (Hdistinct : distinct P)
+  (Hsteps : t_steps P G t n lo lc (Some P') G') li (Hin : In (t, li) P),
+  exists vs vs' cond, to_mem' (G t) t (firstn n li) vs =
+    Some (filter (fun c => beq (thread_of c) t) lc, G' t, vs', cond) /\
+    Forall id cond.
+Proof.
+  induction n; intros.
+  { exists [], [], []; clarify. }
+  simpl in Hsteps.
+  destruct Hsteps as (? & c & P1 & ? & ? & ? & ? & P2 & ? & ? & ? & Hminus & ?);
+    clarify.
+  exploit exec_result; eauto; intros (? & i & rest & ? & v & ?); clarify.
+  assert (li = i :: rest).
+  { exploit distinct_in; [eauto | eauto | apply split_in | clarify]. }
+  assert (match li with [] => [] | a :: l => a :: firstn n l end =
+    [i] ++ firstn n rest) as Heq by clarify; subst; rewrite Heq.
+  setoid_rewrite to_mem'_app.
+  assert (exists lcr, lc = opt_to_list c ++ lcr) as (lcr & ?).
+  { destruct P2; clarify; eauto. }
+  subst.
+  assert (exists vs vs' cond, to_mem' match instr_result t i (G t) v with
+    Some (_, _, _, u, _) => upd_env' G t u t | None => G t end t (firstn n rest)
+    vs = Some (filter (fun c => beq (thread_of c) t) lcr, G' t, vs', cond) /\
+    Forall id cond) as (vs & vs' & cond & Hm2 & ?).
+  { exploit exec_minus_ops; eauto; intro Hops'.
+    destruct P1; [|inversion Hminus]; clarify.
+    exploit distinct_step; eauto; intro.
+    destruct (instr_result t i (G t) v) as [((((?, ?), ?), ?), ?)|]; clarify.
+    destruct P2; clarify.
+    exploit exec_other_threads; try apply Hminus; try apply split_in; intro.
+    exploit distinct_steps; try eapply exec_minus_exec; eauto; intro.
+    exploit IHn; eauto.
+    intros (vs & vs' & cond & Heq); exists vs, vs', cond.
+    erewrite exec_minus_env in Heq; eauto.
+    exploit app_inv_head; eauto; clarify.
+    rewrite filter_app, (filter_none _ Hops'); auto. }
+  exists (match i with Load _ _ => v :: vs | _ => vs end), vs',
+    (match i with Assert_le e1 e2 => (eval (G t) e1 <= eval (G t) e2) :: cond
+     | _ => cond end); destruct i; clarify.
+  - unfold upd_env in Hm2; rewrite upd_new in Hm2; rewrite Hm2; auto.
+  - unfold upd_env in Hm2; rewrite upd_new in Hm2; rewrite Hm2; auto.
+  - inversion Hminus; clarify.
 Qed.
 
 Lemma to_mem_conds : forall t li G vs lc G' vs'
