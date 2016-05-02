@@ -1298,46 +1298,6 @@ Proof.
   - repeat rewrite <- app_assoc; eapply iexec_step; eauto.
 Qed.
 
-Definition mostly_ext P m0 m1 m2 := forall c (Hprog : prog_op c)
-  (Hlock : locks (fst (loc_of c)) P -> exists t, c = Acq t (fst (loc_of c))),
-  consistent (m0 ++ m1 ++ [c]) <-> consistent (m0 ++ m2 ++ [c]).
-
-Lemma mostly_ext_step : forall P G lo lc P' G' t o c P'' G'' m0 m1 m2
-  (Hroot : exec_star (Some P) G lo lc (Some P') G')
-  (Hstep : exec P' G' t o (Some c) P'' G'') (Hext : mostly_ext P m0 m1 m2)
-  (Hlock : locks (fst (loc_of c)) P -> exists t, c = Acq t (fst (loc_of c))),
-  mostly_ext P m0 (m1 ++ [c]) (m2 ++ [c]).
-Proof.
-  repeat intro.
-  repeat rewrite <- app_assoc; simpl; do 2 rewrite app_assoc.
-  exploit prog_step; eauto; simpl; intro Hprog'; inversion Hprog'; subst.
-  generalize (Hext c), (Hext c0); intros Hc Hc0; clarify.
-  destruct (eq_dec (loc_of c0) (loc_of c)).
-  - destruct (writesb c (loc_of c)) eqn: Hwrite.
-    + exploit writesb_val; eauto; intros (v & Hv).
-      split; intro; eapply consistent_next_write; eauto.
-      * do 2 rewrite app_assoc in Hc; rewrite <- Hc; eapply consistent_drop;
-          eauto.
-      * rewrite consistent_next_write_iff in H; eauto.
-        eapply consistent_drop; eauto.
-      * do 2 rewrite app_assoc in Hc; rewrite Hc; eapply consistent_drop;
-          eauto.
-      * rewrite consistent_next_write_iff in H; eauto.
-        eapply consistent_drop; eauto.
-    + exploit no_write_read; eauto; intros (t0 & ? & v & ?); clarify.
-      split; intro.
-      * exploit consistent_drop; eauto; intro.
-        rewrite read_noop_SC; rewrite read_noop_SC in H; auto.
-        rewrite <- app_assoc in *; rewrite <- Hc0; auto.
-        { rewrite <- app_assoc in *; rewrite <- Hc; auto. }
-      * exploit consistent_drop; eauto; intro.
-        rewrite read_noop_SC; rewrite read_noop_SC in H; auto.
-        rewrite <- app_assoc in *; rewrite Hc0; auto.
-        { rewrite <- app_assoc in *; rewrite Hc; auto. }
-  - do 2 (rewrite loc_valid_SC; auto).
-    repeat rewrite <- app_assoc; rewrite Hc, Hc0; reflexivity.
-Qed.
-
 Corollary instrument_indep_n' : forall P0 G0 t o c P G lo lc P1 G1 P2 G2 i rest
   (Hdistinct : distinct P0) P0' (Hsim : state_sim P0' P0)
   (Hsafe : safe_locs P0') (Hfresh : fresh_tmps P0')

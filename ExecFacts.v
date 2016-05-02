@@ -72,7 +72,7 @@ Lemma exec_result : forall P G t o c P' G'
     | Some (th, o1, c1, u1, f) => G' = match u1 with Some (a, v) =>
         upd_env G t a v | None => G end /\ o1 = o /\ c1 = c /\
         P' = Some (P1 ++ (t, li) :: opt_to_list th ++ P2) /\ f P
-    | None => G' = G /\ P' = None
+    | None => G' = G /\ P' = None /\ o = None /\ c = None
     end.
 Proof.
   intros; inversion Hexec; clarify; do 4 eexists; try (exists v);
@@ -178,7 +178,7 @@ Lemma exec_next : forall P G t o c P' G' (Hexec : exec P G t o c P' G')
   | Some (th, o1, c1, u1, f) => G' = match u1 with Some (a, v) =>
       upd_env G t a v | None => G end /\ o1 = o /\ c1 = c /\
       P' = Some (Pa ++ (t, li) :: opt_to_list th ++ Pb) /\ f P
-  | None => G' = G /\ P' = None end.
+  | None => G' = G /\ P' = None /\ o = None /\ c = None end.
 Proof.
   intros; exploit exec_result; eauto; intros (? & i' & ? & ? & v & ?).
   clarify.
@@ -1159,18 +1159,17 @@ Proof.
     repeat rewrite <- app_assoc; auto.
 Qed.
 
-(* This could be incorporated into the above and into exec_result. *)
-Lemma exec_next' : forall P G t o c P' G' (Hexec : exec P G t o c P' G')
-  (Hdistinct : distinct P) Pa Pb i li (Hin : P = Pa ++ (t, i :: li) :: Pb),
-  exists v, match instr_result t i (G t) v with
-  | Some (th, o1, c1, u1, f) => G' = match u1 with Some (a, v) =>
-      upd_env G t a v | None => G end /\ o1 = o /\ c1 = c /\
-      P' = Some (Pa ++ (t, li) :: opt_to_list th ++ Pb) /\ f P
-  | None => G' = G /\ P' = None /\ o = None /\ c = None end.
+Lemma exec_t_rev_inv : forall t P G lo lc P' G'
+  (Ht : exec_star_t t P G lo lc P' G'),
+  P' = P /\ G' = G /\ lo = [] /\ lc = [] \/
+    exists P1 G1 lo1 lc1 o c, exec_star_t t P G lo1 lc1 (Some P1) G1 /\
+      exec P1 G1 t o c P' G' /\ lo = lo1 ++ opt_to_list o /\
+      lc = lc1 ++ opt_to_list c.
 Proof.
-  intros; exploit exec_next; eauto; intros (v & ?); exists v.
-  destruct (instr_result t i (G t) v) eqn: Hi; clarify.
-  inversion Hexec; clarify.
+  intros; induction Ht; clarify.
+  right; destruct IHHt; clarify.
+  - repeat eexists; eauto; try apply exec_refl_t; clarsimp.
+  - repeat eexists; eauto; try eapply exec_step_t; eauto; clarsimp.
 Qed.
 
 Fixpoint to_mem' G t li vs :=
@@ -1501,6 +1500,25 @@ Proof.
     { eapply exec_step; eauto. }
     { rewrite <- app_assoc; auto. }
     { rewrite <- app_assoc; auto. }
+Qed.
+
+Lemma exec_t_env : forall t P G lo lc P' G'
+  (Hsteps : exec_star_t t P G lo lc P' G') t' (Hdiff : t' <> t), G' t' = G t'.
+Proof.
+  intros; induction Hsteps; clarify.
+  exploit exec_result; eauto; intros (? & i & ? & ? & v & ?).
+  destruct (instr_result t i (G t) v) as [((((?, ?), ?), ?), ?)|]; clarify.
+  destruct o3 as [(?, ?)|]; clarify.
+  rewrite IHHsteps; unfold upd_env, upd; clarify.
+Qed.
+
+Lemma exec_star_ops : forall t P G lo lc P' G'
+  (Hexec : exec_star_t t P G lo lc P' G'),
+  Forall (fun c => beq (thread_of c) t = true) lc.
+Proof.
+  intros; induction Hexec; auto.
+  rewrite Forall_app; clarify.
+  eapply exec_ops; eauto.
 Qed.
 
 End Exec.

@@ -412,11 +412,12 @@ Proof.
   split; clarsimp; eauto.
 Qed.
 
-Lemma can_read_unique : forall m p v v' (Hcon : consistent m)
+Lemma can_read_unique : forall m p v v'
   (Hinit : initialized m p) (Hv : can_read m p v) (Hv' : can_read m p v'),
   v' = v.
 Proof.
   unfold can_read; intros.
+  exploit consistent_app_SC; eauto; intro.
   unfold consistent, SC, lower in *.
   rewrite map_app, flatten_app in *; clarify.
   destruct Hinit.
@@ -790,6 +791,87 @@ Proof.
     rewrite Hloc in *; rewrite <- read_written_SC; eauto.
     eapply consistent_app_SC; rewrite <- app_assoc; simpl; eauto.
   - eapply consistent_next_write; eauto.
+Qed.
+
+Lemma can_arw_SC_iff' : forall p m v v' t,
+  consistent (m ++ [ARW t p v v']) <-> can_read m p v /\ can_write m p.
+Proof.
+  intros; rewrite can_arw_SC_iff; split; intro.
+  - unfold can_write in *; split.
+    + eapply can_read_thread'.
+      specialize (H 0); eapply consistent_app_SC; eauto.
+    + intro v1; specialize (H v1); rewrite <- app_assoc in H; simpl in H. 
+      rewrite read_noop_SC in H; auto.
+      eapply consistent_drop; eauto.
+  - eapply can_write_SC; clarify.
+    + apply can_read_thread; auto.
+    + constructor; simpl; auto.
+Qed.
+
+Definition lock_op x a := exists t, a = Acq t x \/ a = Rel t x.
+
+Lemma lock_hold : forall m l t ops (Hinit : initialized m (l, 0))
+  (Hheld : can_read m (l, 0) (S t)) (Hcon : consistent (m ++ ops))
+  (Hprog : Forall prog_op ops) (Hlock : Forall (fun a => loc_of a = (l, 0) ->
+     lock_op l a) ops),
+  can_read (m ++ ops) (l, 0) (S t) \/ In (Rel t l) ops.
+Proof.
+  induction ops using rev_ind; clarsimp.
+  rewrite app_assoc in Hcon; exploit consistent_app_SC; eauto.
+  rewrite Forall_app in *; clarify.
+  inversion Hlock2 as [|?? Hx]; inversion Hprog2; rewrite in_app; clarify.
+  unfold can_read in *.
+  repeat rewrite <- app_assoc in *; simpl.
+  destruct (eq_dec (loc_of x) (l, 0)).
+  - unfold lock_op in Hx; clarify.
+    destruct Hx as [? | ?]; clarify.
+    + rewrite app_assoc, can_arw_SC_iff in Hcon.
+      specialize (Hcon 0); exploit consistent_app_SC; eauto; intro.
+      exploit can_read_thread'; eauto; intro.
+      rewrite app_assoc in IHops.
+      generalize (init_steps Hinit Hprog1); intro.
+      generalize (can_read_unique(m := m ++ ops)(p := (l, 0)) (S t) 0); clarify.
+    + rewrite app_assoc, can_arw_SC_iff in Hcon.
+      specialize (Hcon 0); exploit consistent_app_SC; eauto; intro.
+      exploit can_read_thread'; eauto; intro.
+      rewrite app_assoc in IHops.
+      generalize (init_steps Hinit Hprog1); intro.
+      generalize (can_read_unique(m := m ++ ops)(p := (l, 0)) (S t) (S x0));
+        intro Heq; clarify.
+      inversion Heq; auto.
+  - rewrite app_assoc, loc_valid_SC; clarify.
+    repeat rewrite <- app_assoc in *; clarify.
+Qed.
+
+Corollary lock_hold2 : forall m l t ops
+  (Hcon : consistent (m ++ Acq t l :: ops))
+  (Hprog : Forall prog_op ops) (Hlock : Forall (fun a => loc_of a = (l, 0) ->
+     lock_op l a) ops),
+  can_read (m ++ Acq t l :: ops) (l, 0) (S t) \/ In (Rel t l) ops.
+Proof.
+  intros; rewrite split_app in *; apply lock_hold; auto.
+  - unfold initialized; rewrite lower_app, lower_single; simpl.
+    eexists; rewrite last_op_app; left.
+    exists 1; clarify.
+    econstructor; simpl; eauto.
+    destruct j; clarify.
+    destruct j; clarify.
+    rewrite inth_nil in *; clarify.
+  - apply can_read_arwritten.
+    eapply consistent_app_SC; eauto.
+Qed.
+
+Lemma delay_rel : forall m t l ops (Hcon : consistent (m ++ [Rel t l]))
+  (Hops : Forall (fun a => loc_of a = (l, 0) -> lock_op l a) ops)
+  (Ht : Forall (fun a => thread_of a <> t) ops) (Hcon' : consistent (m ++ ops))
+  (Hprog : Forall prog_op ops) (Hinit : initialized m (l, 0)),
+  consistent (m ++ ops ++ [Rel t l]).
+Proof.
+  intros.
+  rewrite app_assoc; rewrite can_arw_SC_iff' in *; clarify; split.
+  - exploit lock_hold; eauto; clarify.
+    rewrite Forall_forall in Ht; exploit Ht; eauto; contradiction.
+  - apply can_write_SC; auto.
 Qed.
 
 End SC.
