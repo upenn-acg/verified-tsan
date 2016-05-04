@@ -3671,7 +3671,7 @@ Proof.
           -split; auto.
            +rewrite <- app_assoc in Hcon1. setoid_rewrite Hlist_silly in Hcon1. auto.
            +apply can_release_SC; auto.
-            specialize(Hs_x (m0++m2) Hx2). inversion Hs_x; clarify.
+(*            specialize(Hs_x (m0++m2) Hx2). inversion Hs_x; clarify.*)
         }
       * constructor; [|constructor]; auto; intro; contradiction Hx1; clarify.
         unfold meta_loc; clarify. repeat right. omega.
@@ -3831,7 +3831,7 @@ Proof.
            +rewrite Forall_app; auto.
            +split; clarify.
             apply can_release_SC. auto.
-            specialize(Hs_x m Hx2). inversion Hs_x; clarify.
+(*            specialize(Hs_x m Hx2). inversion Hs_x; clarify.*)
       }
       *apply can_read_thread. apply can_read_SC.
        {apply can_read_SC.

@@ -301,19 +301,6 @@ Proof.
   apply read_written. auto.
 Qed.
 
-Lemma can_release_SC: forall t m l
-  (Hcon: consistent (m ++ [Acq t l])) (Hcan_write: can_write m (l, 0)),
- consistent ((m ++ [Acq t l]) ++ [Rel t l]).
-Proof.
-  intros. 
-  rewrite can_arw_SC_iff.
-  apply can_write_SC.
-  -apply can_write_SC; auto.
-   constructor; clarify.
-  -rewrite read_arwritten_SC; auto.
-  -constructor; clarify.
-Qed.
-
 Lemma can_read_thread' : forall m p v t,   consistent (m ++ [Read t p v]) ->
      can_read m p v .
 Proof.
@@ -808,6 +795,28 @@ Proof.
     + constructor; simpl; auto.
 Qed.
 
+Lemma can_acquire_SC: forall t t' m l (Hcon: consistent (m ++ [Rel t l])),
+ consistent (m ++ [Rel t l; Acq t' l]).
+Proof.
+  intros. 
+  rewrite split_app, can_arw_SC_iff'; split.
+  - eapply can_read_thread'; rewrite read_arwritten_SC; auto.
+  - apply can_write_SC; auto.
+    rewrite can_arw_SC_iff' in Hcon; clarify.
+    { constructor; simpl; auto. }
+Qed.
+
+Lemma can_release_SC: forall t m l (Hcon: consistent (m ++ [Acq t l])),
+ consistent ((m ++ [Acq t l]) ++ [Rel t l]).
+Proof.
+  intros. 
+  rewrite can_arw_SC_iff'; split.
+  - eapply can_read_thread'; rewrite read_arwritten_SC; auto.
+  - apply can_write_SC; auto.
+    rewrite can_arw_SC_iff' in Hcon; clarify.
+    { constructor; simpl; auto. }
+Qed.
+
 Definition lock_op x a := exists t, a = Acq t x \/ a = Rel t x.
 
 Lemma lock_hold : forall m l t ops (Hinit : initialized m (l, 0))
@@ -872,6 +881,35 @@ Proof.
   - exploit lock_hold; eauto; clarify.
     rewrite Forall_forall in Ht; exploit Ht; eauto; contradiction.
   - apply can_write_SC; auto.
+Qed.
+
+Lemma consistent_next : forall m1 m2 c1 c2
+  (Hprog1 : prog_op c1) (Hprog2 : prog_op c2)
+  (Hcon : consistent (m1 ++ [c1; c2])) (Hcon2 : consistent (m2 ++ [c1]))
+  (Himp : consistent (m1 ++ [c2]) -> consistent (m2 ++ [c2])),
+  consistent (m2 ++ [c1; c2]).
+Proof.
+  intros.
+  exploit consistent_drop; eauto; intro.
+  destruct (eq_dec (loc_of c1) (loc_of c2)).
+  - destruct (writesb c1 (loc_of c1)) eqn: Hwrite.
+    + exploit writesb_val; eauto; clarify.
+      rewrite consistent_next_write_iff in Hcon; eauto.
+      rewrite consistent_next_write_iff; eauto.
+    + exploit no_write_read; try apply Hwrite; clarify.
+      rewrite read_noop_SC in Hcon; rewrite read_noop_SC; auto.
+      rewrite app_nil_r; eapply consistent_app_SC; eauto.
+  - rewrite loc_valid_SC in Hcon; clarify.
+    rewrite loc_valid_SC; clarify.
+Qed.    
+
+Lemma rel_rel : forall m t t' l, ~consistent (m ++ [Rel t l; Rel t' l]).
+Proof.
+  repeat intro.
+  rewrite split_app, can_arw_SC_iff' in H; clarify.
+  exploit can_read_thread; eauto.
+  rewrite read_arwritten_SC; [|eapply consistent_app_SC; eauto].
+  intro Heq; inversion Heq.
 Qed.
 
 End SC.

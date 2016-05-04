@@ -1521,4 +1521,24 @@ Proof.
   eapply exec_ops; eauto.
 Qed.
 
+Lemma out_env : forall t P' (Hout : ~In t (map fst P')) P G lo lc G'
+  (Hdistinct : distinct P),
+  exec_star (Some P) G lo lc (Some P') G' -> G' t = G t.
+Proof.
+  intros; remember (Some P) as P1; remember (Some P') as P2;
+    generalize dependent P; induction H; clarify.
+  destruct P'0; [|inversion H].
+  exploit distinct_step; eauto; intro.
+  exploit exec_result; eauto; intros (? & i & ? & ? & v & ?).
+  destruct (instr_result t0 i (G t0) v) as [((((?, ?), ?), ?), ?)|] eqn: Hi;
+    clarify.
+  exploit IHexec_star; try apply eq_refl; auto; intro IH; rewrite IH.
+  apply result_env.
+  intro; subst.
+  exploit exec_keep; try apply H; auto.
+  { apply split_in. }
+  clarify; contradiction Hout; rewrite in_map_iff.
+  do 2 eexists; eauto; auto.
+Qed.  
+
 End Exec.
