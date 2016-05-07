@@ -1541,4 +1541,18 @@ Proof.
   do 2 eexists; eauto; auto.
 Qed.  
 
+Lemma exec_det : forall P G t o1 c1 P1 G1 o2 c2 P2 G2 m (Hdistinct : distinct P)
+  (Hexec1 : exec P G t o1 c1 P1 G1) (Hexec2 : exec P G t o2 c2 P2 G2)
+  (Hcon1 : consistent (m ++ opt_to_list c1))
+  (Hcon2 : consistent (m ++ opt_to_list c2))
+  (Hinit : match c1 with Some c => initialized m (loc_of c) | _ => True end),
+  o1 = o2 /\ c1 = c2 /\ P1 = P2 /\ G1 = G2.
+Proof.
+  intros.
+  inversion Hexec1; subst; inversion Hexec2; subst; exploit distinct_thread;
+    eauto; clarify.
+  exploit can_read_unique; [eauto | eapply can_read_thread', Hcon1 |
+    eapply can_read_thread', Hcon2 | clarify].
+Qed.
+
 End Exec.

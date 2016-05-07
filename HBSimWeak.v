@@ -10761,30 +10761,6 @@ Proof.
      specialize(IHP2 P3 P1 H4 H10). clarify.
 Qed.
 
-Lemma init_can_write: forall m x (Hinit : initialized m x)
-  (Hcon : consistent m), can_write m x.
-Proof.
-  unfold initialized, can_write; clarify.
-  unfold consistent, SC in *; destruct Hinit as (i & Hlast & Hi).
-  rewrite lower_app, lower_single; simpl.
-  rewrite inth_nth_error in Hi; exploit nth_error_split'; eauto;
-    intros (m1 & m2 & ? & Heq); rewrite Heq in *.
-  rewrite <- app_assoc; simpl.
-  rewrite split_app, not_mod_ops_write.
-  - rewrite <- app_assoc; simpl.
-    rewrite write_not_read_single; clarify.
-    rewrite split_app in Hcon.
-    generalize (consistent_app _ _ Hcon); intro Hcon'; clarify.
-    rewrite write_any_value in Hcon'; eauto.
-  - rewrite Forall_forall; intros a ?.
-    exploit in_nth_error; eauto; intros (i' & ?).
-    inversion Hlast.
-    specialize (Hlast0 (length m1 + S i') a).
-    rewrite inth_nth_error, nth_error_plus in Hlast0; clarify.
-    destruct a; clarify; omega.
-  - rewrite <- app_assoc; simpl; auto.
-Qed.
-
 Lemma consistent_mem_vals: forall m1 m2 c
      (Hinit: initialized m1 (loc_of c)) (Hcon: consistent (m2++[c])) (Hmem_vals: mem_vals m1 m2) (Hmeta: ~ meta_loc (loc_of c)) (Hprog: prog_op c),
                                      consistent (m1++[c]).
