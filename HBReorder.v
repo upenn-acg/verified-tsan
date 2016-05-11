@@ -7105,8 +7105,10 @@ Proof.
   - rewrite nth_error_single in Hn; clarify.
 Qed.
 
+
 (* Like sim_next_iexec, but finishes any handler that has had an effect on
    the non-metadata state. *)
+(*
 Lemma sim_next_iexec' : forall P P1 P2 (Hsim : state_sim P P1)
   (Hsafe : safe_locs P) (Hfresh : fresh_tmps P)
   P0 P0' (Hsim : state_sim P0 P0') (Hdistinct : distinct P0')
@@ -7605,7 +7607,7 @@ Proof.
               rewrite (split_app _ _ (Read _ _ _)); rewrite split_app;
                 repeat rewrite app_assoc; apply can_arw_SC.
               { exploit lock_hold2.
-                { do 3 (rewrite <- app_assoc in *); simpl in *; eauto. }
+                { do 3 (rewrite <- app_assoc in * ); simpl in *; eauto. }
                 { rewrite Forall_app; split; [|constructor; simpl; auto].
                   exploit prog_steps; [eapply t_steps_exec; eauto|].
                   rewrite Forall_app; intros (_ & Hprog); inversion Hprog; auto.
@@ -8143,7 +8145,7 @@ Proof.
         rewrite in_app in Hin'; simpl in Hin'; destruct Hin' as [? | [? | ?]];
           eauto; clarify; eauto.
 Qed.
-
+*)
 Lemma part_complete : forall P0 P (Hsim : state_sim P0 P)
   (Ht : Forall (fun e => fst e < zt) P0)
   (Hsafe : safe_locs P0) (Hfresh : fresh_tmps P0) (Hdistinct : distinct P)
