@@ -4956,7 +4956,7 @@ Lemma instrument_sim_race : forall P P1 P2 G1 G2 t ops1
  /\ exec_star (Some P2) G2s lo lc (Some P2') G2' /\ state_suffix P1 P2' /\
     exec P2' G2' t o2 c2 None G2'' /\ consistent (m0 ++ m2 ++ lc ++ opt_to_list c2) /\
     mem_vals (m0++m1) (m0++m2) /\ env_sim G1 G2s /\
-    (Forall (fun c0=> meta_loc (loc_of c0)) lc).
+    (Forall (fun c0=> meta_loc (loc_of c0)) lc)/\ env_sim G2s G2'.
 Proof.
   intros. 
   exploit instrument_sim_safe'.
@@ -5073,7 +5073,7 @@ Proof.
         inversion Ht2 as (HtP0 & Hirest).  inversion Hirest. clarify.
        +apply can_arw_SC; specialize(Hs_x (m0++m2) H22); clarify.
       -auto.
-      -split; auto.
+      -split;[|split]; auto.
        constructor.
        +clarify. apply X_meta; auto.
        +rewrite Forall_forall. intros.
@@ -5083,6 +5083,7 @@ Proof.
           inversion Ht2 as (HtP0 & Hirest).  inversion Hirest. clarify. apply H4. }
         { left. eauto. }
         clarify.
+       +unfold env_sim. unfold upd_env, upd. clarify. destruct (eq_dec tmp2 v0); clarify.
     }
     -(*store*)
      destruct x as (x, o). 
@@ -5178,7 +5179,7 @@ Proof.
        apply clocks_sim_allreads; clarify.
        +apply clocks_sim_acq; clarify.
        +apply mops_hb_check_read.
-      -split; clarify.
+      -split;[|split]; clarify.
        constructor.
        +clarify. apply X_meta; auto.
        +inversion Ht as (Ht1 & Ht2); clarify. rewrite Forall_app in Ht2; clarify.
@@ -5190,6 +5191,7 @@ Proof.
         *apply H22.
         *apply H4.
         *right.  eauto.
+       +unfold env_sim. unfold upd_env, upd. clarify. destruct (eq_dec tmp2 v); clarify.
     }
     {(*WAW*)
       exploit store_handler_race_waw_spec'.
@@ -5259,9 +5261,10 @@ Proof.
        apply mops_hb_check_con; clarify.
        +apply clocks_sim_acq; clarify.
        +apply can_arw_SC; specialize(Hs_x (m0++m2) H22); clarify.
-      -split; auto. constructor.
+      -split;[|split]; auto. constructor.
        +simpl. apply X_meta; auto.
        +simpl in H4. rewrite Forall_forall; intros. eapply mops_hb_check_meta; eauto.
+       +unfold env_sim. unfold upd_env, upd. clarify. destruct (eq_dec tmp2 v); clarify.
      }
     {(*both WAW&WAR, equilvalent to WAW*)
       exploit store_handler_race_waw_spec'.
@@ -5331,9 +5334,10 @@ Proof.
        apply mops_hb_check_con; clarify.
        +apply clocks_sim_acq; clarify.
        +apply can_arw_SC; specialize(Hs_x (m0++m2) H22); clarify.
-      -split; auto. constructor.
+      -split;[|split]; auto. constructor.
        +apply X_meta; auto.
        +simpl in H2. rewrite Forall_forall. intros. eapply mops_hb_check_meta; eauto.
+       +unfold env_sim. unfold upd_env, upd. clarify. destruct (eq_dec tmp2 v); clarify.
      }
     - destruct s_good as (((vc, vl), vr), vw); exploit Hrace; [|clarify].
       econstructor; [constructor; auto | apply ss_refl].
@@ -5753,14 +5757,12 @@ Proof.
      * eapply consistent_app_SC; do 2 rewrite <- app_assoc; eauto.
    + inversion Hexec'; clarify.
      inversion Hexec_race2. clarify.
-     
-     etransitivity; eauto.
-     etransitivity; eauto.
-     etransitivity; eauto.
-     symmetry; auto.
-     inversion Hexec_race2; clarify.
-     symmetry. etransitivity; eauto.
-     
+     instantiate(1:= G2s) in HG.
+     eapply env_sim_trans.
+     *instantiate (1:= G2s). eapply env_sim_trans.
+      { instantiate (1:= G1_good). apply env_sim_symm. auto. }
+      { auto. }
+     *auto.
 Qed.
 
 End Sim_Proofs.
