@@ -4633,7 +4633,7 @@ Proof.
    subst. repeat rewrite app_nil_l in *. apply first_gt_spec in Hfirst_gt. inversion Hfirst_gt. clarify.
    destruct (leb v1 v2) eqn: Hleb; clarify.
    +rewrite leb_le in Hleb. apply le_not_gt in Hleb. clarify.
-   +split; clarify.
+   + split; clarify.
     *eapply exec_step'; eauto.
      { Check exec_load.
        apply exec_load with (v:=v1); eauto. }
@@ -4642,7 +4642,7 @@ Proof.
        -rewrite <- minus_n_O. eapply exec_refl; eauto. }
      { simpl. eauto. }
      { eauto. }
-    *eapply assert_le_fail_spec'; eauto. Check assert_le_fail_spec'.
+    *Check assert_le_fail_spec'. eapply assert_le_fail_spec' with (a:=C1) (b:=C2) (i:=x0) (j:=x0); eauto. 
      apply gt_not_le. auto.
   -destruct pre_vs2; clarify.
    inversion Hlen. specialize(IHpre_vs1 (upd_env (upd_env G t tmp1 a) t tmp2 n0)).
@@ -4686,7 +4686,8 @@ Proof.
     +eapply exec_assert_fail; eauto.
      simpl. rewrite upd_same. rewrite upd_assoc; eauto. rewrite upd_same.
      apply first_gt_spec in Hfirst_gt. apply gt_not_le. clarify.
-     Admitted. (*uninstantiated existentials*)
+Qed.
+    
 
 Corollary hb_check_fail_spec': forall n C1 C2 t tmp1 tmp2 P G P1 P2 rest v1 v2
   vs1 vs2 (Hhb_check_spec: P= P1++(t,hb_check C1 C2 n tmp1 tmp2++rest)::P2) 
