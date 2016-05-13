@@ -3738,8 +3738,7 @@ Proof.
                -rewrite <- app_assoc. eauto. }
            *{ (*can release after acquire*)
                apply can_write_thread.
-               apply can_write_SC; auto.
-               eapply write_any_SC. eauto.
+               apply can_write_SC; auto. 
                apply init_can_write. apply init_steps; auto.
                eapply consistent_app_SC; eauto.
                constructor; simpl; auto. }  
@@ -4204,8 +4203,7 @@ Proof.
  -clarify; do 5 eexists; [eapply iexec_exec; eauto|];
   exploit sim_step; eauto; clarify.
   rewrite app_assoc. auto.
-  Admitted.
-(*Qed. *)
+Qed.
 
 
 
@@ -4542,45 +4540,6 @@ match (z,m, vs1,vs2) with
 | _ => []
 end.
 
-(*
-Lemma mops_hb_check_app: forall C1 C2 vs1 vs2 t pre_vs1 pre_vs2 suf_vs1 suf_vs2 z c 
-                              (Hvs1: vs1=pre_vs1++suf_vs1) (Hvs2: vs2=pre_vs2 ++ suf_vs2)
-                              (Hlen_pre_vs2: length pre_vs2 = c)
-                              (Hlen_pre_vs1: length pre_vs1 = c)
-                              (Hlen_vs1: length vs1= z)
-                              (Hlen_vs2: length vs2= z)
-                              (Hpre: first_gt pre_vs1 pre_vs2=None),
-                           mops_hb_check C1 C2 vs1 vs2 z t =
-                           mops_hb_check2 C1 C2 pre_vs1 pre_vs2 z c t ++
-                           mops_hb_check2 C1 C2 suf_vs1 suf_vs2 (z-c) (z-c) t.
-Proof.
-  admit.
-Qed.
-
-Lemma mops_hb_check_decompose: forall C1 C2 vs1 vs2 t pre_vs1 pre_vs2 v1 v2 suf_vs1 suf_vs2 z c
-                                        (Hvs1: vs1=pre_vs1++v1::suf_vs1)
-                                        (Hvs2: vs2=pre_vs2++v2::suf_vs2)
-                                        (Hlen_pre_vs2: length pre_vs2 = c)
-                                        (Hlen_pre_vs1: length pre_vs1 = c)
-                                        (Hlen_vs1: length vs1= z)
-                                        (Hlen_vs2: length vs2 =z )
-                                        (Hpre: first_gt pre_vs1 pre_vs2=None)
-                                        (Hv1v2: v1 > v2),         
-
-                                   mops_hb_check C1 C2 vs1 vs2 z t =
-                                   mops_hb_check2 C1 C2 pre_vs1 pre_vs2 z c t++
-                                                   mops_assert_le (C1,z-c-1) (C2,z-c-1) v1 v2 t.
-Proof.
-  intros.
-  rewrite mops_hb_check_app with (suf_vs1:= v1::suf_vs1) (suf_vs2:=v2::suf_vs2)
-                                                         (pre_vs1:=pre_vs1) (pre_vs2:=pre_vs2) (c:=c); clarify.
-  rewrite app_length, Hlen_pre_vs1. rewrite minus_plus. clarify.
-  destruct (leb v1 v2) eqn: Heq; clarify.
-  -apply leb_le in Heq. apply le_not_gt in Heq. clarify.
-  -unfold mops_assert_le. setoid_rewrite <- minus_n_O. auto.
-Qed.
-
- *)
 
 Lemma assert_le_fail_spec': forall P P1 P2 rest G a b i j tmp1 tmp2 t v1 v2
                                    Pgood Ggood
