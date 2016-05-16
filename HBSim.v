@@ -115,18 +115,6 @@ Proof.
 Qed.
 
 
-Lemma in_mops_max_vc': forall n c vc1 vc2 vs1 vs2 t
-   (Hin: In c (mops_max_vc vc1 vc2 vs1 vs2 t n)),
-  match c with 
-  | Write tc p _ => fst p = vc2
-  | Read tc p _  => fst p = vc1 \/ fst p = vc2
-  | _ => False
-  end.
-Proof.
-  induction n; intros; destruct vs1; clarify; destruct vs2; clarify.
-  destruct c; clarify; exploit IHn; eauto.
-Qed.
-
 Lemma in_mops_max_vcn: forall n c vc1 vc2 vs1 vs2 t
    (Hin: In c (mops_max_vc vc1 vc2 vs1 vs2 t n)),
   match c with 
