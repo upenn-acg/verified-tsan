@@ -537,7 +537,14 @@ Proof.
   intros; eapply exec_iexec with (lc0 := []); eauto; apply exec_refl.
 Qed.
 
-(*
+
+Lemma upd_three : forall G t a1 a2 v1 v2 v1' (Hdiff : a1 <> a2),
+  upd_env (upd_env (upd_env G t a1 v1) t a2 v2) t a1 v1' =
+  upd_env (upd_env G t a1 v1') t a2 v2.
+Proof.
+  intros; rewrite upd_assoc, upd_overwrite; auto.
+Qed.
+
 Lemma hb_check_fail_exec : forall t z P G lo lc P' G' (Hdistinct : distinct P)
   li src tgt
   Pa Pb (HP : P = Pa ++ (t, hb_check src tgt z tmp1 tmp2 ++ li) :: Pb)
@@ -589,17 +596,22 @@ Proof.
   exploit IHz; try apply eq_refl; eauto.
   { omega. }
   intros (vs1 & vs2 & k & ? & ? & ? & ? & ? & ? & Hle & ?);
-    exists (v1 :: vs1), (v2 :: vs2), (S k); clarify.
-  rewrite <- leb_le in l; clarify.
-  rewrite last_cons, last_cons; try (intro; clarify; omega).
+    exists (v1 :: vs1), (v2 :: vs2), (S k).
+  rewrite <- leb_le in l.  
+  rewrite last_cons, last_cons. do 2 rewrite last_cons'; auto.
+  try (intro; clarify; omega).
   clarify.
   split; [omega | clarify].
   rewrite upd_overwrite, upd_same.
   rewrite upd_three, upd_old, upd_same, upd_assoc; auto.
-  do 2 rewrite last_cons'; auto.
+  (* do 2 rewrite last_cons'; auto. *)
   split; auto.
   rewrite leb_le in cond; destruct i; clarify.
   eapply Hle; eauto; omega.
+  intro Habsurd. rewrite Habsurd in H8. simpl in H8. clarify.
+  setoid_rewrite <- H8 in H61. inversion H61.
+  intro Habsurd. rewrite Habsurd in *.   rewrite <- H7 in H6. simpl in H6.
+  inversion H6. inversion H10.
 Qed.
 
 Lemma hb_check_match_n : forall C1 C2 t z vs1 vs2 k (Hk : k <= z)
@@ -628,6 +640,28 @@ Proof.
       { eapply consistent_app_SC; rewrite <- app_assoc; simpl; eauto. } }
     { instantiate (1 := n); omega. }
     eauto.
+Qed.
+
+
+Lemma hb_check_match : forall C1 C2 t z vs1 vs2 (Hlen1 : length vs1 = z)
+  (Hlen2 : length vs2 = z) (Hle : first_gt vs1 vs2 = None)
+  m (Hcon : consistent (m ++ mops_hb_check C1 C2 vs1 vs2 z t)) n (Hlt : n < z), 
+  exists v, nth_error vs2 n = Some v /\ can_read m (C2, z - n - 1) v.
+Proof.
+  induction z; clarify; [omega|].
+  destruct vs1, vs2; clarify.
+  destruct n.
+  - do 2 eexists; simpl; eauto.
+    rewrite <- minus_n_O.
+    rewrite read_noop_SC in Hcon.
+    eapply can_read_thread'.
+    eapply consistent_app_SC; rewrite <- app_assoc; simpl; eauto.
+    { eapply consistent_app_SC; rewrite <- app_assoc; simpl; eauto. }
+  - exploit (IHz vs1 vs2); eauto.
+    { rewrite read_noop_SC, read_noop_SC in Hcon; auto.
+      { eapply consistent_app_SC; rewrite <- app_assoc; simpl; eauto. }
+      { eapply consistent_app_SC; rewrite <- app_assoc; simpl; eauto. } }
+    { omega. }
 Qed.
 
 Corollary hb_check_twice_n : forall C1 C1' C2 t z vs1 vs1' vs2 vs2' k
@@ -659,7 +693,7 @@ Proof.
   unfold can_read in Hread'; rewrite <- app_assoc in Hread'.
   rewrite reads_noops_SC in Hread'; auto; [|apply mops_hb_check_read].
   exploit can_read_unique.
-  { eapply consistent_app_SC; eauto. }
+ (* { eapply consistent_app_SC; eauto. } *)
   { specialize (Hinit (z - n - 1)).
     use Hinit; [eauto | omega]. }
   { apply Hread. }
@@ -670,7 +704,7 @@ Proof.
     destruct (nth_error vs2' n) eqn: Hn; auto.
     exploit nth_error_lt; eauto; omega. }
 Qed.
-*)
+
 Lemma events_hb_check_extend : forall src tgt vs1 vs2 t vs1' vs2'
   (Hfail : first_gt vs1 vs2 <> None),
   events_hb_check src tgt (vs1 ++ vs1') (vs2 ++ vs2') t =
@@ -696,7 +730,52 @@ Lemma first_gt_extend : forall vs1 vs2 x vs1' vs2'
 Proof.
   induction vs1; destruct vs2; clarify.
 Qed.
-(*
+
+
+Lemma hb_check_exec : forall t z P G lo lc P' G' (Hdistinct : distinct P)
+  li src tgt
+  Pa Pb (HP : P = Pa ++ (t, hb_check src tgt z tmp1 tmp2 ++ li) :: Pb)
+  (Ht : exec_star_t t (Some P) G lo lc (Some P') G') (Hin' : In (t, li) P'),
+  exists vs1 vs2, lo = events_hb_check src tgt vs1 vs2 t /\
+    lc = mops_hb_check src tgt vs1 vs2 z t /\ first_gt vs1 vs2 = None /\
+    length vs1 = z /\ length vs2 = z /\ P' = (Pa ++ (t, li) :: Pb) /\
+    G' = upd_env (upd_env G t tmp1 (last vs1 (G t tmp1)))
+                 t tmp2 (last vs2 (G t tmp2)).
+Proof.
+  induction z; clarify.
+  - exists [], []; clarify.
+    do 2 rewrite upd_triv.
+    exploit exec_t_maintain; eauto; clarify.
+    rewrite in_app; clarify.
+  - inversion Ht; clarify.
+    { exploit distinct_in; [eauto | rewrite in_app; clarify | apply Hin' |
+                            clarify].
+      repeat rewrite app_comm_cons in *; exploit app_nil_inv; eauto; clarify. }
+    exploit exec_next; eauto; intros (v1 & ?); clarify.
+    exploit distinct_step; eauto; intro.
+    inversion Hexec'; clarify.
+    { exploit distinct_in; [eauto | rewrite in_app; clarify | apply Hin' |
+                            clarify].
+      repeat rewrite app_comm_cons in *; exploit app_nil_inv; eauto; clarify. }
+    exploit exec_next; eauto; intros (v2 & ?); clarify.
+    exploit distinct_step; eauto; intro.
+    inversion Hexec'0; clarify.
+    { exploit distinct_in; [eauto | rewrite in_app; clarify | apply Hin' |
+                            clarify].
+      repeat rewrite app_comm_cons in *; exploit app_nil_inv; eauto; clarify. }
+    exploit exec_next; eauto; simpl; intros (? & ?).
+    rewrite upd_same, upd_assoc, upd_same in *; auto.
+    destruct (le_dec v1 v2); clarify; [|inversion Hexec'1].
+    exploit distinct_step; eauto; intro.
+    exploit IHz; eauto.
+    rewrite <- leb_le in *.
+    Opaque last.
+    intros (vs1 & vs2 & ?); exists (v1 :: vs1), (v2 :: vs2); clarify.
+    rewrite upd_overwrite, upd_same.
+    rewrite upd_three, upd_old, upd_same, upd_assoc; auto.
+    do 2 rewrite last_cons'; auto.
+Qed.
+
 Lemma exec_t_fail_iexec : forall t P G lo lc P' G' i li (Hdistinct : distinct P)
   (Hin : In (t, instrument_instr i t ++ li) P)
   (Hi : match i with Assert_le _ _ => False | _ => True end)
@@ -848,7 +927,8 @@ Proof.
       { eapply skipn_in; setoid_rewrite Hskip'; simpl; eauto. }
       clarify.
 Qed.
-*)
+
+
 Lemma first_fail : forall P P0 (Hsim0 : state_sim P P0)
   (Hdistinct : distinct P0) (Hsafe0 : safe_locs P) (Hfresh0 : fresh_tmps P)
   (Ht : Forall (fun e => fst e < zt) P)
@@ -874,8 +954,7 @@ Lemma first_fail : forall P P0 (Hsim0 : state_sim P P0)
   (HC_init : forall t o, t < zt -> o < zt -> initialized m (C + t, o)),
   exists lo1 lc1, fail_iexec P0' t lo1 lc1 /\ consistent (m ++ lc0 ++ lc1).
 Proof.
-  admit.
-(*  intros until G3; intro.
+  intros until G3; intro.
   remember (Some P2) as Pa; remember (Some P3) as Pb; generalize dependent P2;
     induction Hsteps2; clarify.
   - inversion Hstep; clarify.
@@ -955,7 +1034,7 @@ Proof.
       { auto. }
     + eapply IHHsteps2; eauto 2.
       { eapply exec_step_inv_m; eauto. }
-      { rewrite <- app_assoc in *; auto. }*)
+      { rewrite <- app_assoc in *; auto. }
 Qed.
 
 Corollary first_fail' : forall P P0 (Hsim0 : state_sim P P0)
@@ -978,10 +1057,9 @@ Corollary first_fail' : forall P P0 (Hsim0 : state_sim P P0)
   (HC_init : forall t o, t < zt -> o < zt -> initialized m (C + t, o)),
   exists lo1 lc1, fail_iexec P0' t lo1 lc1 /\ consistent (m ++ lc0 ++ lc1).
 Proof.
-  Admitted. (*
   intros; eapply first_fail with (lc0' := [])(lc := []); try apply Hstep;
-    try apply Hroot; eauto; constructor.
-Qed.*)
+  try apply Hroot; eauto; constructor.
+Qed.
 
 Lemma state_sim_steps : forall P1 P2 G2 lo lc P2' G2'
   (Hdistinct : distinct P2) (HPsim : state_sim P1 P2) (Hsafe : safe_locs P1)
