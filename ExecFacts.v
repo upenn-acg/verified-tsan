@@ -12,6 +12,9 @@ Set Implicit Arguments.
 
 Hint Constructors exec.
 
+Notation upd_env' G t u := (match u with Some (a, v) => upd_env G t a v
+  | None => G end).
+
 Section Exec.
 
 Definition mods_loc i x :=
@@ -490,9 +493,6 @@ Lemma upd_comm : forall (G : env) t t' Gt Gt' (Hdiff : t' <> t),
 Proof.
   intros; extensionality a; unfold upd; clarify.
 Qed.
-
-Notation upd_env' G t u := (match u with Some (a, v) => upd_env G t a v
-  | None => G end).
 
 Lemma result_env : forall t t' (Hdiff : t' <> t) u1 G,
   upd_env' G t u1 t' = G t'.
@@ -2019,7 +2019,131 @@ Proof.
   clarify; eapply exec_step_inv_t; eauto.
 Qed.
 
-End Exec.
+Lemma lock_acq : forall P (Hdistinct : distinct P)
+  t li1 li2 (Hin : In (t, li1 ++ li2) P) x (Hlock : In (Lock x) li1)
+  G lo lc P' G' (Hsteps : exec_star (Some P) G lo lc (Some P') G')
+  (Hin' : In (t, li2) P'), In (Acq t x) lc.
+Proof.
+  intros; remember (Some P) as Pa; remember (Some P') as Pb;
+    generalize dependent P; generalize dependent li1; induction Hsteps; clarify.
+  - exploit distinct_in; [eauto | apply Hin | eauto | intro].
+    exploit app_nil_inv; eauto; clear H; clarify.
+  - destruct P'0; [|inversion Hsteps].
+    destruct li1; [clarify|].
+    exploit distinct_step; eauto; intro.
+    rewrite in_app.
+    destruct (eq_dec t0 t); [|exploit exec_other_thread; eauto].
+    clarify.
+    destruct Hlock; clarify.
+    + exploit in_split; eauto; clarify.
+      exploit exec_next; eauto; clarify.
+    + exploit in_split; eauto; clarify.
+      exploit exec_next; eauto; intros (v & ?).
+      destruct (instr_result t i (G t) v) as [((((?, ?), ?), ?), ?)|]; clarify.
+      right; eapply IHHsteps; eauto.
+      apply split_in.
+Qed.
+    
+Lemma rel_inv : forall t x P G lo lc P' G' (Hdistinct : distinct P)
+  (Hsteps : exec_star (Some P) G lo lc P' G') li (Hin : In (t, li) P)
+  (Hrel : In (Rel t x) lc), exists li1 li2, li = li1 ++ Unlock x :: li2 /\
+  match P' with Some s' => exists n, In (t, skipn n li2) s' | None => True end.
+Proof.
+  intros; rewrite exec_rev in Hsteps; remember (Some P) as P0;
+    generalize dependent P; induction Hsteps; clarify.
+  rewrite <- exec_rev in Hsteps.
+  rewrite in_app in Hrel; destruct Hrel.
+  - clarify.
+    specialize (IHHsteps P0); clarify.
+    repeat eexists; eauto.
+    destruct P''; clarify.
+    exploit distinct_steps; eauto; intro.
+    exploit exec_keep.
+    + eauto.
+    + eapply exec_step, exec_refl; eauto.
+    + eauto.
+    + clarify; rewrite skipn_skipn in *; eauto.
+  - inversion Hexec'; clarify.
+    inversion H; clarify.
+    exploit exec_mono; eauto.
+    { rewrite in_app; clarify. }
+    intros (n & Hn).
+    exists (firstn n li), rest.
+    rewrite Hn, firstn_skipn; clarify.
+    exists 0; rewrite in_app; clarify.
+Qed.  
 
-Notation upd_env' G t u := (match u with Some (a, v) => upd_env G t a v
-  | None => G end).
+Lemma rel_inv' : forall t x P G lo lc P' G' (Hdistinct : distinct P)
+  (Hsteps : exec_star (Some P) G lo lc (Some P') G') li li'
+  (Hin : In (t, li ++ li') P) (Hin' : In (t, li') P') (Hrel : In (Rel t x) lc),
+  In (Unlock x) li.
+Proof.
+  intros.
+  exploit rel_inv; eauto; intros (li1 & li2 & Heq & ? & Hin2).
+  exploit distinct_steps; eauto; intro.
+  exploit distinct_in.
+  { eauto. }
+  { apply Hin'. }
+  { eauto. }
+  clarify.
+  symmetry in Heq.
+  rewrite split_app in Heq; exploit app_eq_inv_ge.
+  { eauto. }
+  { assert (length ((li1 ++ [Unlock x]) ++ li2) = length (li ++ skipn x0 li2))
+      by (rewrite Heq; auto).
+    repeat rewrite app_length in *; rewrite skipn_length in *; omega. }
+  intros (? & _ & ?); subst.
+  repeat rewrite in_app; simpl; auto.
+Qed.
+
+Lemma exec_star_rd_ops : forall t P G lo lc P' G'
+  (Hsteps : exec_star_t t P G lo lc P' G'),
+  Forall (fun o => VectorClocks.thread_of o = t) lo.
+Proof.
+  induction 1; clarify.
+  rewrite Forall_app; clarify.
+  eapply exec_rd_ops; eauto.
+Qed.
+
+(* up *)
+Lemma step_segment' : forall P G lo lc P' G'
+  (Hsteps : exec_star (Some P) G lo lc (Some P') G')
+  t li1 li2 (Ht : In (t, li1 ++ li2) P) (Hdistinct : distinct P)
+  n (Hin' : In (t, skipn n li2) P'),
+  exists P'' G'' lo1 lc1 lo2 lc2, exec_star (Some P) G lo1 lc1 (Some P'') G'' /\
+    In (t, li2) P'' /\ exec_star (Some P'') G'' lo2 lc2 (Some P') G' /\
+    lo = lo1 ++ lo2 /\ lc = lc1 ++ lc2.
+Proof.
+  intros; eapply step_invariant; eauto.
+  repeat intro.
+  exploit distinct_in; [eauto | apply Ht0 | eauto | intro Heq].
+  assert (length (skipn n0 li1 ++ li2) = length (skipn n li2))
+    by (rewrite Heq; auto).
+  rewrite app_length, skipn_length, skipn_length in *; omega.
+Qed.    
+
+(* up *)
+Lemma step_instr' : forall t i li1 li2 P (Hin : In (t, li1 ++ i :: li2) P)
+  (Hdistinct : distinct P)
+  G lo lc P' G' (Hsteps : exec_star (Some P) G lo lc (Some P') G')
+  n (Hin' : In (t, skipn n li2) P'),
+  exists P1 G1 lo1 lc1 o c P1' G1' lo2 lc2,
+    exec_star (Some P) G lo1 lc1 (Some P1) G1 /\
+    In (t, i :: li2) P1 /\ exec P1 G1 t o c (Some P1') G1' /\
+    exec_star (Some P1') G1' lo2 lc2 (Some P') G' /\
+    lo = lo1 ++ opt_to_list o ++ lo2 /\ lc = lc1 ++ opt_to_list c ++ lc2.
+Proof.
+  intros.
+  exploit step_segment'; eauto.
+  { instantiate (1 := S n); auto. }
+  intros (? & ? & ? & ? & ? & ? & Hsteps0 & ?); clarify.
+  exploit step_instr; eauto.
+  { eapply distinct_steps; eauto. }
+  clarify.
+  do 11 eexists; [eapply exec_star_trans; [apply Hsteps0 |
+    eapply exec_minus_exec]; eauto|].
+  exploit exec_other_threads; eauto; split; auto.
+  do 2 rewrite <- app_assoc; eauto.
+Qed.
+
+End Exec.

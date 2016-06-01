@@ -6,6 +6,9 @@ Require Import Lang.
 
 Set Implicit Arguments.
 
+Notation indep ops1 ops2 := (Forall (fun c1 => Forall (fun c2 =>
+  loc_of c2 <> loc_of c1) ops2) ops1).
+
 Section SC.
 
 Context {ML : @Memory_Layout var nat _}.
@@ -976,6 +979,67 @@ Proof.
     rewrite inth_nth_error, nth_error_plus in Hlast0; clarify.
     destruct a; clarify; omega.
   - rewrite <- app_assoc; simpl; auto.
+Qed.
+
+(* up *)
+Lemma can_read_step' : forall m1 m2 p v c
+  (Hcan : can_read m1 p v <-> can_read m2 p v) (Hprog : prog_op c)
+  (Hcon1 : consistent (m1 ++ [c])) (Hcon2 : consistent (m2 ++ [c])),
+  can_read (m1 ++ [c]) p v <-> can_read (m2 ++ [c]) p v.
+Proof.
+  intros.
+  unfold can_read; repeat rewrite <- app_assoc; simpl; split; intro;
+    eapply consistent_next; eauto; clarify.
+  - rewrite <- Hcan; auto.
+  - rewrite Hcan; auto.
+Qed.    
+
+Lemma loc_partition : forall f ops m (Hcon : consistent (m ++ ops))
+  ops1 ops2 (Hpart : partition f ops = (ops1, ops2))
+  (Hops : Forall prog_op ops) (Hindep : indep ops1 ops2),
+  consistent (m ++ ops2).
+Proof.
+  setoid_rewrite partition_filter.
+  induction ops; clarify.
+  specialize (IHops (m ++ [a])); rewrite <- app_assoc in IHops; clarify.
+  specialize (IHops _ _ eq_refl).
+  inversion Hops; subst.
+  destruct (f a); clarify.
+  - inversion Hindep; clarify.
+    rewrite <- app_assoc, loc_valid_ops_SC in IHops; clarify.
+    apply Forall_filter; auto.
+  - rewrite <- app_assoc in IHops; apply IHops.
+    rewrite Forall_forall in *; intros ? Hin.
+    specialize (Hindep _ Hin); inversion Hindep; auto.
+Qed.
+
+Lemma indep_sym : forall ops1 ops2, indep ops1 ops2 -> indep ops2 ops1.
+Proof.
+  repeat setoid_rewrite Forall_forall; repeat intro.
+  eapply H; eauto.
+Qed.
+
+Lemma loc_split_iff : forall f ops ops1 ops2
+  (Hpart : partition f ops = (ops1, ops2))
+  (Hops : Forall prog_op ops) (Hindep : indep ops1 ops2) m m2,
+  consistent (m ++ ops ++ m2) <-> consistent (m ++ ops1 ++ ops2 ++ m2).
+Proof.
+  setoid_rewrite partition_filter.
+  induction ops; clarify.
+  { reflexivity. }
+  specialize (IHops _ _ eq_refl).
+  assert (indep (filter f ops) (filter (fun x : conc_op => negb (f x)) ops)).
+  { destruct (f a); clarify.
+    - inversion Hindep; auto.
+    - apply indep_sym in Hindep; apply indep_sym; inversion Hindep; auto. }
+  inversion Hops; clarify.
+  specialize (IHops (m ++ [a]) m2); repeat rewrite <- app_assoc in IHops;
+    rewrite IHops.
+  destruct (f a); clarify.
+  - reflexivity.
+  - apply loc_comm_ops1_SC; auto.
+    + apply indep_sym in Hindep; inversion Hindep; auto.
+    + apply Forall_filter; auto.
 Qed.
 
 End SC.
