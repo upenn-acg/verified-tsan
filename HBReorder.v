@@ -9218,6 +9218,27 @@ Corollary first_fail' : forall P P0 (Hsim0 : state_sim P P0)
   exists lo1 lc1, fail_iexec P0' t lo1 lc1 /\ consistent (m ++ lc0 ++ lc1).
 Admitted.
 
+Lemma first_gt_extend : forall vs1 vs2 x vs1' vs2'
+  (Hfirst : first_gt vs1 vs2 = Some x),
+  first_gt (vs1 ++ vs1') (vs2 ++ vs2') = Some x.
+Proof.
+  induction vs1; destruct vs2; clarify.
+Qed.
+
+
+Lemma emacs_is_sb : forall m C1 C2 vs1 vs2 vs3 vs4 t v1 v2
+                           (Hlen1: length vs1 <= zt)
+                           (Hlen2: length vs2 <= zt)
+                           (Hlen3: length vs3 = zt)
+                           (Hlen4: length vs4 = zt)
+                           (Hfirst_gt1 : first_gt vs1 vs2 = Some (v1, v2))
+                           (Hfirst_gt2 : first_gt vs3 vs4 = None)
+                           (Hcon1: consistent (m ++ mops_hb_check C1 C2 vs1 vs2 zt t ))
+                           (Hcon2: consistent (m ++ mops_hb_check C1 C2 vs3 vs4 zt t )),
+                      exists suf1 suf2, vs3= vs1 ++ suf1 /\ vs4 = vs2 ++ suf2.
+Proof.
+  intros.
+   Admitted.
 Lemma iexec_or_fail : forall P G t lo lc P' G' (Hdistinct : distinct P)
   (Hiexec : iexec P G t lo lc P' G') m (Hcon : consistent (m ++ lc))
   lo1 lc1 (Hfail : fail_iexec P t lo1 lc1) (Hcon' : consistent (m ++ lc1)),
@@ -9231,10 +9252,54 @@ Proof.
     clarify.
   - exploit (instrument_incom (Load a0 (x0, o0)) (Load a (x, o)) rest0 rest).
     { simpl in *; repeat rewrite <- app_assoc in *; eauto. }
+    clarify. inversion H1. apply plus_reg_l in H0. clarify. exploit emacs_is_sb.
+    { apply Hlen1. }
+    { apply Hlen2. }
+    { apply Hlen0. }
+    { apply Hlen3. }
+    { eauto. }
+    { eauto. }
+    { rewrite split_app in Hcon'. eauto. }
+    { rewrite split_app in Hcon. eapply consistent_app_SC. rewrite <- app_assoc.
+      eauto. }
+    intros (suf1 & suf2 & Hvs0 & Hvs3).
+    rewrite Hvs0, Hvs3 in Hle. apply first_gt_extend  with (vs1':=suf1) (vs2':=suf2) in Hgt.
     clarify.
-    admit.
   - exploit (instrument_incom (Store (x0, o0) e) (Load a (x, o)) rest0 rest).
     { simpl in *; repeat rewrite <- app_assoc in *; eauto. }
+    clarify.
+  - exploit (instrument_incom (Lock m0) (Load a (x, o)) rest0 rest).
+    { simpl in *; repeat rewrite <- app_assoc in *; eauto. }
+    clarify.
+  - exploit (instrument_incom (Unlock m0) (Load a (x, o)) rest0 rest).
+    { simpl in *; repeat rewrite <- app_assoc in *; eauto. }
+    clarify.
+  -  admit.
+  - exploit (instrument_incom (Wait u) (Load a (x, o)) rest0 rest).
+    { simpl in *; repeat rewrite <- app_assoc in *; eauto. }
+    clarify.
+  - exploit (instrument_incom (Assert_le e1 e2) (Load a (x, o)) rest0 rest).
+    { simpl in *; repeat rewrite <- app_assoc in *; eauto. }
+    clarify.
+  - exploit (instrument_incom (Assign a e0) (Store (x, o) e) rest0 rest).
+    { simpl in *; repeat rewrite <- app_assoc in *; eauto. }
+    clarify.
+  - exploit (instrument_incom (Load a (x0,o0)) (Store (x, o) e) rest0 rest).
+    { simpl in *; repeat rewrite <- app_assoc in *; eauto. }
+    clarify.
+  - exploit (instrument_incom (Store (x0, o0) e0) (Store (x, o) e) rest0 rest).
+    { simpl in *; repeat rewrite <- app_assoc in *; eauto. }
+    clarify. inversion H1. apply plus_reg_l in H0. clarify. exploit emacs_is_sb.
+    { apply Hlen1. }
+    { apply Hlen2. }
+    { apply Hlen0. }
+    { apply Hlen3. }
+    { eauto. }
+    { eauto. }
+    { rewrite split_app in Hcon'. eauto. }
+    { rewrite split_app in Hcon. eapply consistent_app_SC. rewrite <- app_assoc.
+      eauto. }
+    intros (suf1 & suf2 & Hvs0 & Hvs3).
     clarify.
 Admitted.
 
