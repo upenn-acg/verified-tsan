@@ -6,7 +6,6 @@ Require Import conc_model.
 Require Import Lang.
 Require Import SCFacts.
 Require Import FunctionalExtensionality.
-Require Import HBRaceDetector. (* This should probably be reordered. *)
 
 Set Implicit Arguments.
 
@@ -16,6 +15,58 @@ Notation upd_env' G t u := (match u with Some (a, v) => upd_env G t a v
   | None => G end).
 
 Section Exec.
+
+Lemma upd_same : forall G t a v,
+  (upd_env G t a v) t a = v.
+Proof.
+  unfold upd_env, upd; clarify.
+Qed.
+
+Lemma upd_overwrite : forall G t a v1 v2,
+  upd_env (upd_env G t a v1) t a v2 = upd_env G t a v2.
+Proof.
+  intros; extensionality t'; extensionality v'.
+  unfold upd_env, upd; clarify.
+Qed.
+
+Lemma upd_triv : forall G t a, upd_env G t a (G t a) = G.
+Proof.
+  intros; extensionality t'; extensionality a'; unfold upd_env, upd; clarify.
+Qed.
+ 
+Lemma upd_diff : forall G t a1 a2 v1 v2
+ (Ha: a1<>a2),
+ (upd_env (upd_env G t a1 v1) t a2 v2) t a1 = v1. 
+Proof.
+  intros; unfold upd_env, upd; clarify.
+Qed.
+
+Lemma upd_assoc: forall G t a1 a2 v1 v2
+ (Ha: a1<>a2),
+ upd_env (upd_env G t a1 v1) t a2 v2 = upd_env (upd_env G t a2 v2) t a1 v1.
+Proof.
+  intros; extensionality t'; extensionality v'.
+  unfold upd_env, upd; clarify.
+Qed.
+
+Lemma upd_old : forall G t1 a1 v1 t2 a2 (Ha : a1 <> a2),
+  upd_env G t1 a1 v1 t2 a2 = G t2 a2.
+Proof.
+  intros; unfold upd_env, upd; clarify.
+Qed.
+
+Lemma upd_old_t : forall G t1 a1 v1 t2 a2 (Ht : t1 <> t2),
+  upd_env G t1 a1 v1 t2 a2 = G t2 a2.
+Proof.
+  intros; unfold upd_env, upd; clarify.
+Qed.
+
+Lemma upd_three : forall G t a1 a2 v1 v2 v1' (Hdiff : a1 <> a2),
+  upd_env (upd_env (upd_env G t a1 v1) t a2 v2) t a1 v1' =
+  upd_env (upd_env G t a1 v1') t a2 v2.
+Proof.
+  intros; rewrite upd_assoc, upd_overwrite; auto.
+Qed.
 
 Definition mods_loc i x :=
   match i with
