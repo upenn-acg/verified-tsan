@@ -17,12 +17,6 @@ Context {meta : metadata}.
 
 Hint Resolve zt_non_zero.
 
-(* up *)
-Lemma iexec_exec_t : forall P G t lo lc P' G'
-  (Hiexec : iexec P G t lo lc P' G'),
-  exec_star_t t (Some P) G lo lc (Some P') G'.
-Admitted.
-
 Definition state_suffix := Forall2 (fun (t1 t2 : tid * list instr) =>
   let (t, li) := t1 in fst t2 = t /\ exists n,
     n < length (instrument_instr (hd (Assign 0 (I 0)) li) t) /\
@@ -63,264 +57,7 @@ Proof.
   clarify; eapply iexec_step; eauto.
 Qed.
 
-(*
-Fixpoint to_mem G t li vs :=
-  match li with
-  | [] => Some ([], G, vs)
-  | i :: li =>
-      match i with
-      | Assign a e => to_mem (upd G a (eval G e)) t li vs
-      | Load a x => match vs with [] => None | v :: vs =>
-          match to_mem (upd G a v) t li vs with None => None
-          | Some (lc, G, vs) => Some (Read t x v :: lc, G, vs) end end
-      | Store x e => match to_mem G t li vs with None => None
-          | Some (lc, G', vs) => Some (Write t x (eval G e) :: lc, G', vs) end
-      | Lock m => match to_mem G t li vs with None => None
-          | Some (lc, G, vs) => Some (Acq t m :: lc, G, vs) end
-      | Unlock m => match to_mem G t li vs with None => None
-          | Some (lc, G, vs) => Some (Rel t m :: lc, G, vs) end
-      | _ => to_mem G t li vs
-      end
-  end.
-*)
-
-(*
-(* up? *)
-Lemma eval_old1: forall G t a v e (Hfresh : expr_fresh a e),
-  eval (upd_env G t a v t) e = eval (G t) e.
-Proof.
-  induction e; clarify.
-  apply upd_old; auto.
-Qed.
-
-Lemma upd_other_comm : forall G t t' a a' v v' (Hdiff : t' <> t),
-  upd_env (upd_env G t a v) t' a' v' = upd_env (upd_env G t' a' v') t a v.
-Proof.
-  intros; unfold upd_env.
-  rewrite upd_comm; auto.
-  do 2 (rewrite VectorClocks.upd_old; auto).
-Qed.
-
-Lemma exec_mem : forall P G lo lc P' G' (Hdistinct : distinct P)
-  (Hsteps : exec_star (Some P) G lo lc (Some P') G')
-  t li1 li2 (Hin : In (t, li1 ++ li2) P) (Hin' : In (t, li2) P'),
-  exists vs lc' vs', to_mem (G t) t li1 vs = Some (lc', G' t, vs') /\
-    filter (fun c => beq (thread_of c) t) lc = lc'.
-Proof.
-  intros until t; remember (Some P) as Pa; remember (Some P') as Pb;
-    generalize dependent P; induction Hsteps; clarify.
-  { exploit distinct_in; [eauto | apply Hin | apply Hin' | intro H].
-    exploit app_nil_inv; eauto; clear H.
-    exists [], [], []; clarify. }
-  destruct P'0; [|inversion Hsteps].
-  exploit exec_result; eauto; intros (? & i & ? & ? & v & ?); clarify.
-  destruct (instr_result t0 i (G t0) v) as [((((?, ?), ?), u), ?)|] eqn: Hi;
-    clarify.
-  destruct (eq_dec t0 t).
-  - subst; exploit distinct_in; [eauto | apply split_in | eauto | clarify].
-    exploit distinct_step; eauto; intro.
-    destruct li1; clarify.
-    { exploit exec_mono; eauto; [apply split_in|].
-      clarify; exploit skip_cons_neq; eauto; contradiction. }
-    exploit IHHsteps; try reflexivity; eauto.
-    { apply split_in. }
-    intros (vs & lc' & vs' & Hvs & Heq).
-    destruct i0; clarify; try solve [do 3 eexists; setoid_rewrite Hvs; auto].
-    + unfold upd_env in Hvs; rewrite upd_new in Hvs; eauto.
-    + exists (v :: vs).
-      unfold upd_env in Hvs; rewrite upd_new in Hvs; auto.
-      do 2 eexists; setoid_rewrite Hvs; auto.
-  - exploit exec_other_thread; try apply Hexec; eauto; intro.
-    exploit distinct_step; eauto; intro.
-    exploit IHHsteps; eauto; intros (? & ? & ? & Hvs & ?).
-    exploit exec_ops; eauto; intro Hops.
-    rewrite filter_app, filter_none.
-    destruct u as [(?, ?)|]; eauto.
-    unfold upd_env in Hvs; rewrite VectorClocks.upd_old in Hvs; eauto.
-    { eapply Forall_impl; eauto 2; unfold beq; clarify. }
-Qed.             
-
-Lemma t_steps_None : forall t n P G lo lc G'
-  (Hsteps : t_steps P G t n lo lc None G'),
-  n > 0 /\ exists P1 G1 lo1 lc1 lo2 lc2,
-    t_steps P G t (n - 1) lo1 lc1 (Some P1) G1 /\
-    t_steps P1 G1 t 1 lo2 lc2 None G' /\ lo = lo1 ++ lo2 /\ lc = lc1 ++ lc2.
-Proof.
-  induction n; simpl; intros.
-  { clarify. }
-  destruct Hsteps as (? & ? & P1 & ? & ? & ? & ? & P2 & ? & ? & ? & Hminus1 &
-    ?); clarify.
-  destruct P2; clarify.
-  - exploit IHn; eauto; intros (? & ? & ? & ? & ? & ? & ? & ? & ?).
-    do 7 eexists.
-    + destruct n; [omega | simpl].
-      do 5 eexists; eauto.
-      do 7 eexists; eauto; simpl in *.
-      rewrite <- minus_n_O in *; eauto.
-    + clarify.
-      split; [repeat eexists; eauto|].
-      repeat rewrite <- app_assoc; auto.
-  - clear IHn.
-    do 8 eexists; eauto; simpl; eauto.
-    do 5 eexists; eauto.
-    do 4 eexists; exists [], []; split; [eauto | clarify].
-Qed.*)
-
-(*
-Lemma to_mem_app : forall t li1 li2 G vs lc G' vs',
-  to_mem G t (li1 ++ li2) vs = Some (lc, G', vs') <->
-  match to_mem G t li1 vs with None => False
-  | Some (lc1, G1, vs1) => match to_mem G1 t li2 vs1 with None => False
-  | Some (lc2, G2, vs2) => lc = lc1 ++ lc2 /\ G' = G2 /\ vs' = vs2 end end.
-Proof.
-  induction li1; clarify.
-  - destruct (to_mem G t li2 vs) as [((?, ?), ?)|]; split; clarify.
-  - assert (forall c G1 vs1, match to_mem G1 t (li1 ++ li2) vs1 with
-      | Some (lc0, G0, vs0) => Some (c :: lc0, G0, vs0)
-      | None => None end = Some (lc, G', vs') <->
-      match match to_mem G1 t li1 vs1 with
-            | Some (lc0, G0, vs0) => Some (c :: lc0, G0, vs0)
-            | None => None end with
-      | Some (lc1, G1, vs1) =>
-          match to_mem G1 t li2 vs1 with
-          | Some (lc2, G2, vs2) => lc = lc1 ++ lc2 /\ G' = G2 /\ vs' = vs2
-          | None => False end
-      | None => False end).
-    { intros.
-      specialize (IHli1 li2 G1 vs1).
-      destruct (to_mem G1 t li1 vs1) as [((?, ?), ?)|]; clarify.
-      destruct (to_mem n t li2 l0) as [((?, ?), ?)|]; clarify.
-      destruct (to_mem G1 t (li1 ++ li2) vs1) as [((?, ?), ?)|];
-        clarify.
-      * specialize (IHli1 l0 n l3); destruct IHli1; split; clarify.
-      * specialize (IHli1 (l ++ l1) n0 l2); destruct IHli1; clarify.
-      * split; clarify.
-        destruct x as ((?, ?), ?); clarify.
-        rewrite IHli1 in *; auto.
-      * split; clarify.
-        destruct x as ((?, ?), ?); clarify.
-        rewrite IHli1 in *; auto. }
-    destruct a; clarify.
-    destruct vs; [split|]; clarify.
-Qed.
-
-Lemma t_steps_mem : forall t n P G lo lc P' G' (Hdistinct : distinct P)
-  (Hsteps : t_steps P G t n lo lc P' G') li (Hin : In (t, li) P),
-  exists vs vs', to_mem (G t) t (firstn n li) vs =
-    Some (filter (fun c => beq (thread_of c) t) lc, G' t, vs').
-Proof.
-  induction n; intros.
-  { exists [], []; clarify. }
-  simpl in Hsteps.
-  destruct Hsteps as (? & c & P1 & ? & ? & ? & ? & P2 & ? & ? & ? & Hminus & ?);
-    clarify.
-  exploit exec_result; eauto; intros (? & i & rest & ? & v & ?); clarify.
-  assert (li = i :: rest).
-  { exploit distinct_in; [eauto | eauto | apply split_in | clarify]. }
-  assert (match li with [] => [] | a :: l => a :: firstn n l end =
-    [i] ++ firstn n rest) as Heq by clarify; subst; rewrite Heq.
-  setoid_rewrite to_mem_app.
-  assert (exists lcr, lc = opt_to_list c ++ lcr) as (lcr & ?).
-  { destruct P2; clarify; eauto. }
-  subst.
-  assert (exists vs vs', to_mem match instr_result t i (G t) v with
-    Some (_, _, _, u, _) => upd_env' G t u t | None => G t end t (firstn n rest)
-    vs = Some (filter (fun c => beq (thread_of c) t) lcr, G' t, vs'))
-    as (vs & vs' & Hm2).
-  { exploit exec_minus_ops; eauto; intro Hops'.
-    destruct P1; [|inversion Hminus]; clarify.
-    - exploit distinct_step; eauto; intro.
-      destruct (instr_result t i (G t) v) as [((((?, ?), ?), ?), ?)|]; clarify.
-      destruct P2; clarify.
-      + exploit exec_other_threads; try apply Hminus; try apply split_in; intro.
-        exploit distinct_steps; try eapply exec_minus_exec; eauto; intro.
-        exploit IHn; eauto.
-        intros (vs & vs' & Heq); exists vs, vs'.
-        erewrite exec_minus_env in Heq; eauto.
-        exploit app_inv_head; eauto; clarify.
-        rewrite filter_app, (filter_none _ Hops'); auto.
-      + exploit app_inv_head; eauto; clarify.        
-        rewrite (filter_none _ Hops').
-        rewrite (exec_minus_env Hminus); exists [], []; auto.
-    - exploit app_inv_head; eauto; clarify.
-      exists [], [].
-      destruct (instr_result t i (G t) v) as [((((?, ?), ?), ?), ?)|]; clarify.
-  }
-  exists (match i with Load _ _ => v :: vs | _ => vs end), vs'; destruct i;
-    clarify.
-  - unfold upd_env in Hm2; rewrite upd_new in Hm2; rewrite Hm2; auto.
-  - unfold upd_env in Hm2; rewrite upd_new in Hm2; rewrite Hm2; auto.
-  - inversion H; clarify.
-Qed.
-*)
-(*
-Lemma t_steps_indep : forall t li P G li2 lo lc P' G' (Hdistinct : distinct P)
-  (Ht : In (t, li ++ li2) P)
-  (Ht_steps : t_steps P G t (length li) lo lc (Some P') G')
-  (Hwait : forall i u, nth_error li i = Some (Wait u) -> i = 0)
-  m (Hcon : consistent (m ++ lc))
-  lct lcr (Hpart : partition (fun c => beq (thread_of c) t) lc = (lct, lcr))
-  (Hindep : Forall (fun c => Forall (fun c' => loc_of c' <> loc_of c) lct) lcr),
-  exists lot P1 G1 lor,
-    exec_star_t t (Some P) G lot lct (Some P1) G1 /\ In (t, li2) P1 /\
-    exec_star_minus t (Some P1) G1 lor lcr (Some P') G' /\
-    consistent (m ++ lct ++ lcr).
-Proof.
-  induction li using rev_ind; simpl; intros.
-  { clarify; repeat eexists; eauto.
-    - apply exec_refl_t.
-    - apply exec_refl_m. }
-  rewrite app_length in Ht_steps; exploit t_steps_plus; eauto; clear Ht_steps.
-  intros (lo1 & lc1 & P1 & G1 & lo2 & lc2 & Hsteps1 & Hsteps2 & ? & ?); subst.
-  rewrite <- app_assoc in Ht; simpl in Ht.
-  specialize (IHli _ _ _ _ _ _ _ Hdistinct Ht Hsteps1); use IHli.
-  rewrite app_assoc in Hcon; specialize (IHli _ (consistent_app_SC _ _ Hcon)).
-  rewrite partition_filter in *; specialize (IHli _ _ eq_refl); use IHli.
-  destruct IHli as (lot & Pt & Gt & lor & Htsteps & HPt & Hminus & Hcon').
-  simpl in Hsteps2.
-  destruct Hsteps2 as (o & c & P2 & G2 & Hstep & lo3 & lc3 & [P3|] & G3 & lo4 &
-    lc4 & Hminus2 & Hresult); clarify.
-  repeat rewrite filter_app in *.
-  destruct P2; [|inversion Hminus2; clarify].
-  exploit distinct_steps; eauto.
-  { eapply exec_t_exec; eauto. }
-  intro Hdistinctt.
-  generalize (exec_minus_ops Hminus2); intro Hall2.
-  rewrite (filter_none _ Hall2), (filter_negb_all _ Hall2) in *.
-  generalize (exec_ops Hstep); intro Hallt.
-  rewrite (filter_all _ Hallt), (filter_negb_none _ Hallt) in *.
-  destruct (nil_dec li); clarify.
-  { repeat eexists.
-    - eapply exec_step_t; [eauto | apply exec_refl_t].
-    - exploit step_thread; eauto; clarify.
-    - rewrite app_nil_r; eauto.
-    - repeat rewrite app_nil_r in *; auto. }
-  generalize (exec_sooner_t Hminus Hstep Hdistinctt); intro Hswap; use Hswap.
-  specialize (Hswap _ HPt); destruct Hswap as (Pt' & Gt' & Hstep' & Hminus').
-  destruct Pt'; [|inversion Hminus'; clarify].
-  repeat eexists.
-  - rewrite app_nil_r; eapply exec_step_inv_t; eauto.
-  - exploit step_thread; eauto; clarify.
-  - rewrite app_nil_r; eapply exec_minus_trans; eauto.
-  - rewrite <- app_assoc, app_nil_r in *.
-    rewrite app_nil_r; eapply loc_split; eauto.
-    { rewrite partition_filter; auto. }
-    rewrite Forall_app in *; clarify.
-    eapply Forall_impl; eauto 2; clarify.
-    rewrite Forall_app in *; clarify.
-    { eapply prog_steps, t_steps_exec; eauto. }
-    { eapply prog_step; eauto. }
-  - intro Hin; generalize (NoDup_id_inj _ _ _ Hdistinctt HPt Hin); clarify.
-    specialize (Hwait (length li) u); clarify.
-    rewrite nth_error_split in Hwait; destruct li; clarify.
-  - repeat rewrite filter_app in Hindep; rewrite Forall_app in Hindep; clarify.
-    eapply Forall_impl; eauto 2; clarify.
-    rewrite Forall_app in *; clarify.
-  - exploit nth_error_lt; eauto.
-    specialize (Hwait i u); rewrite nth_error_app in Hwait; clarify.
-Qed.*)
-
-(*Lemma hb_check_no_wait : forall C1 C2 z tmp1 tmp2 j u,
+Lemma hb_check_no_wait : forall C1 C2 z tmp1 tmp2 j u,
   nth_error (hb_check C1 C2 z tmp1 tmp2) j <> Some (Wait u).
 Proof.
   induction z; clarsimp.
@@ -391,7 +128,7 @@ Proof.
   -unfold wait_handler in Hnth.
     destruct j; clarify.
     exploit max_vc_no_wait'; eauto; clarify.
-Qed.*)
+Qed.
 
 Lemma instrument_single : forall i t i', instrument_instr i t = [i'] ->
   match i with Assign _ _ => True | Assert_le _ _ => True | _ => False end.
@@ -425,30 +162,6 @@ Proof.
       exploit IHP1a; eauto; clarify.
       constructor; auto.
 Qed.
-(*
-Opaque minus.
-
-Lemma to_mem_suffix : forall t li G vs lc G' vs'
-  (Hmem : to_mem G t li vs = Some (lc, G', vs')), exists vs1, vs = vs1 ++ vs'.
-Proof.
-  induction li; clarify.
-  - exists []; auto.
-  - destruct a; clarify; eauto.
-    + destruct vs; clarify.
-      destruct x0 as ((?, ?), ?); clarify.
-      exploit IHli; eauto; clarify.
-      setoid_rewrite <- list_cons_plus_assoc; eauto.
-    + destruct x0 as ((?, ?), ?); clarify; eauto.
-    + destruct x as ((?, ?), ?); clarify; eauto.
-    + destruct x as ((?, ?), ?); clarify; eauto.
-Qed.
-
-Corollary to_mem_le : forall G t li vs lc G' vs'
-  (Hmem : to_mem G t li vs = Some (lc, G', vs')), length vs' <= length vs.
-Proof.
-  intros; exploit to_mem_suffix; eauto; clarify; rewrite app_length; omega.
-Qed.
-*)
 
 Lemma hb_check_len : forall C1 C2 z tmp1 tmp2,
   length (hb_check C1 C2 z tmp1 tmp2) = 3 * z.
@@ -853,14 +566,13 @@ Proof.
     rewrite skipn_all in *; clarify.
 Qed.
 
-(*
 Lemma own_thread : forall t P1 G lo lc P1' G' (Ht : t < zt)
   (Hsteps : exec_star_minus t (Some P1) G lo lc P1' G')
   P (Hsafe : safe_locs P) P0 (Hsim : state_sim P P0)
   (Hdistinct : distinct P0) G0 lo0 lc0
   (Hroot : exec_star (Some P0) G0 lo0 lc0 (Some P1) G)
   li (Hlive : In (t, li) P1) (Hli : li <> []) (Hspawns : safe_spawns P1),
-  Forall (fun c => fst (loc_of c) <> C' + t) lc.
+  Forall (fun c => fst (loc_of c) <> C + t) lc.
 Proof.
   intros ?????????; remember (Some P1) as Pa; generalize dependent P1;
     induction Hsteps; clarify.
@@ -914,7 +626,6 @@ Proof.
       * eapply exec_step_inv; eauto.
       * eapply exec_other_thread; eauto.
 Qed.
-*)
 
 Lemma instrument_own_thread : forall t (Ht : t < zt) P G lo lc P1 G1
   (Hsteps : exec_star (Some P) G lo lc (Some P1) G1)
@@ -925,8 +636,7 @@ Lemma instrument_own_thread : forall t (Ht : t < zt) P G lo lc P1 G1
   Forall (fun c => fst (loc_of c) <> C + t)
     (filter (fun x => negb (beq (thread_of x) t)) lc).
 Proof.
-  admit.
-(*  intros until li; remember (Some P) as Pa; remember (Some P1) as Pb;
+  intros until li; remember (Some P) as Pa; remember (Some P1) as Pb;
     generalize dependent P1; generalize dependent P;
     rewrite exec_rev in Hsteps; induction Hsteps; clarify.
   specialize (IHHsteps _ eq_refl _ eq_refl); clarify.
@@ -952,12 +662,8 @@ Proof.
     { eapply exec_star_trans; eauto. }
     { eapply safe_spawns_steps; eauto.
       eapply exec_star_trans; eauto. }
-    intro; apply Forall_filter; auto.*)
+    intro; apply Forall_filter; auto.
 Qed.
-
-(* up *)
-Lemma C_meta : forall t (Ht : t < zt) o, meta_loc (C + t, o).
-Proof. intros; unfold meta_loc; simpl; omega. Qed. 
 
 Definition good_lock x := state_forall (fun i =>
   match i with Load _ p | Store p _ => p <> x | _ => True end).
@@ -1020,10 +726,6 @@ Proof.
   repeat rewrite skipn_length in *; rewrite app_length in *; clarify; omega.
 Qed.  
 
-(* up *)
-Lemma X_meta : forall v (Ht : v < zv) o, meta_loc (X + v, o).
-Proof. intros; unfold meta_loc; simpl; omega. Qed.
-(*
 Lemma instrument_hd : forall i t, let i' := hd (Lock 0) (instrument_instr i t)
   in match i' with
   | Assign _ _ | Wait _ | Assert_le _ _ => i' = i
@@ -1033,9 +735,8 @@ Lemma instrument_hd : forall i t, let i' := hd (Lock 0) (instrument_instr i t)
   | _ => False
   end.
 Proof.
-  destruct i; try (destruct x); clarify; eauto; destruct zt; clarify.
-  - right; repeat eexists; clarify.
-  - right; repeat eexists; clarify.
+  destruct i; try (destruct x); clarify; eauto; destruct zt; clarify;
+    right; repeat eexists; clarify.
 Qed.
 
 Corollary instrument_access : forall i t i' li rest v
@@ -1052,13 +753,7 @@ Proof.
   destruct i0; try destruct v; clarify; eauto.
   right; clarify; eauto.
 Qed.
-*)
-Lemma R_meta : forall v (Ht : v < zv) o, meta_loc (R + v, o).
-Proof. intros; unfold meta_loc; simpl; omega. Qed.
 
-Lemma W_meta : forall v (Ht : v < zv) o, meta_loc (W + v, o).
-Proof. intros; unfold meta_loc; simpl; omega. Qed.
-(*
 Lemma v_not_C : forall t (Ht : t < zt) (o1 : nat) v (Hv : ~meta_loc v)
   (Hv2 : fst v < zv) (Haccess : Some (C + t, o1) = Some v \/
     (exists o, Some (C + t, o1) = Some (R + fst v, o)) \/
@@ -1091,7 +786,7 @@ Proof.
   - exploit Hmetalocs_disjoint_WR; try apply H1; auto; contradiction.
   - eapply plus_reg_l; eauto.
 Qed.
-*)
+
 Lemma unlock_last : forall i t n l rest, skipn n (instrument_instr i t) =
   Unlock l :: rest -> rest = [].
 Proof.
@@ -1154,6 +849,18 @@ Proof.
       rewrite nth_error_two in *; clarify.
 Qed.      
 
+Notation is_tmp a := (if eq_dec a tmp1 then true else if eq_dec a tmp2 then true
+  else false).
+
+Definition meta_instr i :=
+  match i with
+  | Assign a e => is_tmp a
+  | Load a p => if meta_loc_dec p then is_tmp a else false
+  | Store p _ => if meta_loc_dec p then true else false
+  | Lock m | Unlock m => if meta_loc_dec (m, 0) then true else false
+  | Assert_le _ _ => true | _ => false
+  end.
+
 Lemma lock_first : forall i t n l rest, skipn n (instrument_instr i t) =
   Lock l :: rest -> n = 0.
 Proof.
@@ -1213,9 +920,20 @@ Proof.
     exploit max_vc_instrs; eauto; clarify.
 Qed.  
 
-Lemma L_meta : forall l (Ht : l < zl) o, meta_loc (L + l, o).
-Proof. intros; unfold meta_loc; simpl; omega. Qed.
-(*
+Corollary lock_inv : forall i t n l rest (Hsafe : safe_instr i) (Ht : t < zt)
+  (Hn : skipn n (instrument_instr i t) = Lock l :: rest)
+  (Hmeta : meta_instr (Lock l) = false),
+  i = Lock l /\ n = 0.
+Proof.
+  intros.
+  exploit lock_first; eauto; clarify.
+  destruct i; try destruct x; clarify.
+  - contradiction n; apply X_meta; auto.
+  - contradiction n; apply X_meta; auto.
+  - clear - Hn; destruct zt; clarify.
+  - clear - Hn; destruct zt; clarify.
+Qed.
+
 Lemma v_not_L : forall l (Hl : l < zl) (o1 : nat) v (Hv : ~meta_loc v)
   (Hv2 : fst v < zv) (Haccess : Some (L + l, o1) = Some v \/
     (exists o, Some (L + l, o1) = Some (R + fst v, o)) \/
@@ -1226,7 +944,7 @@ Proof.
   - eapply Hmetalocs_disjoint_LR; eauto.
   - eapply Hmetalocs_disjoint_LW; eauto.
 Qed.
-*)
+
 Definition bounded_instr := instr_rect'' _ _ (fun _ => True)
   (fun u li r => u < zt /\ r) True (fun _ _ r1 r2 => r1 /\ r2).
 
@@ -1319,7 +1037,6 @@ Proof.
   exploit instrument_nonnil; eauto.
 Qed.
 
-(*
 Lemma lock_hold' : forall m l t ops (Hinit : initialized m (l, 0))
   (Hheld : can_read (m ++ ops) (l, 0) (S t)) (Hcon : consistent (m ++ ops))
   (Hprog : Forall prog_op ops) (Hlock : Forall (fun a => loc_of a = (l, 0) ->
@@ -1353,7 +1070,7 @@ Proof.
   - simpl in Hheld; rewrite app_assoc, loc_valid_SC in Hheld; clarify.
     repeat rewrite <- app_assoc in *; clarify.
 Qed.
-*)
+
 Definition good_var x := state_forall
   (fun i => match i with Lock l | Unlock l => l <> x | _ => True end).
 
@@ -1370,8 +1087,7 @@ Lemma protect_self : forall P0 (Hsafe : safe_locs P0)
   Forall (fun a => loc_of a <> (l, 0))
     (filter (fun x => negb (beq (thread_of x) t)) lc).
 Proof.
-  admit.
-(*  intros.
+  intros.
   remember (Some P) as P1; generalize dependent P; rewrite exec_rev in Hsteps'; 
     induction Hsteps'; clarify.
   rewrite Forall_app in Hno_lock.
@@ -1399,25 +1115,25 @@ Proof.
     rewrite can_arw_SC_iff in Hcon.
     specialize (Hcon 0); exploit consistent_app_SC; try apply Hcon; intro.
     exploit can_read_thread'; eauto; intro.
+    rewrite <- app_assoc in *.
     exploit can_read_unique.
-    { apply H. }
     { do 2 (eapply init_steps, prog_steps; eauto). }
-    { apply Hheld'. }
     { eauto. }
+    { apply Hheld'. }
     clarify.
   - inversion Hexec'; clarify.
     rewrite can_arw_SC_iff in Hcon.
     specialize (Hcon 0); exploit consistent_app_SC; try apply Hcon; intro.
     exploit can_read_thread'; eauto; intro.
+    rewrite <- app_assoc in *.
     exploit can_read_unique.
-    { apply H. }
     { do 2 (eapply init_steps, prog_steps; eauto). }
-    { apply Hheld'. }
     { eauto. }
+    { apply Hheld'. }
     intro Heq; inversion Heq; unfold beq, negb in cond; clarify.
-  - rewrite Forall_forall in Hno_lock1; exploit Hno_lock1; eauto.*)
+  - rewrite Forall_forall in Hno_lock1; exploit Hno_lock1; eauto.
 Qed.
-(*
+
 Lemma access_v : forall i t n i' rest (Ht : t < zt)
   (Hn : skipn n (instrument_instr i t) = i' :: rest)
   v o (Hv : v < zv) (Hmeta : ~meta_loc (v, o))
@@ -1526,7 +1242,7 @@ Proof.
         destruct Haccess as [? | [? | ?]]; eauto.
     + unfold unlock_handler in Hinstr.
       destruct (set_vc (C + t) (L + m) zt tmp1) eqn: Hset; clarify.
-      { destruct zt; clarify. }
+      { generalize zt_non_zero; destruct zt; clarify. }
       repeat rewrite skipn_app in Hn; rewrite <- app_assoc in Hn.
       destruct (skipn n l) eqn: Hskip.
       destruct (skipn (n - length l) (inc_vc t (C + t) tmp1)) eqn: Hskip'.
@@ -1552,7 +1268,7 @@ Proof.
           destruct Haccess as [? | [? | ?]]; eauto. }
     + unfold spawn_handler in Hinstr.
       destruct (max_vc (C + t) (C + t0) zt tmp1 tmp2) eqn: Hmax; clarify.
-      { destruct zt; clarify. }
+      { generalize zt_non_zero; destruct zt; clarify. }
       repeat rewrite skipn_app in Hn; rewrite <- app_assoc in Hn.
       destruct (skipn n l) eqn: Hskip.
       destruct (skipn (n - length l) (inc_vc t (C + t) tmp1)) eqn: Hskip'.
@@ -1593,43 +1309,8 @@ Proof.
           destruct Haccess as [? | [? | ?]]; eauto. }
         { eapply v_not_C with (v := (v, o))(t := t); eauto.
           destruct Haccess as [? | [? | ?]]; eauto. }
-Qed.*)
-
-(*
-Lemma step_into_instruments1 : forall P P1 (Hsim : state_sim P P1)
-  (Hsafe : safe_locs P) (Hdistinct : distinct P1)
-  G1 lo lc P1' G1' (Hsteps : exec_star (Some P1) G1 lo lc (Some P1') G1')
-  Pa n (HPa : Pa = skipn n P1'),
-  exists P', safe_locs P' /\ state_suffix P' Pa.
-Proof.
-  induction Pa; clarify.
-  - repeat eexists; constructor.
-  - destruct P1'; [rewrite skipn_nil in HPa; clarify|].
-    exploit skipn_cons; eauto; intro.
-    specialize (IHPa (S n)); use IHPa; destruct IHPa as (P' & ?).
-    assert (In a (p :: P1')).
-    { eapply skipn_in; setoid_rewrite <- HPa; simpl; auto. }
-    destruct a as (t, li); destruct li.
-    + exists ((t, []) :: P'); repeat split; constructor; clarify; eauto.
-    + exploit step_into_instrument; eauto.
-      intros (? & ? & ? & ? & n' & i' & li' & rest & ?).
-      exists ((t, i' :: rest) :: P'); repeat split; constructor; clarify.
-      exists n'; rewrite skipn_app.
-      destruct (le_gt_dec (length (instrument_instr i' t)) n').
-      { rewrite skipn_all in *; clarify. }
-      rewrite not_le_minus_0; [clarsimp | omega].
 Qed.
 
-Corollary step_into_instruments : forall P P1 (Hsim : state_sim P P1)
-  (Hsafe : safe_locs P) (Hdistinct : distinct P1)
-  G1 lo lc P1' G1' (Hsteps : exec_star (Some P1) G1 lo lc (Some P1') G1'),
-  exists P', safe_locs P' /\ state_suffix P' P1'.
-Proof.
-  intros; eapply step_into_instruments1 with (n := 0); eauto.
-Qed.
-*)
-
-(*    
 Lemma access_held : forall P0 (Hsafe : safe_locs P0)
   (Ht : Forall (fun e => fst e < zt) P0) P0' (Hsim : state_sim P0 P0')
   (Hdistinct : distinct P0') G0 lo0 lc0 P G
@@ -1657,20 +1338,7 @@ Proof.
     * inversion Hi0; clarify.
     * repeat rewrite Forall_app in Hi0; destruct Hi0 as ((_ & Hi0) & ?).
       inversion Hi0; clarify. }
-  { destruct i0; auto; clarify.
-    destruct n; clarify.
-    exploit step_instr; try apply Hinl; eauto.
-    { rewrite skipn_app, not_le_minus_0.
-      setoid_rewrite Heq; simpl; auto.
-      { intro; rewrite skipn_all in Heq; clarify. } }
-    intros (? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & Hwait & ?); clarify.
-    exploit exec_other_threads; try apply Hinl; eauto; intro.
-    exploit in_split; eauto; clarify.
-    exploit distinct_steps; try eapply exec_minus_exec; eauto; intro.
-    exploit exec_next; eauto; clarify.
-    exploit bounded_steps; try apply Hstepsl; auto; intro.
-    exploit bounded_steps; try eapply exec_minus_exec; eauto; intro Hbound'.
-    setoid_rewrite Forall_forall in Hbound'; exploit Hbound'; eauto; clarify. }
+  { destruct i0; auto. }
   intros (? & ?); destruct n; [omega|].
   destruct i0; try contradiction; try destruct x6; clarify.
   - exploit step_instr; try apply Hinl; eauto.
@@ -1769,7 +1437,7 @@ Proof.
       rewrite plus_comm; apply plus_le_compat_r; omega.
       { omega. }
 Qed.
-*)
+
 Lemma protect_held : forall P0 (Hsafe : safe_locs P0)
   (Ht : Forall (fun e => fst e < zt) P0) P0' (Hsim : state_sim P0 P0')
   (Hdistinct : distinct P0') G0 lo0 lc0 P G
@@ -1784,8 +1452,7 @@ Lemma protect_held : forall P0 (Hsafe : safe_locs P0)
   Forall (fun a => ~v_access v a /\ loc_of a <> (X + fst v, 0))
     (filter (fun x => negb (beq (thread_of x) t)) lc).
 Proof.
-  admit.
-(*  intros.
+  intros.
   remember (Some P) as P1; generalize dependent P; rewrite exec_rev in Hsteps'; 
     induction Hsteps'; clarify.
   rewrite Forall_app in Hno_lock.
@@ -1829,14 +1496,13 @@ Proof.
   rewrite <- app_assoc in *.
   exploit access_held; eauto; intro.
   exploit can_read_unique.
-  { apply H. }
   { do 2 (eapply init_steps, prog_steps; eauto). }
-  { apply Hheld'. }
   { eauto. }
+  { apply Hheld'. }
   intro Heq; inversion Heq; unfold beq, negb in cond; clarify.
-  { rewrite Forall_forall in Hno_lock1; exploit Hno_lock1; eauto. }*)
+  { rewrite Forall_forall in Hno_lock1; exploit Hno_lock1; eauto. }
 Qed.
-(*
+
 Lemma L_access : forall i1 i t (Ht : t < zt)
   (Hsafe : safe_instr i) (Hi : match i with Wait u => u < zt | _ => True end)
   (His : In i1 (instrument_instr i t))
@@ -1849,7 +1515,7 @@ Proof.
     + exploit Hmetalocs_disjoint_LX; eauto.
     + exploit hb_check_instrs; eauto; intros [[? [? [? | ?]]] | ?]; clarify.
       * exploit Hmetalocs_disjoint_LW; eauto.
-      * eapply Hmetalocs_disjoint_CL with (t := t); eauto.
+      * eapply (Hmetalocs_disjoint_CL Hv Ht); auto.
     + destruct H; clarify.
       * eapply Hmetalocs_disjoint_CL; eauto.
       * eapply Hmetalocs_disjoint_LR; eauto.
@@ -1860,10 +1526,10 @@ Proof.
     + exploit Hmetalocs_disjoint_LX; eauto.
     + exploit hb_check_instrs; eauto; intros [[? [? [? | ?]]] | ?]; clarify.
       * exploit Hmetalocs_disjoint_LW; eauto.
-      * eapply Hmetalocs_disjoint_CL with (t := t); eauto.
+      * eapply (Hmetalocs_disjoint_CL Hv Ht); auto.
     + exploit hb_check_instrs; eauto; intros [[? [? [? | ?]]] | ?]; clarify.
       * exploit Hmetalocs_disjoint_LR; eauto.
-      * eapply Hmetalocs_disjoint_CL with (t := t); eauto.
+      * eapply (Hmetalocs_disjoint_CL Hv Ht); auto.
     + destruct H; clarify.
       * eapply Hmetalocs_disjoint_CL; eauto.
       * eapply Hmetalocs_disjoint_LW; eauto.
@@ -1885,17 +1551,16 @@ Proof.
     + contradiction Hsafe1; apply L_meta; auto.
   - setoid_rewrite in_app in His; destruct His as [[? | ?] | ?]; clarify.
     + exploit max_vc_instrs; eauto; intros [[? [? [? | ?]]] | ?]; clarify.
-      * eapply Hmetalocs_disjoint_CL with (t := t0); eauto.
-      * destruct H1; clarify; eapply Hmetalocs_disjoint_CL with (t := t); eauto.
+      * eapply (Hmetalocs_disjoint_CL Hv Ht); auto.
+      * destruct H1; clarify; eapply (Hmetalocs_disjoint_CL Hv Hsafe1); auto.
     + destruct H as [? | [? | ?]]; clarify; eapply Hmetalocs_disjoint_CL; eauto.
   - setoid_rewrite in_app in His; destruct His; clarify.
     + exploit max_vc_instrs; eauto; intros [[? [? [? | ?]]] | ?]; clarify.
-      * eapply Hmetalocs_disjoint_CL with (t := t); eauto.
-      * destruct H1; clarify; eapply Hmetalocs_disjoint_CL with (t := t0);
-          eauto.
+      * eapply (Hmetalocs_disjoint_CL Hv Hsafe); auto.
+      * destruct H1; clarify; eapply (Hmetalocs_disjoint_CL Hv Ht); auto.
     + destruct H; clarify; eapply Hmetalocs_disjoint_CL; eauto.
 Qed.
-*)
+
 Definition good_unlock l li := forall i, nth_error li i = Some (Unlock l) ->
   exists j, j < i /\ nth_error li j = Some (Lock l) /\
   forall k, j < k < i -> nth_error li k <> Some (Unlock l).
@@ -1915,7 +1580,7 @@ Qed.
 
 Definition well_locked l (P : state) :=
   Forall (fun e => good_unlock l (snd e) /\ Forall (good_unlocks l) (snd e)) P.
-(*
+
 Lemma well_locked_spawn : forall l P G lo lc P' G'
   (Hwell_locked : well_locked l P)
   (Hsteps : exec_star (Some P) G lo lc (Some P') G') t li (Hin : In (t, li) P')
@@ -2038,7 +1703,7 @@ Proof.
   rewrite firstn_app, firstn_length, minus_diag, app_nil_r, <- app_assoc;
     auto.
 Qed.
-*)
+
 (* With well-locked programs, if we're up to an unlock we should know we hold
    the lock. *)
 Lemma unlock_locked : forall P0 l (Hdistinct : distinct P0)
@@ -2049,8 +1714,7 @@ Lemma unlock_locked : forall P0 l (Hdistinct : distinct P0)
   m (Hinit : initialized m (l, 0)) (Hcon : consistent (m ++ lc)),
   can_read (m ++ lc) (l, 0) (S t).
 Proof.
-  admit.
-(*  intros until G; intro; rewrite exec_rev in Hsteps.
+  intros until G; intro; rewrite exec_rev in Hsteps.
   remember (Some P0) as P1; remember (Some P) as P2; generalize dependent P;
     generalize dependent P0; induction Hsteps; clarify.
   - setoid_rewrite Forall_forall in Hlock'.
@@ -2124,9 +1788,9 @@ Proof.
       rewrite nth_error_app in Hj; clarify.
       exploit nth_error_in; eauto; intro.
       rewrite Forall_forall in Hlocked; exploit Hlocked; eauto;
-        contradiction.*)
+        contradiction.
 Qed.
-(*
+
 Transparent minus.
       
 Lemma protect_l : forall P0 (Hsafe : safe_locs P0)
@@ -2169,7 +1833,7 @@ Proof.
         ? & ? & Hsafe_i & ?); clarify.
       exploit bounded_sim; eauto; intro.
       exploit bounded_steps; eauto; setoid_rewrite Forall_app.
-      intros [? Ht']; inversion Ht'; clarify.
+      intros [? Ht']; inversion Ht' as [|?? (Ht1 & _)]; clarify.
       exploit step_thread; eauto.
       { eapply distinct_steps; eauto. }
       { rewrite in_app; clarify. }
@@ -2190,30 +1854,15 @@ Proof.
             destruct (instrument_instr i0 t); clarify. }
         destruct i0; try contradiction; clarify.
         * contradiction Hmeta; rewrite H11; apply L_meta; auto.
-        * destruct zt; clarify.
-          exploit Hmetalocs_disjoint_CL; eauto; contradiction. }
+        * specialize (Hmetalocs_disjoint_CL Hv Ht1).
+          generalize zt_non_zero; destruct zt; clarify. }
       assert (distinct x0).
       { eapply distinct_steps; [|eauto]; auto. }
       assert (S n' - length (instrument_instr i2 t) = 0) as Hn'.
       { destruct (lt_dec n' (length (instrument_instr i2 t))); [omega|].
         rewrite skipn_all in H2; [inversion H2 | simpl; omega]. }
       exploit L_access; eauto.
-      { destruct i2; auto.
-        exploit step_instr; try apply Hi2.
-        { auto. }
-        { eapply exec_step_inv; eauto. }
-        { instantiate (1 := n'); rewrite skipn_app.
-          simpl in Hn'; rewrite Hn'.
-          simpl; erewrite skipn_cons; [|apply H2]; auto. }
-        intros (? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & Hwait & ?).
-        exploit exec_other_threads; try apply Hi2; eauto; intro.
-        exploit distinct_steps; [|eapply exec_minus_exec; eauto|]; auto.
-        exploit in_split; eauto; clarify.
-        inversion Hwait; subst; exploit distinct_thread; eauto; clarify.
-        exploit bounded_steps; try apply H1; auto; intro.
-        exploit bounded_steps; [|eapply exec_minus_exec; eauto|]; auto.
-        setoid_rewrite Forall_forall; intro Hbound; exploit Hbound; eauto;
-          clarify. }
+      { destruct i2; auto. }
       { eapply skipn_in.
         setoid_rewrite H2; simpl; auto. }
       destruct i2; try contradiction; intro; subst; simpl in *.
@@ -2328,7 +1977,7 @@ Proof.
     inversion Hthread; unfold beq in *; clarify.
     rewrite Forall_forall in Hno_lock1; exploit Hno_lock1; eauto; clarify.
 Qed.
-*)
+
 Lemma protect_lock : forall P0 (Hsafe : safe_locs P0)
   (Ht : Forall (fun e => fst e < zt) P0) P0' (Hsim : state_sim P0 P0')
   (Hdistinct : distinct P0') G0 lo0 lc0 P G
@@ -2343,8 +1992,7 @@ Lemma protect_lock : forall P0 (Hsafe : safe_locs P0)
   Forall (fun a => forall o, loc_of a <> (L + l, o))
     (filter (fun x => negb (beq (thread_of x) t)) lc).
 Proof.
-  admit.
-(*  intros.
+  intros.
   remember (Some P) as P1; generalize dependent P; rewrite exec_rev in Hsteps'; 
     induction Hsteps'; clarify.
   rewrite Forall_app in Hno_lock.
@@ -2380,13 +2028,12 @@ Proof.
   { repeat rewrite <- app_assoc in *; auto. }
   { simpl; auto. }
   { rewrite H1; auto. }
-  intro; exploit can_read_unique.
-  { apply H. }
+  rewrite <- app_assoc in *; intro; exploit can_read_unique.
   { do 2 (eapply init_steps, prog_steps; eauto). }
+  { eauto. }
   { apply Hheld'. }
-  { rewrite <- app_assoc; eauto. }
   intro Heq; inversion Heq; unfold beq, negb in cond; clarify.
-  { rewrite Forall_forall in Hno_lock1; exploit Hno_lock1; eauto. }*)
+  { rewrite Forall_forall in Hno_lock1; exploit Hno_lock1; eauto. }
 Qed.
 
 Lemma instrument_incom : forall i i' l l' t,
@@ -2412,7 +2059,7 @@ Proof.
       exploit IHli; symmetry; eauto; clarify.
 Qed.
 
-(*
+
 (* This should probably replace all other versions. *)
 Lemma in_mops_set_vc'': forall n c vc1 vc2 vs t
   (Hin: In c (mops_set_vc vc1 vc2 n t vs)),
@@ -2547,7 +2194,7 @@ Proof.
   destruct a, H; clarify; [omega|].
   exploit IHP; eauto; omega.
 Qed.
-*)
+
 Lemma protect_spawn' : forall P0 (Hsafe : safe_locs P0)
   (Ht : Forall (fun e => fst e < zt) P0) P0' (Hsim : state_sim P0 P0')
   (Hdistinct : distinct P0') (Hspawns : safe_spawns P0') G0 lo0 lc0 P G
@@ -2558,8 +2205,7 @@ Lemma protect_spawn' : forall P0 (Hsafe : safe_locs P0)
   Forall (fun a => forall o, loc_of a <> (C + u, o))
     (filter (fun x => negb (beq (thread_of x) t)) lc).
 Proof.
-  admit.
-(*  intros until G'; intro.
+  intros until G'; intro.
   remember (Some P) as P1; remember (Some P') as P2; generalize dependent P';
     generalize dependent P; rewrite exec_rev in Hsteps'; 
     induction Hsteps'; clarify.
@@ -2639,7 +2285,6 @@ Proof.
       exploit has_spawn; eauto; intro.
       generalize (has_spawn_thread t1 _ _ Hin); simpl; omega.
       { clear Hin Hin2; rewrite in_app in *; clarify; rewrite in_app; clarify. }
-*)
 Qed.
 
 Definition waits t := instr_rect'' (fun _ => nat) _
@@ -2684,7 +2329,7 @@ Proof.
   unfold waits in Hwaits; simpl in Hwaits;
     rewrite (waits_list_def t') in *; omega.
 Qed.
-(*
+
 Definition waiter t u := instr_rect'' _ (fun _ => tid -> Prop)
   (fun i => match i with Wait u' => fun t' => u' = u /\ t' = t
    | _ => fun _ => False end)
@@ -2844,9 +2489,9 @@ Proof.
   exploit t_waits_steps; eauto.
   do 2 eexists; eauto; clarify.
   constructor; unfold waiter; clarify.
-Qed.    
+Qed.
     
-Lemma protect_wait : forall P0 (Hsafe : safe_locs P0)
+Lemma protect_wait' : forall P0 (Hsafe : safe_locs P0)
   (Ht : Forall (fun e => fst e < zt) P0) P0' (Hsim : state_sim P0 P0')
   (Hdistinct : distinct P0') (Hspawns : safe_spawns P0')
   (Hwaits : safe_waits P0') G0 lo0 lc0 P G
@@ -2894,62 +2539,7 @@ Proof.
       unfold negb, beq in *; clarify. }
     exploit unique_wait; eauto; intros (t' & Ht').
     exploit Ht'; try apply Hin; eauto; clarify.
-    exploit Ht'; try apply H2; eauto.
-  - inversion Hexec'; clarify.
-Qed.
-*)
-
-Lemma protect_wait' : forall P0 (Hsafe : safe_locs P0)
-  (Ht : Forall (fun e => fst e < zt) P0) P0' (Hsim : state_sim P0 P0')
-  (Hdistinct : distinct P0') (Hspawns : safe_spawns P0')
-  (Hwaits : safe_waits P0') G0 lo0 lc0 P G
-  (Hsteps : exec_star (Some P0') G0 lo0 lc0 (Some P) G)
-  u (Hdone : In (u, []) P)
-  lo lc P' G' (Hsteps' : exec_star (Some P) G lo lc P' G')
-  t li (Hin : In (t, Wait u :: li) P),
-  Forall (fun a => forall o, loc_of a <> (C + u, o))
-    (filter (fun x => negb (beq (thread_of x) t)) lc).
-Proof.
-  admit.
-(*  intros; remember (Some P) as P1; rewrite exec_rev in Hsteps';
-    induction Hsteps'; clarify.
-  rewrite filter_app, Forall_app; clarify.
-  exploit exec_result; eauto; intros (? & i & ? & ? & v & ? & Hresult).
-  destruct (instr_result t0 i (G' t0) v) as [((((?, ?), ?), ?), ?)|] eqn: Hi;
-    clarify.
-  rewrite <- exec_rev in Hsteps'.
-  rewrite Forall_forall; intros.
-  destruct c; clarify; intro.
-  exploit distinct_steps; eauto; intro.
-  exploit exec_keep; try apply Hdone; eauto; intros (? & Hdone').
-  rewrite skipn_nil in Hdone'; clarify.
-  exploit instrument_thread''; try apply Hexec'; eauto.
-  { eapply exec_star_trans; eauto. }
-  { exploit bounded_sim; eauto; intro.
-    exploit bounded_steps; eauto; intro Hu.
-    setoid_rewrite Forall_forall in Hu; specialize (Hu _ Hdone); clarify. }
-  intros [? | (? & ? & ? & ? & i' & n' & ? & ? & ? & ? & ? & Hin' & ?)].
-  { exploit distinct_steps; eauto; intro; subst.
-    exploit distinct_in; [eauto | rewrite in_app; clarify | eauto | clarify]. }
-  destruct i'; clarify.
-  - generalize (safe_spawns_steps Hspawns Hsteps); intro Hspawns1.
-    generalize (safe_spawns_steps Hspawns1 Hsteps'); intro Hspawns'.
-    specialize (Hspawns' t1); clarify.
-    specialize (Hspawns'2 []); clarify.
-    rewrite skipn_app in Hin'.
-    rewrite app_length in *; simpl in *.
-    assert (n' - length (spawn_handler t0 t1 zt) = 0) as Hzero by omega.
-    rewrite Hzero in Hin'; simpl in Hin'.
-    generalize (has_spawn_thread t1 _ _ Hin'); simpl.
-    repeat rewrite spawns_list_app; clarify.
-    unfold spawns in *; clarify; rewrite (spawns_list_def t1) in *; omega.
-  - assert (t0 <> t).
-    { exploit exec_ops; eauto; simpl; intro Hx; inversion Hx; clarify.
-      unfold negb, beq in *; clarify. }
-    exploit unique_wait; eauto; intros (t' & Ht').
-    exploit Ht'; try apply Hin; eauto; clarify.
-    exploit Ht'; try apply H2; eauto.
-  - inversion Hexec'; clarify.*)
+    exploit Ht'; eauto.
 Qed.
 
 Definition lock_instr l := instr_rect'' (fun _ => Prop) _
@@ -3072,11 +2662,10 @@ Qed.
 
 Lemma sim_suffix : forall P P', state_sim P P' -> state_suffix P P'.
 Proof.
-  admit.
-(*  intros; induction H; constructor; auto.
+  intros; induction H; constructor; auto.
   destruct x, y; clarify.
   exists 0; clarify.
-  generalize (instrument_length (hd (Assign 0 (I 0)) p) t0); omega.*)
+  generalize (instrument_length (hd (Assign 0 (I 0)) p) t0); omega.
 Qed.
 
 Lemma spawn_in_handler' : forall u li i t n
@@ -3119,7 +2708,7 @@ Proof.
   - rewrite Hin; auto.
   - rewrite IHHsuffix; auto.
 Qed.
-(*
+
 Lemma sim_thread : forall P P1 P2 (Hsim : state_sim P P1)
   (Hdistinct : distinct P1) G1 lo lc G2
   (Hsteps : exec_star (Some P1) G1 lo lc (Some P2) G2) t li
@@ -3264,7 +2853,7 @@ Proof.
       rewrite app_length in *; omega. }
     rewrite <- (plus_O_n n'), <- skipn_nth; subst.
     rewrite <- Hskip; clarify.
-Qed.*)
+Qed.
 
 Lemma state_sim_inv' : forall P2a P1 P2b t li'
   (Hsim : state_sim P1 (P2a ++ (t, li') :: P2b))
@@ -3326,7 +2915,7 @@ Proof.
       * specialize (H1 (S n) t0 li0); clarify; eauto.
       * specialize (H2 (S n) t0 li1); clarify; eauto.
 Qed.
-(*
+
 (* Next time, consider using a map. *)
 Lemma state_suffix_inter : forall P P1 (Hsim : state_suffix P P1)
   (Hdistinct : distinct P1)
@@ -3382,18 +2971,18 @@ Proof.
         [|rewrite <- (plus_O_n n), <- skipn_nth, Hskip; simpl; eauto].
       inversion Hskip as [Heq]; simpl; rewrite Heq; auto.
 Qed.  
-*)
+
 Corollary state_suffix_inv : forall P P1 (Hsim : state_sim P P1)
   (Hdistinct : distinct P1)
   G1 lo1 lc1 P2 G2 (Hsteps1 : exec_star (Some P1) G1 lo1 lc1 (Some P2) G2)
   lo2 lc2 P3 G3 (Hsteps2 : exec_star (Some P2) G2 lo2 lc2 (Some P3) G3)
   (Hsuffix : state_suffix P P3), state_suffix P P2.
 Proof.
-  admit.
-(*  intros; eapply state_suffix_inter with (P3 := P3); try apply sim_suffix, Hsim;
-    eauto.*)
+  intros; eapply state_suffix_inter with (P3 := P3); try apply sim_suffix, Hsim;
+    eauto.
 Qed.
-(*
+
+(* up? *)
 Lemma upd_overwrite1 : forall A B (A_eq : EqDec_eq A) (f : A -> B) t v1 v2,
   upd (upd f t v1) t v2 = upd f t v2.
 Proof.
@@ -3406,12 +2995,7 @@ Proof.
   intros; extensionality x; unfold upd; clarify.
 Qed.
 
-Lemma upd_three : forall G t a1 a2 v1 v2 v1' (Hdiff : a1 <> a2),
-  upd_env (upd_env (upd_env G t a1 v1) t a2 v2) t a1 v1' =
-  upd_env (upd_env G t a1 v1') t a2 v2.
-Proof.
-  intros; rewrite upd_assoc, upd_overwrite; auto.
-Qed.
+Hint Resolve Htmp.
 
 Lemma hb_check_exec : forall t z P G lo lc P' G' (Hdistinct : distinct P)
   li src tgt
@@ -3517,7 +3101,7 @@ Proof.
   rewrite Forall_forall; intros.
   exploit in_mops_hb_check; eauto; destruct x; auto.
 Qed.
-*)
+
 Corollary hb_check_twice : forall C1 C1' C2 t z vs1 vs1' vs2 vs2'
   (Hlen1 : length vs1 = z) (Hlen1' : length vs1' = z) (Hlen2 : length vs2 = z)
   (Hlen2' : length vs2' = z) (Hle : first_gt vs1 vs2 = None)
@@ -3527,7 +3111,6 @@ Corollary hb_check_twice : forall C1 C1' C2 t z vs1 vs1' vs2 vs2'
   (Hinit : forall o, o < z -> initialized m (C2, o)),
   vs2' = vs2.
 Proof.
-  admit. (*
   intros.
   rewrite app_assoc in Hcon.
   generalize (hb_check_match _ _ _ _ _ Hlen1' Hlen2' Hle' _ Hcon); intro Hvs2'.
@@ -3539,7 +3122,6 @@ Proof.
     rewrite reads_noops_SC in Hvs2'2; auto; [|apply mops_hb_check_read].
     exploit consistent_app_SC; eauto; intro.
     exploit can_read_unique.
-    { eauto. }
     { specialize (Hinit (length vs1 - n - 1)).
       use Hinit; [eauto | omega]. }
     { apply Hvs22. }
@@ -3548,9 +3130,9 @@ Proof.
   - destruct (nth_error vs2 n) eqn: Hnth.
     { exploit nth_error_lt; eauto; omega. }
     destruct (nth_error vs2' n) eqn: Hnth'; auto.
-    { exploit nth_error_lt; eauto; omega. }*)
+    { exploit nth_error_lt; eauto; omega. }
 Qed.
-(*
+
 Lemma max_vc_exec : forall t z P G lo lc P' G' (Hdistinct : distinct P)
   li src tgt (Hz : z <> 0)
   Pa Pb (HP : P = Pa ++ (t, max_vc src tgt z tmp1 tmp2 ++ li) :: Pb)
@@ -3613,7 +3195,7 @@ Proof.
   induction z; clarify.
   { exists []; clarify.
     exploit exec_t_maintain; eauto; try apply split_in; clarify.
-    rewrite last_nil, upd_triv; auto. }
+    rewrite upd_triv; auto. }
   inversion Ht; clarify.
   { exploit distinct_in; [eauto | apply split_in | apply Hin' | clarify].
     repeat rewrite app_comm_cons in *; exploit app_nil_inv; eauto; clarify. }
@@ -3631,7 +3213,7 @@ Proof.
 Qed.
 
 Opaque move mops_move.
-*)
+
 Lemma exec_t_iexec : forall t P G lo lc P' G' i li (Hdistinct : distinct P)
   (Hin : In (t, instrument_instr i t ++ li) P) (Hlt : t < zt)
   (Hfresh : fresh tmp1 i /\ fresh tmp2 i)
@@ -3640,8 +3222,7 @@ Lemma exec_t_iexec : forall t P G lo lc P' G' i li (Hdistinct : distinct P)
   (Hinit : forall t o, t < zt -> o < zt -> initialized m (C + t, o)),
   iexec P G t lo lc P' G'.
 Proof.
-  admit.
-(*  destruct i; try destruct x; clarify.
+  destruct i; try destruct x; clarify.
   - inversion Ht; clarify.
     { generalize (NoDup_id_inj _ _ _ Hdistinct Hin Hin'); clarify.
       exploit cons_neq; eauto; clarify. }
@@ -3881,7 +3462,7 @@ Proof.
     exploit distinct_step; eauto; intro.
     exploit exec_t_maintain; eauto; try apply split_in.
     clarify; eapply iexec_assert; eauto.
-    { inversion Hexec'. }*)
+    { inversion Hexec'. }
 Qed.
 
 Lemma exec_minus_reorder : forall t P G lo lc P1 G1 (Hdistinct : distinct P)
@@ -3896,8 +3477,7 @@ Lemma exec_minus_reorder : forall t P G lo lc P1 G1 (Hdistinct : distinct P)
   exists P1' G1', exec P G t o c (Some P1') G1' /\
     exec_star_minus t (Some P1') G1' lo lc (Some P2) G2.
 Proof.
-  admit.
-(*  intros until G2; remember (Some P) as Pa; remember (Some P1) as Pb;
+  intros until G2; remember (Some P) as Pa; remember (Some P1) as Pb;
     generalize dependent P; induction Hsteps; clarify.
   { repeat eexists; eauto; apply exec_refl_m. }
   destruct P'; [|inversion Hsteps].
@@ -3930,7 +3510,7 @@ Proof.
     { apply Hdistinct. }
     { eapply exec_step; try apply exec_refl; eauto. }
     { eauto. }
-    clarify; rewrite skipn_nil in *; auto.*)
+    clarify; rewrite skipn_nil in *; auto.
 Qed.
 
 Lemma state_suffix_stable : forall P P1 (Hsuffix : state_suffix P P1)
@@ -3940,8 +3520,7 @@ Lemma state_suffix_stable : forall P P1 (Hsuffix : state_suffix P P1)
   Forall (fun o => match o with fork _ _ => False | _ => True end) lo /\
   Forall (fun e => snd e = [] -> In e P1) P2.
 Proof.
-  admit.
-(*  intros; remember (Some P1) as Pa; remember (Some P2) as Pb;
+  intros; remember (Some P1) as Pa; remember (Some P2) as Pb;
     generalize dependent P1; induction Hsteps; clarify.
   { rewrite Forall_forall; auto. }
   destruct P'; [|inversion Hsteps].
@@ -3965,8 +3544,8 @@ Proof.
     destruct l; clarify.
     exploit Forall2_in1; try apply Hsuffix; eauto; intros ((?, ?) & ?); clarify.
     rewrite skipn_nil in *; auto.
-    { symmetry in Heq; rewrite skipn_all_iff, app_length in Heq; omega. }*)
-Qed.  
+    { symmetry in Heq; rewrite skipn_all_iff, app_length in Heq; omega. }
+Qed.
 
 Opaque removelast.
 
@@ -4702,7 +4281,7 @@ Proof.
   { repeat rewrite app_length in Hn; simpl in Hn; omega. }
 Qed.
 
-(*Lemma instrument_own_thread' : forall t (Ht : t < zt) P G lo lc P1 G1
+Lemma instrument_own_thread' : forall t (Ht : t < zt) P G lo lc P1 G1
   (Hsteps : exec_star (Some P) G lo lc (Some P1) G1)
   P0 (Hsafe : safe_locs P0) P0' (Hdistinct : distinct P0')
   (Hspawns : safe_spawns P0') (Hsim : state_sim P0 P0') G0 lo0 lc0
@@ -4764,7 +4343,19 @@ Proof.
       simpl in Hin'; destruct Hin' as [? | [? | ?]]; clarify; eauto].
     eapply has_spawn; simpl; repeat rewrite in_app; simpl; eauto.
   - exploit Hrest; eauto; omega.
-Qed.*)
+Qed.
+
+Lemma in_mops_max_vc': forall n c vc1 vc2 vs1 vs2 t
+   (Hin: In c (mops_max_vc vc1 vc2 vs1 vs2 t n)),
+  match c with 
+  | Write tc p _ => fst p = vc2
+  | Read tc p _  => fst p = vc1 \/ fst p = vc2
+  | _ => False
+  end.
+Proof.
+  induction n; intros; destruct vs1; clarify; destruct vs2; clarify.
+  destruct c; clarify; exploit IHn; eauto.
+Qed.
 
 Lemma instrument_indep_n : forall P0 G0 t o c P G lo lc P1 G1 P2 G2 i rest
   (Hdistinct : distinct P0) P0' (Hsim : state_sim P0' P0)
@@ -4791,8 +4382,7 @@ Lemma instrument_indep_n : forall P0 G0 t o c P G lo lc P1 G1 P2 G2 i rest
             (opt_to_list c ++ lc ++ opt_to_list c')))
     (filter (fun x => negb (beq (thread_of x) t)) (lc ++ opt_to_list c')).
 Proof.
-  admit.
-(*  intros.
+  intros.
   exploit step_thread'; eauto; intros (i' & ? & Hin1 & ?).
   exploit distinct_steps; eauto; intro Hdistinct1.
   exploit distinct_step; eauto; intro Hdistinct'.
@@ -5265,7 +4855,7 @@ Proof.
     { apply Hdistinct2. }
     { apply Hin'. }
     { eauto. }
-    simpl; intro; exploit skip_cons_neq; eauto; clarify.*)
+    simpl; intro; exploit skip_cons_neq; eauto; clarify.
 Qed.
 
 Corollary instrument_indep : forall P0 G0 t o c P G lo lc P1 G1 o' c' P2 G2 i
@@ -5311,7 +4901,7 @@ Proof.
   - rewrite skipn_app, not_le_minus_0 in Hin2; [auto | omega].
   - eapply exec_ops; eauto.
 Qed.
-(*
+
 Lemma first_mem : forall P G t o c P' G' (Hstep : exec P G t o c P' G')
   (Hdistinct : distinct P)
   i rest (Hinstr : In (t, instrument_instr i t ++ rest) P)
@@ -5334,7 +4924,7 @@ Proof.
   constructor; [|eapply IHP; eauto].
   destruct a, y; clarify.
 Qed.
-*)
+
 Lemma noninterference : forall t P P0 (Hsim0 : state_sim P P0)
   (Hdistinct : distinct P0) (Hsafe0 : safe_locs P) (Hfresh0 : fresh_tmps P)
   (Ht : Forall (fun e => fst e < zt) P)
@@ -5356,8 +4946,7 @@ Lemma noninterference : forall t P P0 (Hsim0 : state_sim P P0)
   Forall (fun c' => match c with Some a => loc_of c' <> loc_of a
       | None => True end) lc. 
 Proof.
-  admit.
-(*  intros.
+  intros.
   exploit distinct_steps; eauto; intro.
   assert (forall t', t' <> t -> Forall (fun c1 =>
     Forall (fun c2 => loc_of c2 <> loc_of c1)
@@ -5526,7 +5115,7 @@ Proof.
           rewrite filter_app, filter_app, Forall_app in Hsep'; clarify.
           rewrite Forall_forall in Hsep'1; exploit Hsep'1; eauto.
           { rewrite filter_In; unfold beq in *; clarify. }
-          { intro X; inversion X; auto. }
+          { intro X'; inversion X'; auto. }
         * exploit state_suffix_inter.
           { eauto. }
           { auto. }
@@ -5592,7 +5181,7 @@ Proof.
   specialize (Hindep c); rewrite filter_In, in_app in Hindep; use Hindep;
     [|unfold negb, beq in *; clarify].
   rewrite Forall_forall in Hindep; apply Hindep.
-  rewrite filter_In; unfold beq; clarify.*)
+  rewrite filter_In; unfold beq; clarify.
 Qed.
 
 Lemma first_finished : forall P P0 (Hsim0 : state_sim P P0)
@@ -5623,8 +5212,7 @@ Lemma first_finished : forall P P0 (Hsim0 : state_sim P P0)
     mem_ext (m ++ lc0 ++ lc1 ++ lc2)
             (m ++ lc0 ++ lc0' ++ lc ++ lc' ++ opt_to_list c).
 Proof.
-  admit.
-(*  intros until G3; intro.
+  intros until G3; intro.
   remember (Some P2) as Pa; remember (Some P3) as Pb; generalize dependent P2;
     induction Hsteps2; clarify.
   - exploit distinct_steps; eauto; intro.
@@ -5660,8 +5248,8 @@ Proof.
       eapply bounded_steps in Hbound; eauto.
       eapply bounded_steps in Hbound; [|eapply exec_t_exec; eauto].
       setoid_rewrite Forall_forall in Hbound; exploit Hbound; eauto; clarify. }
-    { setoid_rewrite Forall_forall in Hfresh; exploit Hfresh; eauto; intro X.
-      inversion X; clarify. }
+    { setoid_rewrite Forall_forall in Hfresh; exploit Hfresh; eauto; intro X'.
+      inversion X'; clarify. }
     { eapply exec_step_inv_t; eauto. }
     { auto. }
     { do 2 rewrite app_assoc in Hcon; rewrite <- app_nil_r in Hcon.
@@ -5706,7 +5294,7 @@ Proof.
       intros; exploit state_suffix_stable; try eapply exec_minus_exec, Hsteps1;
         eauto.
       exploit noninterference; try apply Hroot; eauto 2.
-      intro X; exploit X; eauto 2.
+      intro X'; exploit X'; eauto 2.
       { eapply consistent_app_SC.
         do 4 rewrite <- app_assoc; rewrite <- app_assoc in Hcon; eauto. }
       clarify; exploit exec_minus_reorder; try apply Hsteps1; eauto.
@@ -5748,7 +5336,7 @@ Proof.
       { rewrite <- app_assoc in *; auto. }
       intros (? & ? & ? & ? & ? & ? & ? & ? & Hm).
       do 7 eexists; eauto; split; eauto.
-      rewrite <- app_assoc in *; auto.*)
+      rewrite <- app_assoc in *; auto.
 Qed.
 
 Corollary first_finished' : forall P P0 (Hsim : state_sim P P0)
@@ -5799,8 +5387,7 @@ Lemma sim_next_iexec : forall P P1 P2 (Hsim : state_sim P P1)
     iexec P1 G1 t lo1 lc1 P' G' /\ exec_star (Some P') G' lo2 lc2 (Some P2) G2
     /\ mem_ext (m ++ lc0 ++ lc1 ++ lc2) (m ++ lc0 ++ lc).
 Proof.
-  admit.
-(*  intros; remember (Some P1) as Pa; remember (Some P2) as Pb;
+  intros; remember (Some P1) as Pa; remember (Some P2) as Pb;
     generalize dependent P2; rewrite exec_rev in Hsteps; induction Hsteps;
     clarify.
   { left; apply sim_suffix; auto. }
@@ -5822,7 +5409,7 @@ Proof.
       destruct (skipn n (instrument_instr i0 t)) eqn: Hlast; clarify.
       destruct l; clarify.
       exploit first_finished'; try apply Hroot; eauto.
-      intro X; exploit X; eauto; try apply split_in.
+      intro X'; exploit X'; eauto; try apply split_in.
       rewrite <- (app_nil_r (instrument_instr _ _)) in Hlast.
       exploit skipn_last; eauto.
       instantiate (1 := Lock 0); clarify; apply split_in.
@@ -5841,7 +5428,7 @@ Proof.
       symmetry; eapply skipn_cons; eauto.
   - clarify; right; do 8 eexists; eauto.
     split; [eapply exec_step_inv; eauto|].
-    repeat rewrite app_assoc in *; apply mem_ext_app; auto.*)
+    repeat rewrite app_assoc in *; apply mem_ext_app; auto.
 Qed.
 
 Definition mem_sim' (m1 m2 : list conc_op) :=
@@ -6023,18 +5610,6 @@ Proof.
       intro X; setoid_rewrite X; split; clarify.
 Qed.
 
-Notation is_tmp a := (if eq_dec a tmp1 then true else if eq_dec a tmp2 then true
-  else false).
-
-Definition meta_instr i :=
-  match i with
-  | Assign a e => is_tmp a
-  | Load a p => if meta_loc_dec p then is_tmp a else false
-  | Store p _ => if meta_loc_dec p then true else false
-  | Lock m | Unlock m => if meta_loc_dec (m, 0) then true else false
-  | Assert_le _ _ => true | _ => false
-  end.
-
 Lemma meta_instr_ops : forall i (Hmeta : meta_instr i = true) P G t li o c P' G'
   (HP : In (t, i :: li) P) (Hdistinct : distinct P)
   (Hstep : exec P G t o c P' G'),
@@ -6062,11 +5637,6 @@ Proof.
   intros ??? Hsim ???. unfold env_sim in H. symmetry. clarify.
 Qed.
 
-(* Alternative approach: a different sim rel, just for failing case, that
-   just drops meta ops instead of lining them up. Sim proof is
-   -meta->*-real->-meta->*
-   But then where do the clocks come in? *)
-
 Transparent move.
 Lemma assign_in_handler : forall a e i t
   (Hin : In (Assign a e) (instrument_instr i t)),
@@ -6093,7 +5663,7 @@ Proof.
     + exploit max_vc_instrs; eauto; intros [? | Ha]; clarify.
       inversion Ha; auto.
     + inversion H; auto.
-Qed.    
+Qed.
 
 Lemma load_inv : forall i t n a x rest (Hsafe : safe_instr i) (Ht : t < zt)
   (Hn : skipn n (instrument_instr i t) = Load a x :: rest)
@@ -6289,20 +5859,6 @@ Proof.
   - destruct n; clarify; rewrite skipn_nil in Hn; clarify.
 Qed.
 
-Corollary lock_inv : forall i t n l rest (Hsafe : safe_instr i) (Ht : t < zt)
-  (Hn : skipn n (instrument_instr i t) = Lock l :: rest)
-  (Hmeta : meta_instr (Lock l) = false),
-  i = Lock l /\ n = 0.
-Proof.
-  intros.
-  exploit lock_first; eauto; clarify.
-  destruct i; try destruct x; clarify.
-  - contradiction n; apply X_meta; auto.
-  - contradiction n; apply X_meta; auto.
-  - clear - Hn; destruct zt; clarify.
-  - clear - Hn; destruct zt; clarify.
-Qed.
-
 Lemma state_sim_inv1 : forall P1a P2 P1b t li
   (Hsim : state_sim (P1a ++ (t, li) :: P1b) P2) (Hdistinct : distinct P2),
   exists P2a li' P2b, P2 = (P2a ++ (t, li') :: P2b) /\
@@ -6389,52 +5945,6 @@ Proof.
   rewrite <- minus_n_O in IHl; erewrite IHl; clarify.
 Qed.
 
-(*(* up? *)
-Definition prog_op' c := match c with
-  ARW t (l, o) _ _ => c = Acq t l \/ c = Rel t l | _ => True end.
-
-Definition mostly_ext P t m1 m2 := forall c (Hprog : prog_op c)
-  (Hlock : locks (fst (loc_of c)) P -> snd (loc_of c) = 0 ->
-     exists t' l, c = Acq t' l \/ c = Rel t' l /\ t' <> t)
-  (Ht : fst (loc_of c) <> C + t),
-  consistent (m1 ++ [c]) -> consistent (m2 ++ [c]).
-
-Lemma mostly_ext_step : forall P G lo lc P' G' t o c P'' G'' t0 m1 m2
-  (Hroot : exec_star (Some P) G lo lc (Some P') G')
-  (Hstep : exec P' G' t o (Some c) P'' G'') (Hext : mostly_ext P t0 m1 m2)
-  (Hlock : locks (fst (loc_of c)) P -> snd (loc_of c) = 0 ->
-    exists t' l, c = Acq t' l \/ c = Rel t' l /\ t' <> t0)
-  (Ht : fst (loc_of c) <> C + t0),
-  mostly_ext P t0 (m1 ++ [c]) (m2 ++ [c]).
-Proof.
-  repeat intro.
-  repeat rewrite <- app_assoc; simpl.
-  exploit prog_step; eauto; simpl; intro Hprog'; inversion Hprog'; subst.
-  generalize (Hext c), (Hext c0); intros Hc Hc0; clarify.
-  exploit consistent_app_SC; eauto; clarify.
-  rewrite <- app_assoc in H; simpl in H.
-  destruct (eq_dec (loc_of c0) (loc_of c)).
-  - destruct (writesb c (loc_of c)) eqn: Hwrite.
-    + exploit writesb_val; eauto; intros (v & Hv).
-      eapply consistent_next_write; eauto.
-      rewrite consistent_next_write_iff in H; eauto.
-    + exploit no_write_read; eauto; intros (? & ? & v & ?); clarify.
-      rewrite read_noop_SC; rewrite read_noop_SC in H; auto.
-  - rewrite loc_valid_SC; clarify.
-    rewrite loc_valid_SC in H; clarify.
-Qed.
-
-Lemma ext_mostly_ext : forall m1 m2 P t, mem_ext m1 m2 -> mostly_ext P t m1 m2.
-Proof.
-  repeat intro; eapply H; auto.
-Qed.
-
-Definition mem_ext_t P t m1 m2 :=
-  (forall l (Hl : good_lock (l, 0) P), consistent (m1 ++ [Rel t l]) ->
-     consistent (m2 ++ [Rel t l])) /\
-  (forall c (Hprog : prog_op c) (Ht : fst (loc_of c) = C + t),
-     consistent (m1 ++ [c]) -> consistent (m2 ++ [c])).*)
-
 Lemma unlock_dec : forall i, (exists l, i = Unlock l) \/
   (forall l, i <> Unlock l).
 Proof.
@@ -6460,152 +5970,6 @@ Lemma iexec_thread : forall t P G lo lc P' G', iexec P G t lo lc P' G' ->
 Proof.
   intros; inversion H; clarify; eexists; apply split_in.
 Qed.
-
-(*(* up? *)
-Lemma prog'_step : forall P G t o c P' G', exec P G t o c P' G' ->
-  Forall prog_op' (opt_to_list c).
-Proof.
-  intros; inversion H; clarify; constructor; simpl; auto.
-Qed.*)
-
-(*Lemma mostly_complete_t : forall P t m1 m2 c (Hmost : mostly_ext P t m1 m2)
-  (Ht : mem_ext_t P t m1 m2) (Hcon : consistent (m1 ++ [c]))
-  P1 G1 t1 o P2 G2 (Hexec : exec P1 G1 t1 o (Some c) P2 G2)
-  (Ht1 : mem_ext_t P t1 m1 m2)
-  G lo lc (Hroot : exec_star (Some P) G lo lc (Some P1) G1)
-  (Hlocks : forall l, locks l P -> good_lock (l, 0) P) (Hdistinct : distinct P),
-  consistent (m2 ++ [c]).
-Proof.
-  intros.
-  exploit exec_result; eauto; intros (? & i & ? & ? & v & ?).
-  destruct (unlock_dec i) as [|Hunlock]; clarify.
-  - destruct Ht1 as (Hl & _); apply Hl; auto.
-    eapply Hlocks, locks_spec; try apply split_in; eauto; clarify.
-  - exploit prog_step; eauto; intro X; inversion X; subst.
-    destruct Ht.
-    destruct (eq_dec (fst (loc_of c)) (C + t)); auto.
-    apply Hmost; auto; intros.
-    exploit good_lock_instr; eauto.
-    { apply split_in. }
-    { rewrite <- exec_accesses; try apply Hexec; clarify.
-      { destruct (loc_of c); auto. }
-      { eapply distinct_steps; eauto. }
-      { apply split_in. } }
-    intros [? | ?]; clarify; eauto.
-    exploit Hunlock; eauto; contradiction.
-Qed.
-    
-Lemma mostly_complete : forall P t0 t m1 m2 c (Hmost : mostly_ext P t0 m1 m2)
-  (Ht : mem_ext_t P t m1 m2) (Hcon : consistent (m1 ++ [c]))
-  P1 G1 o P2 G2 (Hexec : exec P1 G1 t o (Some c) P2 G2)
-  G lo lc (Hroot : exec_star (Some P) G lo lc (Some P1) G1)
-  (Hlocks : forall l, locks l P -> good_lock (l, 0) P) (Hdistinct : distinct P)
-  P0 (Hsim : state_sim P0 P) (Ht : Forall (fun e => fst e < zt) P0)
-  (Hsafe : safe_locs P0) (Hspawns : safe_spawns P) li (Hin : In (t0, li) P1)
-  (Hli : li <> []),
-  consistent (m2 ++ [c]).
-Proof.
-  intros.
-  destruct (eq_dec t0 t); [subst; eapply mostly_complete_t; eauto|].
-  exploit exec_result; eauto; intros (? & i & ? & ? & v & ?).
-  destruct Ht as (Hl & Ht).
-  destruct (unlock_dec i) as [|Hunlock]; clarify.
-  - apply Hl; auto.
-    eapply Hlocks, locks_spec; try apply split_in; eauto; clarify.
-  - exploit prog_step; eauto; intro X; inversion X; subst.
-    destruct (eq_dec (fst (loc_of c)) (C + t)); auto.
-    apply Hmost; auto.
-    + intros.
-      exploit good_lock_instr; eauto.
-      { apply split_in. }
-      { rewrite <- exec_accesses; try apply Hexec; clarify.
-        { destruct (loc_of c); auto. }
-        { eapply distinct_steps; eauto. }
-        { apply split_in. } }
-      intros [? | ?]; clarify; eauto.
-    + exploit bounded_sim; eauto; intro Hbound.
-      eapply bounded_steps in Hbound; eauto.
-      setoid_rewrite Forall_forall in Hbound.
-      exploit Hbound; [eauto | clarify].
-      destruct P2; [|inversion Hexec].
-      exploit instrument_own_thread; try apply Hsim; auto.
-      { eauto. }
-      { eapply exec_step'; eauto.
-        apply exec_refl. }
-      { eauto. }
-      { eauto. }
-      { destruct (instr_result t i (G1 t) v) as [((((?, ?), ?), ?), ?)|];
-          clarify.
-        rewrite in_app in *; destruct Hin as [? | [? | ?]]; eauto; clarify.
-        rewrite in_app; clarify. }
-      { auto. }
-      rewrite filter_negb_all.
-      intro Hall; inversion Hall; auto.
-      { exploit exec_ops; eauto; intro.
-        rewrite app_nil_r; eapply Forall_impl; eauto 2; unfold beq; clarify. }
-Qed.
-
-Lemma mostly_ext_step' : forall P G lo lc P' G' t o c P'' G'' t0 m1 m2
-  (Hroot : exec_star (Some P) G lo lc (Some P') G')
-  (Hstep : exec P' G' t o (Some c) P'' G'') (Hext : mostly_ext P t0 m1 m2)
-  (Ht : consistent (m2 ++ [c])),
-  mostly_ext P t0 (m1 ++ [c]) (m2 ++ [c]).
-Proof.
-  repeat intro.
-  repeat rewrite <- app_assoc; simpl.
-  exploit prog_step; eauto; simpl; intro Hprog'; inversion Hprog'; subst.
-  generalize (Hext c), (Hext c0); intros Hc Hc0; clarify.
-  exploit consistent_app_SC; eauto; clarify.
-  rewrite <- app_assoc in H; simpl in H.
-  destruct (eq_dec (loc_of c0) (loc_of c)).
-  - destruct (writesb c (loc_of c)) eqn: Hwrite.
-    + exploit writesb_val; eauto; intros (v & Hv).
-      eapply consistent_next_write; eauto.
-      rewrite consistent_next_write_iff in H; eauto.
-    + exploit no_write_read; eauto; intros (? & ? & v & ?); clarify.
-      rewrite read_noop_SC; rewrite read_noop_SC in H; auto.
-  - rewrite loc_valid_SC; clarify.
-    rewrite loc_valid_SC in H; clarify.
-Qed.
-
-Lemma in_cases : forall A (x y : A) l1 l2 l3, In x (l1 ++ y :: l2 ++ l3) ->
-  x = y \/ In x l2 \/ In x (l1 ++ l3).
-Proof.
-  intros; rewrite in_app in *; simpl in *; rewrite in_app in *; clarify.
-Qed.
-
-Lemma mem_ext_t_step : forall P t m1 m2 c (Hext : mem_ext_t P t m1 m2)
-  (Hcon : consistent (m2 ++ [c])) (Hprog : prog_op c),
-  mem_ext_t P t (m1 ++ [c]) (m2 ++ [c]).
-Proof.
-  intros ????? (Hlock & HC); split; intros.
-  - repeat rewrite <- app_assoc in *; simpl in *; eapply consistent_next; eauto.
-    constructor; auto.
-  - repeat rewrite <- app_assoc in *; simpl in *; eapply consistent_next; eauto.
-Qed.
-
-Lemma in_app_cases : forall A (x y : A) l1 l2, In x (l1 ++ y :: l2) ->
-  x = y \/ In x (l1 ++ l2).
-Proof.
-  intros; rewrite in_app in *; clarify.
-Qed.
-
-(* !! How much simpler would this be if we just used the memory machine? *)
-Definition mem_ext_t_l P t l0 m1 m2 :=
-  (forall l (Hnot : l <> l0) (Hl : good_lock (l, 0) P),
-     consistent (m1 ++ [Rel t l]) -> consistent (m2 ++ [Rel t l])) /\
-  (forall c (Hprog : prog_op c) (Ht : fst (loc_of c) = C + t),
-     consistent (m1 ++ [c]) -> consistent (m2 ++ [c])).
-
-Lemma mem_ext_t_l_step : forall P t l m1 m2 c (Hext : mem_ext_t_l P t l m1 m2)
-  (Hcon : consistent (m2 ++ [c])) (Hprog : prog_op c),
-  mem_ext_t_l P t l (m1 ++ [c]) (m2 ++ [c]).
-Proof.
-  intros ?????? (Hlock & HC); split; intros.
-  - repeat rewrite <- app_assoc in *; simpl in *; eapply consistent_next; eauto.
-    constructor; auto.
-  - repeat rewrite <- app_assoc in *; simpl in *; eapply consistent_next; eauto.
-Qed.*)
 
 (* up! *)
 Lemma skipn_cons_nth : forall A n (l : list A) x l',
@@ -6677,56 +6041,6 @@ Proof.
   destruct l0; clarify.
   exists n1; rewrite upd_new; clarify.
 Qed.
-
-(* up! *)
-Lemma last_single : forall A (x d : A), last [x] d = x.
-Proof. auto. Qed.
-
-Lemma lock_handler_spec_t : forall n t l P G P1 P2 rest vs1 vs2 v
-  (HP : P = P1 ++ (t, lock_handler t l n ++ rest) :: P2)
-  (Hlen1 : length vs1 = n) (Hlen2 : length vs2 = n) (Hn : n <> 0),
-  exec_star_t t (Some P) G (events_max_vc (L + l) (C + t) t n)
-    (mops_max_vc (L + l) (C + t) vs1 vs2 t n) (Some (P1 ++ (t, rest) :: P2))
-    (upd_env (upd_env G t tmp1 (last vs1 0)) t tmp2
-       (Peano.max (last vs1 v) (last vs2 v))).
-Proof.
-  induction n; clarify.
-  destruct vs1, vs2; clarify.
-  eapply exec_step_t'; eauto.
-  { apply exec_load; eauto. }
-  eapply exec_step_t'; eauto.
-  { apply exec_load; eauto. }
-  eapply exec_step_t'; eauto.
-  { apply exec_assign; eauto. }
-  eapply exec_step_t'; eauto.
-  { apply exec_store; eauto. }
-  instantiate (1 := mops_max_vc (L + l) (C + t) vs1 vs2 t n).
-  instantiate (1 := events_max_vc (L + l) (C + t) t n).
-  rewrite upd_overwrite.
-  destruct (eq_dec n 0).
-  - clarify.
-    destruct vs1; clarify.
-    repeat rewrite last_single.
-    rewrite upd_old, upd_same, upd_same; auto.
-    apply exec_refl_t.
-  - repeat rewrite last_cons; try solve [intro; clarify; omega].
-    exploit IHn.
-    { eauto. }
-    { instantiate (1 := vs1); auto. }
-    { instantiate (1 := vs2); auto. }
-    { auto. }
-    instantiate (5 := upd_env (upd_env G t tmp1 n0) t tmp2
-        (eval (upd_env (upd_env G t tmp1 n0) t tmp2 n1 t)
-           (Max (V tmp1) (V tmp2)))).
-    setoid_rewrite upd_assoc at 2; auto.
-    rewrite upd_overwrite.
-    setoid_rewrite upd_assoc at 2; auto.
-    rewrite upd_overwrite; eauto.
-  - auto.
-  - simpl.
-    rewrite upd_overwrite, upd_same, upd_same.
-    rewrite upd_assoc, upd_same; auto.
-Qed.  
 
 Lemma can_max : forall t src tgt z (Hz : z <= zt) m (Hcon : consistent m)
   (Hinit1 : forall o, o < z -> initialized m (src, o))
@@ -6891,67 +6205,6 @@ Proof.
     + simpl in H; destruct H; clarify.
   - destruct n; clarify; rewrite skipn_nil in Hn; clarify.
 Qed.
-
-Lemma wait_handler_spec_t : forall n t u P G P1 P2 rest vs1 vs2 v
-  (HP : P = P1 ++ (t, wait_handler t u n ++ rest) :: P2)
-  (Hlen1 : length vs1 = n) (Hlen2 : length vs2 = n) (Hn : n <> 0),
-  exec_star_t t (Some P) G
-    (events_max_vc (C + u) (C + t) t n ++ events_inc_vc (C + u) t)
-    (mops_max_vc (C + u) (C + t) vs1 vs2 t n ++ mops_inc_vc' (C + u) v t u)
-    (Some (P1 ++ (t, rest) :: P2))
-    (upd_env (upd_env G t tmp2 (Peano.max (last vs1 0) (last vs2 0)))
-             t tmp1 (v + 1)).
-Proof.
-  induction n; clarify.
-  destruct vs1, vs2; clarify.
-  eapply exec_step_t'; eauto.
-  { apply exec_load; eauto. }
-  eapply exec_step_t'; eauto.
-  { apply exec_load; eauto. }
-  eapply exec_step_t'; eauto.
-  { apply exec_assign; eauto. }
-  rewrite upd_overwrite; simpl.
-  rewrite upd_same, upd_old, upd_same; auto.
-  eapply exec_step_t'; eauto.
-  { apply exec_store; eauto. }
-  instantiate (1 := mops_max_vc (C + u) (C + t) vs1 vs2 t n ++
-    mops_inc_vc' (C + u) v t u).
-  instantiate (1 := events_max_vc (C + u) (C + t) t n ++
-    events_inc_vc (C + u) t).
-  destruct (eq_dec n 0).
-  - destruct vs1, vs2; clarify.
-    repeat rewrite last_single.
-    eapply exec_step_t'; eauto.
-    { apply exec_load; eauto. }
-    eapply exec_step_t'; eauto.
-    { apply exec_assign; eauto. }
-    simpl; eapply exec_step_t'; eauto.
-    { apply exec_store; eauto. }
-(* copy *)
-Lemma upd_three : forall G t a1 a2 v1 v2 v1' (Hdiff : a1 <> a2),
-  upd_env (upd_env (upd_env G t a1 v1) t a2 v2) t a1 v1' =
-  upd_env (upd_env G t a1 v1') t a2 v2.
-Admitted.
-    repeat rewrite upd_three; auto.
-    rewrite upd_old, upd_same, upd_assoc; auto.
-    apply exec_refl_t.
-    + auto.
-    + simpl.
-      repeat rewrite upd_same; auto.
-  - repeat rewrite last_cons; try solve [intro; clarify; omega].
-    exploit IHn.
-    { eauto. }
-    { instantiate (1 := vs1); auto. }
-    { instantiate (1 := vs2); auto. }
-    { auto. }
-    instantiate (4 := upd_env (upd_env G t tmp1 n0) t tmp2 (Peano.max n0 n1)).
-    rewrite upd_overwrite.
-    rewrite upd_three; auto.
-    setoid_rewrite upd_assoc at 2; eauto.
-  - auto.
-  - simpl.
-    rewrite upd_same; auto.
-Qed.  
 
 Lemma finish_handler : forall P0'
   (HX_locks : forall v, v < zv -> good_lock (X + v, 0) P0')
@@ -7279,100 +6532,6 @@ Proof.
     + exploit nth_error_in; [eauto | intro].
       exploit H; eauto 2; clarify.
   - rewrite nth_error_single in Hn; clarify.
-Qed.
-
-Lemma upd_env_sim : forall G t g G' (Hupd : disjoint_upd G t g G'),
-  env_sim G G' <-> forall a v (Ha : g a = Some v), a = tmp1 \/ a = tmp2.
-Proof.
-  intros; split; repeat intro.
-  - destruct Hupd as (Hupd & _).
-    specialize (H t a); specialize (Hupd a).
-    rewrite Ha in Hupd.
-    destruct (eq_dec a tmp1); auto.
-    destruct (eq_dec a tmp2); auto.
-    rewrite H in Hupd; clarify.
-  - destruct Hupd as (Hupd & Ht').
-    destruct (eq_dec t0 t); [|rewrite Ht'; auto].
-    subst; specialize (Hupd v).
-    destruct (g v) eqn: Hv; auto.
-    exploit H; eauto; intros [? | ?]; clarify.
-Qed.
-
-Lemma exec_star_diamond : forall t P (Hdistinct : distinct P) G
-  lom lcm Pm Gm (Hstepsm : exec_star_minus t (Some P) G lom lcm (Some Pm) Gm)
-  lot lct Pt Gt (Hstepst : exec_star_t t (Some P) G lot lct (Some Pt) Gt)
-  (Hspawns : safe_spawns P),
-  exists P' G', exec_star_minus t (Some Pt) Gt lom lcm (Some P') G' /\
-    exec_star_t t (Some Pm) Gm lot lct (Some P') G' /\
-    exists g, disjoint_upd G t g Gt /\ disjoint_upd Gm t g G'.
-Proof.
-  intros until Gm; intro; remember (Some P) as Pa; remember (Some Pm) as Pb;
-    generalize dependent P; induction Hstepsm; clarify.
-  { do 3 eexists; [eapply exec_refl_m|].
-    split; auto.
-    exploit exec_star_t_upd; eauto; clarify; eauto. }
-  destruct P'; [|inversion Hstepsm].
-  exploit distinct_step; eauto; intro Hdistinct'.
-  specialize (IHHstepsm _ Hdistinct' eq_refl).
-  exploit exec_t_diamond; try apply Hin; try apply Hexec; eauto; clarify.
-  exploit IHHstepsm; eauto; clarify.
-  { eapply safe_spawns_step; eauto. }
-  do 3 eexists; [eapply exec_step_m; eauto|].
-  split; auto.
-  do 2 eexists; eauto.
-  setoid_rewrite disjoint_upd_inj; eauto.
-Qed.
-
-Corollary exec_t_diamond' : forall t t' (Hdiff : t' <> t) P
-  (Hdistinct : distinct P) 
-  G lot lct Pt Gt (Hstepst : exec_star_t t (Some P) G lot lct (Some Pt) Gt)
-  o c P' G' (Hstep : exec P G t' o c (Some P') G') (Hspawns : safe_spawns P),
-  exists Pt' Gt', exec_star_t t (Some P') G' lot lct (Some Pt') Gt' /\
-    exec Pt Gt t' o c (Some Pt') Gt' /\
-    (env_sim G Gt <-> env_sim G' Gt').
-Proof.
-  intros; exploit exec_t_diamond; eauto; clarify.
-  do 3 eexists; [|split]; eauto.
-  do 2 (rewrite upd_env_sim; eauto); reflexivity.
-Qed.
-
-Corollary exec_star_diamond' : forall t P (Hdistinct : distinct P) G
-  lom lcm Pm Gm (Hstepsm : exec_star_minus t (Some P) G lom lcm (Some Pm) Gm)
-  lot lct Pt Gt (Hstepst : exec_star_t t (Some P) G lot lct (Some Pt) Gt)
-  (Hspawns : safe_spawns P),
-  exists P' G', exec_star_minus t (Some Pt) Gt lom lcm (Some P') G' /\
-    exec_star_t t (Some Pm) Gm lot lct (Some P') G' /\
-    (env_sim G Gt <-> env_sim Gm G').
-Proof.
-  intros; exploit exec_star_diamond; eauto; clarify.
-  do 3 eexists; [|split]; eauto.
-  do 2 (rewrite upd_env_sim; eauto); reflexivity.
-Qed.
-
-Lemma in_mops_max_vc': forall n c vc1 vc2 vs1 vs2 t
-   (Hin: In c (mops_max_vc vc1 vc2 vs1 vs2 t n)),
-  match c with 
-  | Write tc p _ => fst p = vc2
-  | Read tc p _  => fst p = vc1 \/ fst p = vc2
-  | _ => False
-  end.
-Proof.
-  induction n; intros; destruct vs1; clarify; destruct vs2; clarify.
-  destruct c; clarify; exploit IHn; eauto.
-Qed.
-
-(* This should probably replace all other versions. *)
-Lemma in_mops_set_vc'': forall n c vc1 vc2 vs t
-  (Hin: In c (mops_set_vc vc1 vc2 n t vs)),
-match c with
-  | Read _ (x, o) _ => x = vc1 /\ o < n
-  | Write _ (x, o) _ => x = vc2 /\ o < n
-  | _ => False
-end.
-Proof.
-  induction n; clarify.
-  destruct vs; clarify.
-  exploit IHn; eauto; destruct c; try destruct x; clarify.
 Qed.
 
 (* up *)
@@ -7958,75 +7117,6 @@ Proof.
     * rewrite Forall_forall; simpl; intros ? [? | [? | ?]]; clarify.
 Qed.
 
-(*(* up *)
-Fixpoint remove1 A {A_eq : EqDec_eq A} x (l : list A) :=
-  match l with 
-  | [] => []
-  | y :: tl => if eq_dec x y then tl else y :: remove1 x tl
-  end.
-
-Fixpoint list_minus A {A_eq : EqDec_eq A} (l1 l2 : list A) :=
-  match l2 with
-  | [] => l1
-  | x :: tl => list_minus (remove1 x l1) tl
-  end.
-
-Lemma list_minus_nil : forall A {A_eq : EqDec_eq A} (l : list A),
-  list_minus [] l = [].
-Proof.
-  induction l; auto.
-Qed.
-
-Lemma list_minus_prefix : forall A {A_eq : EqDec_eq A} (l l1 l2 : list A),
-  list_minus (l ++ l1) (l ++ l2) = list_minus l1 l2.
-Proof.
-  induction l; clarify.
-Qed.
-
-Lemma remove1_app2 : forall A {A_eq : EqDec_eq A} x (l1 l2 : list A)
-  (Hout : ~In x l1), remove1 x (l1 ++ l2) = l1 ++ remove1 x l2.
-Proof.
-  induction l1; clarify.
-  destruct (eq_dec x a); clarify.
-  { contradiction Hout; auto. }
-  rewrite IHl1; auto.
-Qed.
-
-Lemma remove1_out : forall A {A_eq : EqDec_eq A} x (l : list A),
-  ~In x l -> remove1 x l = l.
-Proof.
-  induction l; clarify.
-  destruct (eq_dec x a); [|rewrite IHl]; clarify.
-  contradiction H; auto.
-Qed.
-
-Lemma remove1_in : forall A {A_eq : EqDec_eq A} x y (l : list A),
-  In y (remove1 x l) -> In y l.
-Proof.
-  induction l; clarify.
-Qed.
-
-Lemma list_minus_out1: forall A {A_eq : EqDec_eq A} (l l2 l1 : list A)
-  (Hout : Forall (fun a => ~In a l2) l),
-  list_minus (l ++ l1) l2 = l ++ list_minus l1 l2.
-Proof.
-  induction l2; clarify.
-  rewrite remove1_app2, IHl2; auto.
-  - eapply Forall_impl; eauto; auto.
-  - intro; rewrite Forall_forall in Hout; eapply Hout; eauto.
-Qed.
-
-Lemma list_minus_out2: forall A {A_eq : EqDec_eq A} (l l1 l2 : list A)
-  (Hout : Forall (fun a => ~In a l1) l),
-  list_minus l1 (l ++ l2) = list_minus l1 l2.
-Proof.
-  induction l; clarify.
-  inversion Hout; subst.
-  rewrite IHl, remove1_out; auto.
-  eapply Forall_impl; eauto; repeat intro.
-  exploit remove1_in; eauto.
-Qed.  *)
-
 Lemma exec_det' : forall P G t o1 c1 P1 G1 o2 c2 P2 G2 m1 m2
   (Hdistinct : distinct P)
   (Hexec1 : exec P G t o1 c1 P1 G1) (Hexec2 : exec P G t o2 c2 P2 G2)
@@ -8044,196 +7134,6 @@ Proof.
   rewrite <- Hmem in Hcon2.
   exploit can_read_unique; [eauto | apply Hcon1 | apply Hcon2 | clarify].
 Qed.
-
-(*Lemma exec_star_diamond_sep : forall t P G
-  (Hspawns : safe_spawns P) (Hdistinct : distinct P)
-  lom lcm Pm Gm (Hsteps : exec_star (Some P) G lom lcm (Some Pm) Gm)
-  lot lct Pt Gt (Hstepst : exec_star_t t (Some P) G lot lct (Some Pt) Gt)
-  (Hdiff : Forall (fun c => Forall (fun c' => loc_of c' <> loc_of c) lct)
-     (filter (fun c => negb (beq (thread_of c) t)) lcm))
-  m1 m2 (Hcon : consistent (m1 ++ lcm)) (Hcon' : consistent (m2 ++ lct))
-  (Hsim : Forall (fun c => forall v,
-    can_read m1 (loc_of c) v <-> can_read m2 (loc_of c) v) lct)
-  (Hinit : Forall (fun c => initialized m2 (loc_of c)) lct),
-  exists P' G', exec_star (Some Pt) Gt (list_minus lom lot)
-    (list_minus lcm lct) (Some P') G' /\
-    exec_star_t t (Some Pm) Gm (list_minus lot lom) (list_minus lct lcm)
-      (Some P') G' /\ forall a, G' t a = Gm t a \/ G' t a = Gt t a.
-Proof.
-  intros until Gm; intro; remember (Some P) as Pa; remember (Some Pm) as Pb;
-    generalize dependent P; induction Hsteps; clarify.
-  { repeat rewrite list_minus_nil.
-    do 3 eexists; [apply exec_refl | auto]. }
-  destruct P'; [|inversion Hsteps].
-  exploit distinct_step; eauto; intro Hdistinct'.
-  generalize (safe_spawns_step Hspawns Hexec); intro Hspawns'.
-  specialize (IHHsteps _ Hspawns' Hdistinct' eq_refl).
-  destruct (eq_dec t0 t).
-  - inversion Hstepst; subst.
-    + do 3 eexists; [eapply exec_step; eauto|].
-      repeat rewrite list_minus_nil.
-      split; [apply exec_refl_t | auto].
-    + exploit exec_det'.
-      { apply Hdistinct. }
-      { apply Hexec0. }
-      { apply Hexec. }
-      { eapply consistent_app_SC; rewrite <- app_assoc; eauto. }
-      { eapply consistent_app_SC; rewrite <- app_assoc; eauto. }
-      { rewrite Forall_app in Hsim; destruct c0; clarify.
-        symmetry; inversion Hsim1; auto. }
-      { rewrite Forall_app in Hinit; destruct c0; clarify.
-        inversion Hinit1; auto. }
-      clarify.
-      repeat rewrite list_minus_prefix.
-      eapply IHHsteps; auto.
-      { rewrite filter_app, Forall_app in Hdiff; destruct Hdiff as (_ & Hdiff).
-        eapply Forall_impl; eauto; intros.
-        rewrite Forall_app in *; clarify. }
-      { rewrite <- app_assoc; eauto. }
-      { rewrite <- app_assoc; eauto. }
-      { rewrite Forall_app in Hsim; destruct Hsim as (_ & Hsim).
-        eapply Forall_impl; [intros | apply Hsim].
-        destruct c; [|repeat rewrite app_nil_r; auto].
-        apply can_read_step'; auto.
-        * exploit prog_step; eauto; intro X; inversion X; auto.
-        * eapply consistent_app_SC; rewrite <- app_assoc; eauto.
-        * eapply consistent_app_SC; rewrite <- app_assoc; eauto. }
-      { rewrite Forall_app in Hinit; destruct Hinit.
-        eapply Forall_impl; eauto; intros.
-        eapply init_steps, prog_step; eauto. }
-  - exploit exec_t_diamond; try apply Hin; try apply Hexec; eauto; clarify.
-    exploit IHHsteps.
-    { eauto. }
-    { rewrite filter_app, Forall_app in Hdiff; clarify. }
-    { rewrite <- app_assoc; eauto. }
-    { eauto. }
-    { rewrite Forall_forall in *; intros ? Hin ?.
-      rewrite <- Hsim; auto.
-      apply can_read_iff_SC.
-      * eapply consistent_app_SC; rewrite <- app_assoc; eauto.
-      * eapply prog_step; eauto.
-      * rewrite Forall_forall; destruct c; clarify.
-        exploit exec_ops; eauto; intro Ht; inversion Ht; subst.
-        exploit Hdiff.
-        { unfold negb, beq in *; clarify. }
-        rewrite Forall_forall; intro X; specialize (X _ Hin).
-        destruct x3; auto. }
-    { auto. }
-    intros (? & ? & ? & ? & Henv).
-    assert (Forall (fun a => ~ In a lot) (opt_to_list o)).
-    { exploit exec_rd_ops; eauto; intro Ho.
-      exploit exec_star_rd_ops; try apply Hstepst; eauto.
-      intro Hlot; rewrite Forall_forall in *; repeat intro.
-      exploit Ho; eauto; exploit Hlot; eauto; clarify. }
-    assert (Forall (fun a => ~ In a lct) (opt_to_list c)).
-    { exploit exec_ops; eauto; intro Hc.
-      exploit exec_star_ops; try apply Hstepst; eauto.
-      intro Hlct; rewrite Forall_forall in *; repeat intro.
-      exploit Hc; eauto; exploit Hlct; eauto; unfold beq; clarify. }
-   repeat rewrite list_minus_out1; auto.
-    do 3 eexists; [eapply exec_step; eauto|].
-    repeat rewrite list_minus_out2; auto.
-    split; auto; intros.
-    specialize (Henv a); clarify.
-    rewrite Henv; exploit exec_result; eauto; intros (? & i & ? & ? & v & ?).
-    destruct (instr_result t0 i (Gt t0) v) as [((((?, ?), ?), ?), ?)|] eqn: Hi;
-      clarify.
-    rewrite result_env; auto.
-Qed.
-(* add mem_ext? *)
-
-Lemma exec_star_diamond_all : forall t P G
-  (Hspawns : safe_spawns P) (Hdistinct : distinct P)
-  lom lcm Pm Gm (Hsteps : exec_star (Some P) G lom lcm (Some Pm) Gm)
-  lot lct Pt Gt (Hstepst : exec_star_t t (Some P) G lot lct (Some Pt) Gt)
-  (Hdiff : Forall (fun c => Forall (fun c' => loc_of c' <> loc_of c) lct)
-     (filter (fun c => negb (beq (thread_of c) t)) lcm))
-  li (Ht : In (t, li) Pt) (Hdone : In (t, li) Pm)
-  m1 m2 (Hcon : consistent (m1 ++ lcm)) (Hcon' : consistent (m2 ++ lct))
-  (Hsim : Forall (fun c => forall v,
-    can_read m1 (loc_of c) v <-> can_read m2 (loc_of c) v) lct)
-  (Hinit : Forall (fun c => initialized m2 (loc_of c)) lct),
-  exec_star_minus t (Some Pt) Gt (list_minus lom lot)
-    (list_minus lcm lct) (Some Pm) Gm.
-Proof.
-  intros until Gm; intro; remember (Some P) as Pa; remember (Some Pm) as Pb;
-    generalize dependent P; induction Hsteps; clarify.
-  { repeat rewrite list_minus_nil.
-    exploit exec_t_maintain; eauto; clarify.
-    apply exec_refl_m. }
-  destruct P'; [|inversion Hsteps].
-  exploit distinct_step; eauto; intro Hdistinct'.
-  generalize (safe_spawns_step Hspawns Hexec); intro Hspawns'.
-  specialize (IHHsteps _ Hspawns' Hdistinct' eq_refl).
-  destruct (eq_dec t0 t).
-  - inversion Hstepst; subst; simpl.
-    + exploit step_thread; eauto; clarify.
-      exploit exec_keep; try apply Hsteps; eauto; clarify.
-      exploit distinct_in; [eapply distinct_steps, Hsteps; eauto | apply Hdone |
-        eauto | intro; exploit skip_cons_neq; eauto; contradiction].
-    + exploit exec_det'.
-      { apply Hdistinct. }
-      { apply Hexec0. }
-      { apply Hexec. }
-      { eapply consistent_app_SC; rewrite <- app_assoc; eauto. }
-      { eapply consistent_app_SC; rewrite <- app_assoc; eauto. }
-      { rewrite Forall_app in Hsim; destruct c0; clarify.
-        symmetry; inversion Hsim1; auto. }
-      { rewrite Forall_app in Hinit; destruct c0; clarify.
-        inversion Hinit1; auto. }
-      clarify.
-      repeat rewrite list_minus_prefix.
-      eapply IHHsteps; auto.
-      { rewrite filter_app, Forall_app in Hdiff; destruct Hdiff as (_ & Hdiff).
-        eapply Forall_impl; eauto; intros.
-        rewrite Forall_app in *; clarify. }
-      { eauto. }
-      { auto. }
-      { rewrite <- app_assoc; eauto. }
-      { rewrite <- app_assoc; eauto. }
-      { rewrite Forall_app in Hsim; destruct Hsim as (_ & Hsim).
-        eapply Forall_impl; [intros | apply Hsim].
-        destruct c; [|repeat rewrite app_nil_r; auto].
-        apply can_read_step'; auto.
-        * exploit prog_step; eauto; intro X; inversion X; auto.
-        * eapply consistent_app_SC; rewrite <- app_assoc; eauto.
-        * eapply consistent_app_SC; rewrite <- app_assoc; eauto. }
-      { rewrite Forall_app in Hinit; destruct Hinit.
-        eapply Forall_impl; eauto; intros.
-        eapply init_steps, prog_step; eauto. }
-  - exploit exec_t_diamond; try apply Hin; try apply Hexec; eauto; clarify.
-    exploit IHHsteps.
-    { eauto. }
-    { rewrite filter_app, Forall_app in Hdiff; clarify. }
-    { exploit exec_other_thread; try apply Ht; eauto. }
-    { auto. }
-    { rewrite <- app_assoc; eauto. }
-    { eauto. }
-    { rewrite Forall_forall in *; intros ? Hin ?.
-      rewrite <- Hsim; auto.
-      apply can_read_iff_SC.
-      * eapply consistent_app_SC; rewrite <- app_assoc; eauto.
-      * eapply prog_step; eauto.
-      * rewrite Forall_forall; destruct c; clarify.
-        exploit exec_ops; eauto; intro Hops; inversion Hops; subst.
-        exploit Hdiff.
-        { unfold negb, beq in *; clarify. }
-        rewrite Forall_forall; intro X; specialize (X _ Hin).
-        destruct x3; auto. }
-    { auto. }
-    assert (Forall (fun a => ~ In a lot) (opt_to_list o)).
-    { exploit exec_rd_ops; eauto; intro Ho.
-      exploit exec_star_rd_ops; try apply Hstepst; eauto.
-      intro Hlot; rewrite Forall_forall in *; repeat intro.
-      exploit Ho; eauto; exploit Hlot; eauto; clarify. }
-    assert (Forall (fun a => ~ In a lct) (opt_to_list c)).
-    { exploit exec_ops; eauto; intro Hc.
-      exploit exec_star_ops; try apply Hstepst; eauto.
-      intro Hlct; rewrite Forall_forall in *; repeat intro.
-      exploit Hc; eauto; exploit Hlct; eauto; unfold beq; clarify. }
-   repeat rewrite list_minus_out1; auto.
-   intro; eapply exec_step_m; eauto.
-Qed.*)
 
 Lemma state_suffix_t : forall P0 P1 (Hsuffix : state_suffix P0 P1)
   (Hdistinct : distinct P1) t i li (Ht : In (t, i :: li) P0)
@@ -8286,26 +7186,6 @@ Proof.
           length (skipn n' (instrument l0 t))) by (rewrite Heq; auto).
   simpl in *; rewrite skipn_length, app_length in *; omega.
 Qed.
-
-(*(* up *)
-Lemma incl_nil : forall A (l : list A), incl [] l.
-Proof.
-  repeat intro; clarify.
-Qed.
-Hint Resolve incl_nil.
-
-Lemma Forall_incl : forall A (l1 l2 : list A) (Hincl : incl l1 l2)
-  P (Hall : Forall P l2), Forall P l1.
-Proof.
-  intros; rewrite Forall_forall in *; intros ? Hin.
-  specialize (Hincl _ Hin); auto.
-Qed.
-
-Lemma incl_pre : forall A (l l1 l2 : list A), incl l1 l2 ->
-  incl (l ++ l1) (l ++ l2).
-Proof.
-  repeat intro; rewrite in_app in *; clarify.
-Qed.*)
 
 Lemma exec_star_diamond_sep' : forall t P G
   (Hspawns : safe_spawns P) (Hdistinct : distinct P)
@@ -8554,18 +7434,6 @@ Proof.
   exploit skipn_in; eauto.
 Qed.
 
-(*Lemma list_minus_filter : forall A {A_eq : EqDec_eq A} (l2 l1 : list A)
-  f (Hf : forallb f l1 = true),
-  list_minus l1 l2 = list_minus l1 (filter f l2).
-Proof.
-  induction l2; clarify.
-  destruct (f a) eqn: Ha; simpl.
-  - apply IHl2.
-    rewrite forallb_forall in *; intros; eapply Hf, remove1_in; eauto.
-  - rewrite remove1_out; auto.
-    rewrite forallb_forall in Hf; intro Hin; specialize (Hf _ Hin); clarify.
-Qed.*)
-
 Definition no_asserts := state_forall
   (fun i => match i with Assert_le _ _ => False | _ => True end).
 
@@ -8595,7 +7463,7 @@ Proof.
     clarify.
   - exploit Hall; eauto 2; clarify.
 Qed.
-(* Really Assert should not be a safe_instr. *)
+(* Possibly Assert should not be a safe_instr. *)
 
 Lemma meta_instrs_ops' : forall P G lo lc P' G'
   (Hmeta : forall t li1 li2, In (t, li1 ++ li2) P -> In (t, li2) P' -> 
@@ -9168,20 +8036,20 @@ Proof.
       inversion Hnoi; clarify.
 Qed.
 
-Inductive fail_iexec P (*G*) t :
-  list operation -> list conc_op -> (*state -> env -> *)Prop :=
+Inductive fail_iexec P t :
+  list operation -> list conc_op -> Prop :=
   | fail_raw P1 P2 a x o v1 v2 rest vs1 vs2
     (Hload: P=P1++(t, load_handler t x zt ++
                                    Load a (x, o) :: Unlock (X + x) :: rest) :: P2)
       (Hgt : first_gt vs1 vs2 = Some (v1,v2) )  (Hlen1: length vs1 <=zt) (Hlen2: length vs2 <=zt):
-      fail_iexec P (*G*) t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t )
+      fail_iexec P t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t )
                   (Acq t (X + x) ::
                    mops_hb_check (W + x) (C + t) vs1 vs2 zt t)
   | fail_waw P1 P2 x o e v1 v2 rest vs1 vs2
       (Hstore : P = P1 ++ (t, store_handler t x zt ++
                               Store (x, o) e :: Unlock (X + x) :: rest) :: P2)
       (Hgt : first_gt vs1 vs2 = Some (v1,v2) ) (Hlen1: length vs1 <=zt) (Hlen2: length vs2 <=zt)  :
-      fail_iexec P (*G*) t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t )
+      fail_iexec P t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t )
                   (Acq t (X + x) ::
                    mops_hb_check (W + x) (C + t) vs1 vs2 zt t )
   | fail_war P1 P2 x o e v1 v2 rest vs1 vs2 vs3
@@ -9190,7 +8058,7 @@ Inductive fail_iexec P (*G*) t :
       (Hle : first_gt vs1 vs2 = None ) (Hgt: first_gt vs3 vs2 = Some (v1, v2) )
       (Hlen1 : length vs1 = zt) (Hlen3: length vs3 = zt)
       (Hlen2: length vs2 = zt):
-      fail_iexec P (*G*) t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t ++
+      fail_iexec P t (acq t (X + x) :: events_hb_check (W + x) (C + t) vs1 vs2 t ++
                        events_hb_check (R + x) (C + t) vs3 vs2 t)
                   (Acq t (X + x) ::
                        mops_hb_check (W + x) (C + t) vs1 vs2 zt t ++
@@ -9242,7 +8110,8 @@ Lemma iexec_inv_state : forall P G t lo lc P' G' (Hdistinct : distinct P)
   (Hiexec : iexec P G t lo lc P' G') P0 (Hsim : state_sim P0 P),
   exists Pa Pb i rest, P = Pa ++ (t, instrument_instr i t ++ rest) :: Pb /\
     (P' = Pa ++ (t, rest) :: Pb \/
-     exists u li', P' = Pa ++ (t, rest) :: (u, li') :: Pb).
+     exists u li', i = Spawn u li' /\
+       P' = Pa ++ (t, rest) :: (u, instrument li' u) :: Pb).
 Proof.
   intros.
   inversion Hiexec; subst.
@@ -9281,16 +8150,186 @@ Proof.
     auto.
 Qed.
 
+(* up *)
+Lemma firstn_plus : forall A n1 n2 (l : list A),
+  firstn (n1 + n2) l = firstn n1 l ++ firstn n2 (skipn n1 l).
+Proof.
+  induction n1; clarify.
+  destruct l; clarify.
+  - rewrite skipn_nil, firstn_nil; auto.
+  - rewrite IHn1, skipn_S_tl; auto.
+Qed.
+
+Lemma meta_suffix : forall P P0 (Hdistinct : distinct P0) 
+  (Hsim : state_suffix P P0) (Hsafe : safe_locs P) (Hfresh : fresh_tmps P)
+  (Hasserts : no_asserts P) t li (Hin0 : In (t, li) P)
+  (Hin1 : In (t, instrument li t) P0)
+  G0 lo lc P1 G1 (Hsteps : exec_star_t t (Some P0) G0 lo lc (Some P1) G1)
+  n (Hin2 : In (t, skipn n (instrument li t)) P1)
+  (Hmeta : forallb meta_instr (firstn n (instrument li t)) = true),
+  state_suffix P P1.
+Proof.
+  intros.
+  generalize dependent lc; revert lo; generalize dependent G1;
+    generalize dependent P1; induction n; intros.
+  - exploit exec_t_maintain; eauto; clarify.
+  - rewrite <- Nat.add_1_r, firstn_plus, forallb_app, andb_true_iff in Hmeta;
+      clarify.
+    exploit exec_t_rev_inv; eauto; intros [? | Hinv]; [clarify|].
+    destruct Hinv as (P2 & G2 & ? & ? & ? & ? & Hsteps' & ?); clarify.
+    exploit exec_keep; try eapply exec_t_exec, Hsteps'; eauto.
+    exploit distinct_steps; try eapply exec_t_exec, Hsteps'; eauto;
+      intro Hdistinct2.
+    intros (n' & Hin'); exploit step_thread; eauto; intros (i' & ? & Heq & ?).
+    destruct li; clarify.
+    { rewrite skipn_nil in *; clarify. }
+    exploit distinct_step; eauto; intro.
+    exploit distinct_in; [eauto | eauto | apply Hin2 | clarify].
+    exploit skipn_cons_nth; eauto; intro.
+    erewrite skipn_n in Heq; eauto; clarify.
+    destruct (le_dec (length (instrument_instr i t)) (S n)).
+    { assert (forallb meta_instr (instrument_instr i t) = true).
+      { destruct (eq_dec (length (instrument_instr i t)) (S n)).
+        * rewrite firstn_app, skipn_app in *.
+          destruct (skipn n (instrument_instr i t)) eqn: Hskip.
+          { rewrite skipn_all_iff in Hskip; omega. }
+          simpl in Hmeta2.
+          rewrite forallb_app, andb_true_iff in Hmeta1; clarify.
+          setoid_rewrite <- (firstn_skipn n); rewrite forallb_app, Hmeta11,
+            Hskip; simpl.
+          destruct l0; clarify.
+          assert (length (skipn n (instrument_instr i t)) =
+            length (i0 :: i1 :: l0)) by (f_equal; auto).
+          rewrite skipn_length in *; simpl in *; omega.
+        * rewrite firstn_app, firstn_length' in Hmeta1; [|omega].
+          rewrite forallb_app, andb_true_iff in Hmeta1; clarify. }
+      setoid_rewrite Forall_forall in Hsafe; specialize (Hsafe _ Hin0);
+        inversion Hsafe; subst.
+      setoid_rewrite Forall_forall in Hfresh; specialize (Hfresh _ Hin0);
+        inversion Hfresh; subst.
+      setoid_rewrite Forall_forall in Hasserts; specialize (Hasserts _ Hin0);
+        inversion Hasserts; subst.
+      exploit has_meta; eauto.
+      { destruct i; auto. }
+      instantiate (1 := t); clarify. }
+    assert (n' = n).
+    { assert (length (skipn (S n') (instrument_instr i t ++ instrument li t)) =
+        length (skipn (S n) (instrument_instr i t ++ instrument li t)))
+        by (f_equal; auto).
+      repeat rewrite skipn_length, app_length in *; omega. }
+    subst.
+    specialize (IHn _ Hin' _ _ _ Hsteps').
+    erewrite skipn_n in Hin'; eauto.
+    generalize (in_split _ _ Hin'); clarify.
+    exploit exec_next; eauto; intros (v & ?).
+    destruct (instr_result t i' (G2 t) v) as [((((?, ?), ?), ?), ?)|] eqn: Hi;
+      clarify.
+    exploit state_suffix_inv'; eauto; clarify.
+    rewrite <- distinct_suffix in Hdistinct; [|eauto].
+    exploit distinct_in; [eauto | apply split_in | eauto | clarify].
+    erewrite skipn_n in Hmeta2; eauto.
+    destruct o; [destruct i'; simpl in Hi; inversion Hi; clarify|].
+    apply Forall2_app; auto; constructor; clarify.
+    do 2 eexists; [|eauto]; omega.
+Qed.      
+
+Lemma instrument_incom' : forall t li1 li2,
+  instrument li1 t = instrument li2 t -> li1 = li2.
+Proof.
+  induction li1; destruct li2; clarify.
+  - exploit app_eq_nil; eauto; clarify.
+    exploit instrument_nonnil; eauto; contradiction.
+  - exploit app_eq_nil; eauto; clarify.
+    exploit instrument_nonnil; eauto; contradiction.
+  - exploit instrument_incom; eauto; clarify.
+    erewrite IHli1; eauto.
+Qed.
+
+Lemma state_sim_inj : forall P P1 (Hsim1 : state_sim P P1) P'
+  (Hsim2 : state_sim P' P1), P = P'.
+Proof.
+  induction 1; intros; inversion Hsim2; clarify.
+  destruct x, y, x0; clarify.
+  exploit IHHsim1; eauto; clarify.
+  exploit instrument_incom'; eauto; clarify.
+Qed.
+
 Lemma next_suffix : forall t P P0 (Hsim : state_sim P P0)
-  P1 (Hsuffix : state_suffix P P1)
+  (Hdistinct : distinct P0) P1 (Hsuffix : state_suffix P P1)
   G1 lo1 lc1 P2 G2 (Hfinish : exec_star_t t (Some P1) G1 lo1 lc1 (Some P2) G2)
   lia lib (Hin1 : In (t, lia ++ lib) P1) (Hin2 : In (t, lib) P2)
   (Hmeta : forallb meta_instr lia = true)
   G0 lo0 lc0 P0' G0' (Hiexec : iexec P0 G0 t lo0 lc0 P0' G0')
-  P' (Hsim' : state_sim P' P0'),
+  P' (Hsim' : state_sim P' P0') (Hsafe : safe_locs P') (Hfresh : fresh_tmps P')
+  (Hasserts : no_asserts P'),
   state_suffix P P2 \/ state_suffix P' P2.
 Proof.
-Admitted.
+  intros ?????????????; remember (Some P1) as Pa; remember (Some P2) as Pb;
+    generalize dependent P1; induction Hfinish; clarify.
+  destruct P'; [|inversion Hfinish].
+  assert (distinct P3).
+  { rewrite <- distinct_suffix; [|eauto].
+    rewrite distinct_suffix; eauto.
+    apply sim_suffix; auto. }
+  exploit exec_result; eauto; intros (? & i & ? & ? & v & ?); clarify.
+  exploit distinct_in; [eauto | apply Hin1 | apply split_in | intro].
+  destruct (instr_result t i (G t) v) as [((((?, ?), ?), ?), ?)|] eqn: Hi;
+    clarify.
+  destruct lia; clarify.
+  { exploit exec_mono; try eapply exec_t_exec, Hfinish; eauto.
+    { eapply distinct_step; eauto. }
+    { apply split_in. }
+    clarify; exploit skip_cons_neq; eauto; contradiction. }
+  rewrite andb_true_iff in Hmeta; clarify.
+  exploit state_suffix_inv'; eauto; intros (Pa & [|] & Pb & n & ? & ? & ? & Heq 
+    & ?); subst.
+  { rewrite skipn_nil in *; clarify. }
+  simpl in *.
+  rewrite skipn_app' in Heq; [|omega].
+  destruct (skipn n (instrument_instr i0 t)) eqn: Hskip; clarify.
+  { rewrite skipn_all_iff in Hskip; omega. }
+  destruct o0; [destruct i1; simpl in Hi; inversion Hi; clarify|].
+  exploit skipn_cons_nth; eauto; intro.
+  erewrite skipn_n in Hskip; eauto; clarify.
+  exploit distinct_steps; try eapply iexec_exec, Hiexec; auto; intro.
+  destruct (length (skipn (S n) (instrument_instr i0 t))) eqn: Hlen.
+  - destruct (skipn (S n) (instrument_instr i0 t)) eqn: Hskip; clarify.
+    rewrite skipn_all_iff in Hskip.
+    right.
+    exploit iexec_inv_state; try apply Hiexec; eauto; intros (? & ? & ? & ? & ?
+      & [? | Hspawn]).
+    + subst; exploit state_sim_inv; try apply Hsim; clarify.
+      exploit instrument_incom; eauto; clarify.
+      eapply meta_suffix; auto.
+      { eapply distinct_step; [|eauto]; auto. }
+      { exploit state_sim_inv'; try apply Hsim'; auto.
+        intros (Pa' & li' & Pb' & ?); clarify.
+        exploit instrument_incom'; eauto; clarify.
+        assert (Pa' = Pa) by (eapply state_sim_inj; eauto).
+        assert (Pb' = Pb) by (eapply state_sim_inj; eauto).
+        subst; apply Forall2_app; auto; constructor; clarify.
+        exists 0; split; auto.
+        destruct li'; clarify.
+        generalize (instrument_length i t); omega. }
+      { exploit state_sim_inv'; try apply Hsim'; clarify.
+        exploit instrument_incom'; eauto; clarify.
+        apply split_in. }
+      { rewrite H5; apply split_in. }
+      { eauto. }
+      { rewrite <- H5, skipn_app', skipn_length'; auto. }
+      { rewrite <- H5, firstn_app, firstn_length, minus_diag, app_nil_r; auto. }
+    + destruct Hspawn as (u & li' & ? & ?); subst.
+      assert (n = length (instrument_instr i0 t) - 1) by omega; subst.
+      exploit state_sim_inv; try apply Hsim; auto; intros (? & ? & Heq).
+      exploit (instrument_incom (Spawn u li')); simpl; eauto; clarify.
+      rewrite app_length in *; simpl in *.
+      rewrite Nat.add_sub, nth_error_split in *; clarify.
+  - eapply IHHfinish; try apply eq_refl; try apply split_in; eauto.
+    apply Forall2_app; auto; constructor; auto; clarify.
+    rewrite skipn_length in Hlen.
+    exists (S n); split; [omega|].
+    rewrite skipn_app'; auto.
+Qed.
 
 Lemma mem_vals_app_meta' : forall m1 lc m2 (Hvals : mem_vals (m1 ++ lc) m2)
   (Hmeta : Forall (fun a => meta_loc (loc_of a)) lc)
