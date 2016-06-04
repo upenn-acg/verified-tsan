@@ -2156,7 +2156,6 @@ Proof.
   eapply exec_rd_ops; eauto.
 Qed.
 
-(* up *)
 Lemma step_segment' : forall P G lo lc P' G'
   (Hsteps : exec_star (Some P) G lo lc (Some P') G')
   t li1 li2 (Ht : In (t, li1 ++ li2) P) (Hdistinct : distinct P)
@@ -2173,7 +2172,6 @@ Proof.
   rewrite app_length, skipn_length, skipn_length in *; omega.
 Qed.    
 
-(* up *)
 Lemma step_instr' : forall t i li1 li2 P (Hin : In (t, li1 ++ i :: li2) P)
   (Hdistinct : distinct P)
   G lo lc P' G' (Hsteps : exec_star (Some P) G lo lc (Some P') G')

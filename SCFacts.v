@@ -981,7 +981,6 @@ Proof.
   - rewrite <- app_assoc; simpl; auto.
 Qed.
 
-(* up *)
 Lemma can_read_step' : forall m1 m2 p v c
   (Hcan : can_read m1 p v <-> can_read m2 p v) (Hprog : prog_op c)
   (Hcon1 : consistent (m1 ++ [c])) (Hcon2 : consistent (m2 ++ [c])),

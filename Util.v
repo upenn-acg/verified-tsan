@@ -1526,12 +1526,8 @@ Proof.
   intros; rewrite (app_removelast_last d H); repeat rewrite last_snoc; auto.
 Qed.
 
-Lemma list_cons_plus_assoc: forall (T:Type) (x:T) (x0 y: list T),
- (x::x0)++y=x::(x0++y).
-Proof.
-  intros.
-  auto.
-Qed.
+Lemma last_single : forall A (x d : A), last [x] d = x.
+Proof. auto. Qed.
 
 Opaque last.
 Lemma last_app : forall A (l1 l2 : list A) d, last (l1 ++ l2) d =
@@ -1541,8 +1537,49 @@ Proof.
   - rewrite app_nil_r; auto.
   - intro; rewrite app_assoc, last_snoc.
     destruct l2; clarify.
-    rewrite <- list_cons_plus_assoc, last_snoc; auto.
+    rewrite app_comm_cons, last_snoc; auto.
 Qed.  
+
+Lemma last_last : forall A (d : A) l, last l (last l d) = last l d.
+Proof.
+  destruct l; clarify.
+  apply last_def; clarify.
+Qed.
+
+Lemma skipn_cons_nth : forall A n (l : list A) x l',
+  skipn n l = x :: l' -> nth_error l n = Some x.
+Proof.
+  intros.
+  rewrite <- (plus_O_n n), <- skipn_nth, H; auto.
+Qed.
+
+Lemma skipn_0 : forall A (l : list A), skipn 0 l = l.
+Proof. auto. Qed.
+
+Lemma skipn_plus : forall A n1 n2 (l : list A) (Hle : n1 <= n2),
+  skipn n1 l = firstn (n2 - n1) (skipn n1 l) ++ skipn n2 l.
+Proof.
+  intros.
+  assert (n2 = n1 + (n2 - n1)) as Heq by omega.
+  rewrite Heq at 2.
+  rewrite <- skipn_skipn, firstn_skipn; auto.
+Qed.
+
+Lemma forallb_skipn : forall A f (l : list A) n, forallb f l = true ->
+  forallb f (skipn n l) = true.
+Proof.
+  intros; rewrite forallb_forall in *; intros.
+  exploit skipn_in; eauto.
+Qed.
+
+Lemma firstn_plus : forall A n1 n2 (l : list A),
+  firstn (n1 + n2) l = firstn n1 l ++ firstn n2 (skipn n1 l).
+Proof.
+  induction n1; clarify.
+  destruct l; clarify.
+  - rewrite firstn_nil; auto.
+  - rewrite IHn1; auto.
+Qed.
 
 Lemma Permutation_NoDup : forall A (l l' : list A) (Hdistinct : NoDup l)
   (Hperm : Permutation l l'), NoDup l'.
@@ -1616,6 +1653,16 @@ Lemma last_cons : forall A (x d : A) l (Hnonnil : l <> []), last (x :: l) d =
 Proof. clarify. Qed.
 
 Opaque last.
+
+Lemma last_skip : forall A (l : list A) d (Hl : l <> []),
+  skipn (length l - 1) l = [last l d].
+Proof.
+  induction l; clarify.
+  destruct l; clarify.
+  rewrite last_cons; clarify.
+  rewrite <- minus_n_O in IHl; erewrite IHl; clarify.
+Qed.
+
 Lemma skipn_last : forall A (l l' : list A) x d n,
   skipn n (l ++ l') = x :: l' -> n = length l - 1 /\ x = last l d.
 Proof.

@@ -667,13 +667,6 @@ Proof.
   intros; eapply exec_t_exec, store_handler_race_war_spec_t; eauto.
 Qed.
 
-(* up *)
-Lemma last_last : forall A (d : A) l, last l (last l d) = last l d.
-Proof.
-  destruct l; clarify.
-  apply last_def; clarify.
-Qed.
-
 Lemma store_handler_norace_spec_t : forall n x t P G P1 P2 rest
   vs1 vs2 vs3 (Hstore_handler_spec: P = P1 ++ (t, store_handler t x n
   ++ rest) :: P2) (Hvs1 : length vs1 = n)
@@ -723,10 +716,6 @@ Qed.
 Definition lock_handler t l z :=
   max_vc (L+l) (C+t) z tmp1 tmp2.
 
-(* up! *)
-Lemma last_single : forall A (x d : A), last [x] d = x.
-Proof. auto. Qed.
-
 Lemma lock_handler_spec_t : forall n t l P G P1 P2 rest vs1 vs2 v
   (HP : P = P1 ++ (t, lock_handler t l n ++ rest) :: P2)
   (Hlen1 : length vs1 = n) (Hlen2 : length vs2 = n) (Hn : n <> 0),
@@ -751,7 +740,7 @@ Proof.
   destruct (eq_dec n 0).
   - clarify.
     destruct vs1; clarify.
-    repeat rewrite last_single.
+    repeat rewrite Util.last_single.
     rewrite upd_old, upd_same, upd_same; auto.
     apply exec_refl_t.
   - repeat rewrite last_cons; try solve [intro; clarify; omega].
@@ -869,7 +858,7 @@ Proof.
     events_inc_vc (C + u) t).
   destruct (eq_dec n 0).
   - destruct vs1, vs2; clarify.
-    repeat rewrite last_single.
+    repeat rewrite Util.last_single.
     eapply exec_step_t'; eauto.
     { apply exec_load; eauto. }
     eapply exec_step_t'; eauto.
