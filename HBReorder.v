@@ -267,23 +267,23 @@ Lemma instrument_own : forall li (Hsafe : Forall safe_instr li)
 Proof.
   induction li; clarify.
   inversion Hsafe as [|?? Hsafe' ?]; clarify.
-  rewrite in_app in Hi; destruct Hi.
+  rewrite in_app in Hi; destruct Hi as [Hin | Hin].
   destruct a; try destruct x; clarify.
   - left.
-    repeat rewrite in_app in H; simpl in H.
-    destruct H as [H | [[H | H] | [H | H]]]; clarify.
+    repeat rewrite in_app in Hin; simpl in Hin.
+    destruct Hin as [Hin | [[Hin | Hin] | [Hin | Hin]]]; clarify.
     + exploit Hmetalocs_disjoint_CX; eauto; clarify.
     + exploit hb_check_instr; eauto; intros (? & ? & [? | ?]); clarify.
       * exploit Hmetalocs_disjoint_CW; try apply Ht'; eauto; contradiction.
       * eapply plus_reg_l; eauto.
-    + destruct H as [H | H]; clarify.
+    + destruct Hin as [Hin | Hin]; clarify.
       * eapply plus_reg_l; eauto.
       * exploit Hmetalocs_disjoint_CR; eauto; contradiction.
     + contradiction Hsafe'1; unfold meta_loc; left; simpl; omega.
     + exploit Hmetalocs_disjoint_CX; eauto; clarify.
   - left.
-    repeat rewrite in_app in H; simpl in H.
-    destruct H as [H | [[H | [H | [H | H]]] | [H | H]]]; clarify.
+    repeat rewrite in_app in Hin; simpl in Hin.
+    destruct Hin as [Hin | [[Hin | [Hin | [Hin | Hin]]] | [Hin | Hin]]]; clarify.
     + exploit Hmetalocs_disjoint_CX; eauto; clarify.
     + exploit hb_check_instr; eauto; intros (? & ? & [? | ?]); clarify.
       * exploit Hmetalocs_disjoint_CW; try apply Ht'; eauto; contradiction.
@@ -295,36 +295,35 @@ Proof.
     + exploit Hmetalocs_disjoint_CW; eauto; contradiction.
     + contradiction Hsafe'1; unfold meta_loc; left; simpl; omega.
     + exploit Hmetalocs_disjoint_CX; eauto; clarify.
-  - left; unfold lock_handler in H.
-    destruct H; clarify.
+  - left; unfold lock_handler in Hin.
+    destruct Hin; clarify.
     + contradiction Hsafe'1; left; simpl; omega.
     + exploit max_vc_instr; eauto; intros (? & ? & [? | ?]); clarify.
       * exploit Hmetalocs_disjoint_CL; try (apply H4); eauto; clarify.
       * eapply plus_reg_l; eauto.
-  - left; unfold unlock_handler in H; repeat rewrite in_app in H.
-    destruct H as [[? | ?] | ?]; clarify.
+  - left; unfold unlock_handler in Hin; repeat rewrite in_app in Hin.
+    destruct Hin as [[? | Hin] | ?]; clarify.
     + exploit set_vc_instr; eauto; intros (? & ? & [? | ?]); clarify.
       * eapply plus_reg_l; eauto.
       * exploit Hmetalocs_disjoint_CL; try (apply H4); eauto; clarify.
-    + destruct H as [? | [? | ?]]; clarify; eapply plus_reg_l; eauto.
+    + destruct Hin as [? | [? | ?]]; clarify; eapply plus_reg_l; eauto.
     + contradiction Hsafe'1; left; simpl; omega.
-  - unfold spawn_handler in H; repeat rewrite in_app in H.
-    destruct H as [[? | ?] | ?]; clarify.
-    +exploit max_vc_instr; eauto; intros (? & ? & [? | ?]); clarify.
+  - unfold spawn_handler in Hin; repeat rewrite in_app in Hin; simpl in Hin.
+    destruct Hin as [[? | Hin] | ?]; clarify.
+    + exploit max_vc_instr; eauto; intros (? & ? & [? | ?]); clarify.
       * left. eapply plus_reg_l; eauto.
       * right; eexists; split; eauto; simpl.
         split; [|eapply plus_reg_l; eauto].
         unfold spawn_handler; repeat rewrite in_app; auto.
-    + left; destruct H as [? | [? | ?]]; clarify; eapply plus_reg_l; eauto.
-   
-  - unfold wait_handler in H; repeat rewrite in_app in H.
-    destruct H as [? | ?]; clarify.
-    +exploit max_vc_instr; eauto; intros (? & ? & [? | ?]); clarify.
-     *right; eexists; split; eauto; clarify.
-      split; clarify. right. unfold wait_handler. rewrite in_app. clarify.
-      eapply plus_reg_l; eauto.
-     *left; eapply plus_reg_l; eauto.
-    + destruct H as [? | [? | [?|?]]]; clarify.
+    + left; destruct Hin as [? | [? | ?]]; clarify; eapply plus_reg_l; eauto.
+  - unfold wait_handler in Hin; repeat rewrite in_app in Hin.
+    destruct Hin as [? | Hin]; clarify.
+    + exploit max_vc_instr; eauto; intros (? & ? & [? | ?]); clarify.
+      * right; eexists; split; eauto; clarify.
+        split; clarify. right. unfold wait_handler. rewrite in_app. clarify.
+        eapply plus_reg_l; eauto.
+      * left; eapply plus_reg_l; eauto.
+    + destruct Hin as [? | [? | [?|?]]]; clarify.
       * right; eexists; split; eauto; clarify.
         split; clarify. right. unfold wait_handler. rewrite in_app. clarify.
         apply plus_reg_l in H1. clarify.
@@ -463,7 +462,7 @@ Proof.
     destruct (instrument_instr i0 t) eqn: Hi0;
       [exploit instrument_nonnil; eauto|]; clarify.
     repeat eexists; try apply exec_refl; auto.
-    + rewrite in_app; setoid_rewrite Hi0; simpl; eauto.
+    + rewrite in_app, Hi0; simpl; eauto.
     + instantiate (1 := 0); eauto.
     + setoid_rewrite Forall_app in Hsafe; clarify.
       inversion Hsafe2 as [|?? Hi]; inversion Hi; clarify.
@@ -847,7 +846,7 @@ Proof.
     + destruct (n - length (max_vc (C + t0) (C + t) zt tmp1 tmp2))
         eqn: Hminus; clarify.
       rewrite nth_error_two in *; clarify.
-Qed.      
+Qed.
 
 Notation is_tmp a := (if eq_dec a tmp1 then true else if eq_dec a tmp2 then true
   else false).
@@ -3033,7 +3032,7 @@ Proof.
     destruct (le_dec v1 v2); clarify; [|inversion Hexec'1].
     exploit distinct_step; eauto; intro.
     exploit IHz; eauto.
-    rewrite <- leb_le in *.
+    rewrite <- Nat.leb_le in *.
     Opaque last.
     intros (vs1 & vs2 & ?); exists (v1 :: vs1), (v2 :: vs2); clarify.
     rewrite upd_overwrite, upd_same.
@@ -3090,7 +3089,7 @@ Proof.
       eapply can_read_thread'.
       eapply consistent_app_SC; rewrite <- app_assoc; simpl; eauto.
       { eapply consistent_app_SC; rewrite <- app_assoc; simpl; eauto. }
-    + rewrite leb_le in *; auto.
+    + rewrite Nat.leb_le in *; auto.
   - apply IHz; auto.
     + rewrite read_noop_SC, read_noop_SC in Hcon; eauto.
       * eapply consistent_app_SC; rewrite <- app_assoc; simpl; eauto.
@@ -3157,7 +3156,7 @@ Proof.
     { intros; specialize (Hle (S i)); use Hle; [clarify | omega]. }
     { exploit (Hle 0); simpl; eauto.
       { omega. }
-      rewrite <- leb_le; clarify.
+      rewrite <- Nat.leb_le; clarify.
       rewrite read_noop_SC, read_noop_SC in Hcon; eauto.
       { eapply consistent_app_SC; rewrite <- app_assoc; simpl; eauto. }
       { eapply consistent_app_SC; rewrite <- app_assoc; simpl; eauto. } }
@@ -3244,11 +3243,11 @@ Proof.
     + exists (a :: l1a), (n :: l2a); simpl.
       rewrite Hle; eauto 8.
     + destruct l1a, l2a; clarify.
-      { rewrite leb_le in *; clarify. }
+      { rewrite Nat.leb_le in *; clarify. }
       eauto 9.
   - split; clarify.
     + exists [], []; simpl; do 3 eexists; eauto; split; eauto; clarify.
-      intro; rewrite <- leb_le in *; clarify.
+      intro; rewrite <- Nat.leb_le in *; clarify.
     + destruct x, x0; clarify.
 Qed.    
 
@@ -3498,7 +3497,7 @@ Proof.
     { intros; apply init_step; auto.
       constructor; simpl; auto. }
     intro; subst.
-    erewrite last_def; [|intro; clarify].
+    rewrite last_last.
     apply iexec_store; auto.
     exploit distinct_thread; try apply H3; clarify.
     repeat rewrite <- app_assoc; auto.
@@ -3767,7 +3766,7 @@ Proof.
       unfold until_last in Hcond; destruct Hcond as [Hcond | Hcond].
       { inversion Hcond; clarify.
         rewrite upd_new, VectorClocks.upd_old, upd_new in *; auto.
-        rewrite <- leb_le in *; unfold id in *; clarify. }
+        rewrite <- Nat.leb_le in *; unfold id in *; clarify. }
       clarify.
       destruct n; [clarify | simpl in Hcond1].
       destruct l2.
@@ -3780,7 +3779,7 @@ Proof.
         clarify.
       * rewrite removelast_2 in Hcond221; inversion Hcond221.
         rewrite upd_new, VectorClocks.upd_old, upd_new in *; auto.
-        rewrite <- leb_le in *; unfold id in *; clarify.
+        rewrite <- Nat.leb_le in *; unfold id in *; clarify.
     + intros; rewrite HG; auto.
       do 2 (rewrite VectorClocks.upd_old; auto).
 Qed.
@@ -3816,7 +3815,7 @@ Proof.
       unfold until_last in Hcond; destruct Hcond as [Hcond | Hcond].
       { inversion Hcond; clarify.
         rewrite upd_new, VectorClocks.upd_old, upd_new in *; auto.
-        rewrite <- leb_le in *; unfold id in *; clarify. }
+        rewrite <- Nat.leb_le in *; unfold id in *; clarify. }
       clarify.
       destruct (length (hb_check C1 C2 z tmp1 tmp2)) eqn: Hlen; clarify.
       { destruct z; clarify. }
@@ -3829,7 +3828,7 @@ Proof.
         clarify.
       * rewrite removelast_2 in Hcond221; inversion Hcond221.
         rewrite upd_new, VectorClocks.upd_old, upd_new in *; auto.
-        rewrite <- leb_le in *; unfold id in *; clarify.
+        rewrite <- Nat.leb_le in *; unfold id in *; clarify.
     + intros; rewrite HG; auto.
       do 2 (rewrite VectorClocks.upd_old; auto).
 Qed.
@@ -6064,7 +6063,7 @@ Proof.
     split.
     + exists (n :: vs1), (n0 :: vs2); clarify.
       rewrite upd_new, VectorClocks.upd_old, upd_new in *; clarify.
-      rewrite <- leb_le in *; unfold id in *; clarify.
+      rewrite <- Nat.leb_le in *; unfold id in *; clarify.
     + intros; rewrite HG; auto.
       do 2 (rewrite VectorClocks.upd_old; auto).
 Qed.
@@ -6593,7 +6592,8 @@ Proof.
       + exploit hb_check_instrs; eauto 2; intros [(? & ? & [? | ?]) | ?];
           clarify.
         * contradiction n1; apply W_meta; auto.
-        * contradiction n2; apply C_meta; auto.
+        * destruct (meta_loc_dec (C + t, x)); clarify.
+          contradiction n2; apply C_meta; auto.
       + destruct H; clarify.
         * contradiction n1; apply C_meta; auto.
         * contradiction n1; apply R_meta; auto. }
@@ -6612,11 +6612,13 @@ Proof.
       + exploit hb_check_instrs; eauto 2; intros [(? & ? & [? | ?]) | ?];
           clarify.
         * contradiction n1; apply W_meta; auto.
-        * contradiction n2; apply C_meta; auto.
+        * destruct (meta_loc_dec (C + t, x)); clarify.
+          contradiction n2; apply C_meta; auto.
       + exploit hb_check_instrs; eauto 2; intros [(? & ? & [? | ?]) | ?];
           clarify.
         * contradiction n1; apply R_meta; auto.
-        * contradiction n2; apply C_meta; auto.
+        * destruct (meta_loc_dec (C + t, x)); clarify.
+          contradiction n2; apply C_meta; auto.
       + destruct H; clarify.
         * contradiction n1; apply C_meta; auto.
         * contradiction n1; apply W_meta; auto. }
@@ -6630,7 +6632,8 @@ Proof.
     { intros; exploit max_vc_instrs; eauto; intros [(? & ? & ?) | ?]; clarify.
       destruct H1 as [? | [? | ?]]; clarify.
       + contradiction n0; apply L_meta; auto.
-      + contradiction n1; apply C_meta; auto.
+      + destruct (meta_loc_dec (C + t, x0)); clarify.
+        contradiction n1; apply C_meta; auto.
       + contradiction n0; apply C_meta; auto. }
     rewrite skipn_S_tl; destruct n; clarify.
     + rewrite forallb_forall; auto.
@@ -6656,7 +6659,8 @@ Proof.
       + exploit max_vc_instrs; eauto 2; intros [(? & ? & [? | [? | ?]]) | ?];
           clarify.
         * contradiction n0; apply C_meta; auto.
-        * contradiction n1; apply C_meta; auto.
+        * destruct (meta_loc_dec (C + t, x)); clarify.
+          contradiction n1; apply C_meta; auto.
         * contradiction n0; apply C_meta; auto.
       + destruct H as [? | [? | ?]]; clarify.
         * contradiction n0; apply C_meta; auto.
@@ -6670,7 +6674,8 @@ Proof.
       + exploit max_vc_instrs; eauto; intros [(? & ? & [? | [? | ?]]) | ?];
           clarify.
         * contradiction n0; apply C_meta; auto.
-        * contradiction n1; apply C_meta; auto.
+        * destruct (meta_loc_dec (C + t0, x0)); clarify.
+          contradiction n1; apply C_meta; auto.
         * contradiction n0; apply C_meta; auto.
       + destruct H as [? | [? | ?]]; clarify.
         * contradiction n0; apply C_meta; auto.
@@ -8196,7 +8201,7 @@ Proof.
     destruct o; [destruct i'; simpl in Hi; inversion Hi; clarify|].
     apply Forall2_app; auto; constructor; clarify.
     do 2 eexists; [|eauto]; omega.
-Qed.      
+Qed.
 
 Lemma instrument_incom' : forall t li1 li2,
   instrument li1 t = instrument li2 t -> li1 = li2.
@@ -8308,7 +8313,7 @@ Proof.
   split; clarify.
   { eapply Forall_impl; try apply Hmeta; repeat intro; clarify. }
   { eapply init_steps; eauto. }
-Qed.  
+Qed.
 
 Lemma iexec_trans : forall P G lo lc P' G' lo' lc' P'' G''
   (Hiexec1 : iexec_star P G lo lc P' G')
@@ -8318,5 +8323,5 @@ Proof.
   intros ???????????; induction Hiexec1; clarify.
   repeat rewrite <- app_assoc; eapply iexec_step; eauto.
 Qed.
-  
+
 End Reordering.

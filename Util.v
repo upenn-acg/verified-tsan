@@ -1,8 +1,8 @@
 Require Export List.
+Require Export Coqlib.
 Require Export Arith.
 (*Require Export Omega.*)
 Require Import Sorted.
-Require Export Coqlib.
 Require Import Program.Tactics.
 Require Import Permutation.
 Require Export NPeano.

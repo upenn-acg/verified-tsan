@@ -445,11 +445,11 @@ Proof.
     { eauto. }
     instantiate (3 := upd_env (upd_env G t tmp1 n0) t tmp2 n1).
     rewrite upd_three, upd_three; auto.
-    rewrite leb_le in *.
+    rewrite Nat.leb_le in *.
     eapply exec_star_t_trans; eauto.
     apply assert_le_pass_spec_t; auto; reflexivity.
   - inversion Hfirst_gt; subst.
-    destruct (le_dec v1 v2); [rewrite <- leb_le in *; clarify|].
+    destruct (le_dec v1 v2); [rewrite <- Nat.leb_le in *; clarify|].
     eapply assert_le_fail_spec_t; auto; reflexivity.
 Qed.
 
@@ -477,7 +477,7 @@ Proof.
   rewrite hb_check_step, events_hb_check_step, mops_hb_check_step.
   simpl in Hfirst_gt.
   destruct (leb n0 n1) eqn: Hle; [|clarify].
-  rewrite leb_le in Hle.
+  rewrite Nat.leb_le in Hle.
   exploit IHn.
   { eauto. }
   { eauto. }
@@ -1071,7 +1071,7 @@ Lemma vc_le_first_gt : forall V1 V2 (Hle : vc_le(tid := tid) V1 V2) l,
   first_gt (map V1 l) (map V2 l) = None.
 Proof.
   induction l; clarify.
-  specialize (Hle a); rewrite <- leb_le in Hle; clarify.
+  specialize (Hle a); rewrite <- Nat.leb_le in Hle; clarify.
 Qed.
 
 Lemma C_meta : forall t (Ht : t < zt) o, meta_loc (C + t, o).

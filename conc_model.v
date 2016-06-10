@@ -993,8 +993,9 @@ Section Concurrency.
         rewrite to_ilist_app in Hread_init, Hcon2.
         generalize (read_justified_op _ _ _ _ Hcon2 Hread_init);
           intros (w & Hlast & Hw).
-        rewrite inth_nth_error, nth_error_app in Hw;
-          destruct (lt_dec w (length (lower m1))).
+        rewrite inth_nth_error, nth_error_app in Hw.
+        destruct (lt_dec w (length (lower m1))) eqn: Hltw;
+          setoid_rewrite Hltw in Hw.
         exploit nth_lower_split; eauto;
           intros (m1' & opw & m2' & i & ? & Hi & ?); clarify.
         generalize (nth_error_in _ _ Hi); intro.
@@ -1473,7 +1474,7 @@ Section Concurrency.
           [omega|].
         destruct (k - length l1') eqn: Hminus; [omega | clarify].
         setoid_rewrite firstn_app in Hlast; rewrite firstn_length' in Hlast;
-          [|omega].
+          [|auto with arith].
         exploit nth_error_split'; eauto; intros (l3' & l4' & ?); clarify.
         rewrite split_app, app_assoc, lower_app, lower_cons in Hlast.
         repeat rewrite <- app_assoc in Hlast.
