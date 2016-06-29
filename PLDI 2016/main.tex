@@ -832,7 +832,7 @@ In an execution in which every thread terminates, we can reorder the entire exec
 \begin{lemma}\label{exec-iexec}Let $P_0$ be a well-formed uninstrumented state and $P$ its instrumented counterpart. If $\execstar{P}{m}{}{(P', m')}$ where $P'$ is some final state, then $\iexecstar{P}{m}{(P', m'')}$ such that $m'' \sim m'$.\end{lemma}
 \ignore{\begin{proof}By Lemma~\ref{exec-iexec1}, there is some $P_1$ such that $\iexecstar{P}{m}{(P_1', m_1')} \execstars{}{(P', m'')}$ and $P'$ is an instrumented suffix of $P_1$. But a final state is only the instrumented suffix of a final state, and so $P_1$ and hence $P_1'$ must also be final. Since $P_1'$ is final, $P_1' = P'$ and $m_1' = m''$, completing the proof.\end{proof}}
 
-We must also consider the case in which the instrumented program fails an assertion before reaching a final state. In this case, other threads may be in the middle of executing instrumentation sections when the execution terminates. In order to show that the instrumented program is nonetheless in the same state (up to metadata) as the original program, we must use a slightly more sophisticated approach. \TODO{diagram!} The core of the approach is a confluence property stating that in an execution in which an instrumentation section has an effect on non-metadata state, 1) we can reorder the section into an atomic block, and 2) executing all the remaining steps after the atomic block yields the same state as completing the incomplete section in the starting execution.
+We must also consider the case in which the instrumented program fails an assertion before reaching a final state. In this case, other threads may be in the middle of executing instrumentation sections when the execution terminates. In order to show that the instrumented program is nonetheless in the same state (up to metadata) as the original program, we must use a slightly more sophisticated approach. The core of the approach, diagrammed in Figure~\ref{fig:confluence}, is a confluence property stating that in an execution in which an instrumentation section has an effect on non-metadata state, 1) we can reorder the section into an atomic block, and 2) executing all the remaining steps after the atomic block yields the same state as completing the incomplete section in the starting execution.
 \ignore{
 \begin{lemma}\label{first-effect}Let $P_0$ be a well-formed uninstrumented state and $P$ its instrumented counterpart. Suppose that $\execstar{P}{m}{}{(P_1, m_1)} \execs{t}{}{(P_2, m_2)} \execstars{P_3}{m_3}$, where $P_1$ is an instrumented suffix of $P_0$ and the step from $P_1$ to $P_2$ has an effect on non-metadata state. Then there exist $P', m', P_3', m_3'$ such that $\iexec{P}{m}{t}{(P', m')} \execstars{}{(P_3', m_3')}$, $m_3' \sim m_3$, and $\execstart{P_3}{m_3}{t}{(P_3', m_3')}$ by only executing metadata operations.\end{lemma}
 \begin{proof}By noninterference and the confluence properties of the step relation.\end{proof}
@@ -984,12 +984,21 @@ where $(P_1, m_1) \sim (P_1', m_1')$, and, according to the \VCalg semantics of 
 Since $(P, m) \sim (P', m')$ implies that the memory and local environments agree on all locations except those involved in the instrumentation, these are strong correctness properties. Theorem~\ref{safe} guarantees that for each race-free execution of the original program, there is a successful instrumented execution that produces the same values in the environment and memory (and vice versa). Theorem~\ref{race} guarantees that for each racy execution of the original program, there is a corresponding instrumented execution that produces the same values in the environment and memory up until the first race, then fails (and vice versa). While it is difficult to talk about ``the same'' execution across two different programs, these lemmas guarantee that in terms of observable results, the original and instrumented programs have the same behavior modulo race detection, and that all racy executions are successfully detected.
 
 \section{Coq Formalization}
-\TODO{size of development table: definitions, proofs x VC, FT, multijoin delta?, instrumentation}
+\begin{figure}[h]
+\begin{tabular}{c || c | c}
+& definitions (loc) & proofs (loc)\\
+\hline
+\VCalg & 100 & 1150\\
+%\hline
+\FT & 70 & 800\\
+%\hline
+multi-join \textsc{VC} ($\Delta$)& 30 & 100\\
+%\hline
+instrumentation & 780 & 18900
+\end{tabular}
+\end{figure}
 
-\TODO{Here's the table. One of us was learning as he went. etc.}
-We expect that the arithmetic involved could be further automated, decreasing the burden of verifying related algorithms.
-
-The verification of the instrumentation is an order of magnitude more complex than the algorithm component.
+All the theorems stated in this paper have been formally verified in Coq. The size of the definitions and proofs in the verification is shown above. The proofs varied considerably in complexity. The proof of correctness for \FT by simulation with \VCalg is particularly simple, consisting mainly of proving that various inequalities are preserved by vector clock operations; this arithmetic could probably be automated, decreasing the burden of verifying related algorithms. The proofs of correctness of the instrumentation were much more complicated, even in proportion to the definitions; the bulk of the work involved reasoning about noninterference and reordering. Our proofs do not make use of any particularly advanced features of Coq, and many of them were completed by one of the authors with no prior Coq experience.
 
 \section{Related Work}
 \label{related}
