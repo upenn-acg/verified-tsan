@@ -845,6 +845,19 @@ This lets us reorder an execution in which a race is detected into a sequence of
 \begin{lemma}\label{exec-fail-iexec}Let $P_0$ be a well-formed uninstrumented state and $P$ its instrumented counterpart. If $\execstar{P}{m}{}{(P', m')} \rightarrow \mathit{err}$, then $\iexecstar{P}{m}{(P', m'')}$ such that $m'' \sim m'$ and $(P', m'') \Rightarrow \mathit{err}$.\end{lemma}
 \ignore{\begin{proof}By Lemma~\ref{exec-iexec1}, there is some $P_1$ such that $\iexecstar{P}{m}{(P_1', m_1')} \execstars{}{(P', m'')}$ and $P'$ is an instrumented suffix of $P_1$. Then we can inductively apply Lemma~\ref{next-effect} to get a state $(P_2', m_2')$ such that $\iexecstar{P_1'}{m_1'}{(P_2', m_2')} \execstarts{t}{(P', m'')}$, $m_2' \sim m''$, and the final steps by $t$ are exactly the failing instrumentation section, i.e., $(P_2', m_2') \Rightarrow \mathit{err}$.\end{proof}}
 
+\begin{figure}[t]
+\xymatrix@=2ex
+{
+& (P,m) \ar[rr]^>{*}  \ar@{:>}[rrrrdd]_{i}_>{t} & & \cdot \ar[rr]^{i}_>{t} & & \cdot \ar[rr]^>{*} & & \cdot \ar@{.>}[rr]^>{*} & & (P',m') \\
+\\
+& && && \cdot \ar@{.>}[rrrruu]^>>{*}
+\\
+}
+\caption{Confluence diagram for completing partially executed instrumentation block for the source instruction $i$.}
+\label{fig:confluence}
+\end{figure}
+
+
 \begin{figure*}[t]
 \begin{minipage}[t]{1.6in}
   \begin{tabular}[t]{c}
