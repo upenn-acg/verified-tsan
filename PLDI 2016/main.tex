@@ -352,8 +352,6 @@ A \FT analysis state is a tuple $(\mathcal{C}, \mathcal{L}, \mathcal{R}, \mathca
 \bigcell{
 \inference[\Rule{ReadSameEpoch}]{R_x = E(t)}{(\mathcal{C}, \mathcal{L}, \mathcal{R}, \mathcal{W}) \xRightarrow{\mathit{rd}(t, x)} (\mathcal{C}, \mathcal{L}, \mathcal{R}, \mathcal{W})}\\\\
 
-\inference[\Rule{\Rule{ReadShared}}]{\mathcal{R}_x \in \mathit{\VectorClock} \\ \mathcal{W}_x \EpochCompare \mathcal{C}_t \\ \mathcal{R}' = \mathcal{R}[x := \mathcal{R}_x[t := \mathcal{C}_t(t)]] }{(\mathcal{C}, \mathcal{L}, \mathcal{R}, \mathcal{W}) \xRightarrow{\mathit{rd}(t, x)} (\mathcal{C}, \mathcal{L}, \mathcal{R}', \mathcal{W})}\\\\
-
 \inference[\Rule{\Rule{ReadExclusive}}]{\mathcal{R}_x \in \mathit{\Epoch} \\ \mathcal{R}_x \EpochCompare \mathcal{C}_t \qquad \mathcal{W}_x \EpochCompare C_t \\ \mathcal{R}' = \mathcal{R}[x := E(t)]
   }{(\mathcal{C}, \mathcal{L}, \mathcal{R}, \mathcal{W}) \xRightarrow{\mathit{rd}(t, x)} (\mathcal{C}, \mathcal{L}, \mathcal{R}', \mathcal{W})} \\\\
 
@@ -362,6 +360,8 @@ A \FT analysis state is a tuple $(\mathcal{C}, \mathcal{L}, \mathcal{R}, \mathca
 } & &
 
 \bigcell{
+\inference[\Rule{\Rule{ReadShared}}]{\mathcal{R}_x \in \mathit{\VectorClock} \\ \mathcal{W}_x \EpochCompare \mathcal{C}_t \\ \mathcal{R}' = \mathcal{R}[x := \mathcal{R}_x[t := \mathcal{C}_t(t)]] }{(\mathcal{C}, \mathcal{L}, \mathcal{R}, \mathcal{W}) \xRightarrow{\mathit{rd}(t, x)} (\mathcal{C}, \mathcal{L}, \mathcal{R}', \mathcal{W})}\\\\
+
 \inference[\Rule{WriteSameEpoch}]{\mathcal{W}_x = E(t)}{(\mathcal{C}, \mathcal{L}, \mathcal{R}, \mathcal{W}) \xRightarrow{\mathit{wr}(t, x)} (\mathcal{C}, \mathcal{L}, \mathcal{R}, \mathcal{W})} \\\\
 
 \inference[\Rule{\Rule{WriteExclusive}}]{\mathcal{R}_x \in \mathit{\Epoch} \\ \mathcal{R}_x \EpochCompare \mathcal{C}_t \qquad \mathcal{W}_x \EpochCompare \mathcal{C}_t \\ \mathcal{W}' = \mathcal{W}[x := E(t)] }{ (\mathcal{C}, \mathcal{L}, \mathcal{R}, \mathcal{W}) \xRightarrow{\mathit{wr}(t, x)} (\mathcal{C}, \mathcal{L}, \mathcal{R}, \mathcal{W}')}\\\\
