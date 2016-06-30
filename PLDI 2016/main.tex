@@ -181,7 +181,7 @@ Multicore processors have steadily invaded a broad swathe of the computing ecosy
 
 While these analyses have been proven correct, such proofs have two main shortcomings: they are proofs of the algorithms, instead of the implementations, and they are paper proofs instead of machine-checked proofs. Because of these shortcomings, it is possible that a race detector does not faithfully implement its algorithm, or that the algorithm itself is not fully correct. Moreover, it still remains to be shown that the implementation, often done via code instrumentation, does not itself introduce or mask races, and that, in the absence of races, the program's behavior is unchanged.
 
-In this paper, we seek to rectify these concerns and place dynamic race detection on a provably correct foundation for the first time\footnote{All proofs are fully machine-checked in Coq. We have submitted them as non-anonymous supplementary material, and intend intend to submit a documented version for artifact evaluation.}. We begin by formalizing the proof of the classic vector-clock race detection algorithm~\cite{vcfidge,vcmattern} using the Coq interactive theorem prover~\cite{coq}. Having established the correctness of this base algorithm, we extend our work along two dimensions. 
+In this paper, we seek to rectify these concerns and place dynamic race detection on a provably correct foundation for the first time\footnote{All proofs are fully machine-checked in Coq. We have submitted them as non-anonymous supplementary material, and intend to submit a documented version for artifact evaluation.}. We begin by formalizing the proof of the classic vector-clock race detection algorithm~\cite{vcfidge,vcmattern} using the Coq interactive theorem prover~\cite{coq}. Having established the correctness of this base algorithm, we extend our work along two dimensions. 
 
 \begin{figure}[t]
 \centering
@@ -203,7 +203,7 @@ This paper makes the following contributions:
 \item We give the first verified implementation of vector-clock race detection on a simple, imperative multithreaded language.
 \ignore{\item We uncover issues in the paper proof of correctness for \FT and in its current implementation that are unlikely to have been revealed without our verification efforts. We repair these issues in our own proofs and implementation.}
 \end{itemize}
-Along the way, we discovered that one lemma in the paper proof of \FT needed strengthening, and noticed a discrepancy between the \FT algorithm and one version of its implementation (which was corrected in a later version). This highlights the value of formal verification for obtaining correct algorithms and implementations.
+Along the way, we discovered that one lemma in the paper proof of \FT needed strengthening, and noticed a discrepancy between the \FT algorithm and one version of its implementation (which was corrected in a later version based on our feedback to the \FT authors). This highlights the value of formal verification for obtaining correct algorithms and implementations.
 
 The remainder of this paper is organized as follows. In Section~\ref{strategy}, we lay out our approach to verifying dynamic race detection algorithms and their implementations. In Section~\ref{algorithms}, we state and verify several algorithms for race detection. In Sections~\ref{language} and \ref{verification}, we describe an instrumentation pass that implements dynamic race detection, and explain the verification process in detail. We compare our approach to related work in Section~\ref{related}, and evaluate our results and describe future work in Section~\ref{conclusion}.
 
@@ -220,18 +220,9 @@ We begin by reviewing the classic vector-clock race detection algorithm~\cite{vc
 % NB: VC stuff borrowed from Joe's Radish paper [ISCA '12]
 
 \subsection{Defining Data Races}
-Data races are formally defined in terms of a \emph{happens-before} relation $\hb$, a partial order over events in a
-program trace~\cite{lamporthb}. Events include reads $\mathit{rd}(t, x)$, writes $\mathit{wr}(t, x)$, lock operations $\mathit{acq}(t, m)$ and $\mathit{rel}(t, m)$, and thread operations $\mathit{fork}(t, u)$ and $\mathit{join}(t, u)$. Given events $a$ and $b$, we say $a$
-\emph{happens before} $b$ (and $b$ \emph{happens after} $a$), written $a \hb b$,
-if: (1) $a$ precedes $b$ in program order in the same thread; or (2) $a$
-precedes $b$ in synchronization order $\sw$, \eg, if $a$ is thread $\Tid$ releasing a lock $\Lock$, and $b$ is thread $\TidU$ subsequently acquiring it; or (3) $(a,b)$ is in the
-transitive closure of program order and synchronization order.
-% Synchronization order also induces happens-before ordering on
-% other synchronization events such as thread fork to thread start
-% and thread termination to thread join. 
-Two events not ordered by happens-before are \emph{concurrent}.  Two
-memory accesses to the same address form a \emph{data race} if they are
-concurrent and at least one is a write.
+Data races are formally defined in terms of a \emph{happens-before} relation $\hb$, a partial order over events in a program trace~\cite{lamporthb}. Events consist of $\mathit{rd}(t, x)$ and $\mathit{wr}(t, x)$ where a thread $t$ reads or writes a memory location $x$, lock operations $\mathit{acq}(t, m)$ and $\mathit{rel}(t, m)$ where a thread $t$ acquires or releases a lock $m$, $\mathit{fork}(t, u)$ where a thread $t$ creates a new thread $u$, and $\mathit{join}(t, u)$ where a thread $t$ joins with a thread $u$. Given events $a$ and $b$, we say $a$ \emph{happens before} $b$ (and $b$ \emph{happens after} $a$), written $a \hb b$, if: (1) $a$ precedes $b$ in program order in the same thread; or (2) $a$ precedes $b$ in synchronization order $\sw$, \eg, if $a$ is thread $\Tid$ releasing a lock $\Lock$, and $b$ is thread $\TidU$ subsequently acquiring it; or (3) $(a,b)$ is in the transitive closure of program order and synchronization order.
+% Synchronization order also induces happens-before ordering on other synchronization events such as thread fork to thread start and thread termination to thread join.
+Two events not ordered by happens-before are \emph{concurrent}.  Two memory accesses to the same address form a \emph{data race} if they are concurrent and at least one is a write.
 
 \subsection{Vector-Clock Race Detection}
 \label{vector-clocks}
@@ -503,9 +494,9 @@ We have verified this modified algorithm in Coq by modifying the proofs of \VCal
 
 In the previous section, we described the statement and verification of \emph{algorithms} for dynamic race detection. However, for dynamic race detection to be useful, it must be implemented as a tool that runs during the execution of a program. Most commonly, this is achieved by \emph{instrumenting} the program with additional instructions that carry out the algorithm. Instrumentation must be defined in terms of the instructions of some language instead of abstract arithmetic operations, and must take place within the flow of a program rather than alongside it. Because of this, the process of translating from algorithm to instrumentation is error-prone, and any discrepancy weakens the guarantee provided by the paper proof.
 
-In practice, we found that the implementation of \FT in the RoadRunner framework uses a different version of the \Rule{Release} rule from that shown in Figure~\ref{f:semvc}: the release handler updates $L_m$ to $L_m \sqcup C_t$ rather than $C_t$. In this case, the difference can be shown not to affect the correctness of the algorithm, and the authors have confirmed that it has no impact on performance. 
+In practice, we found that the implementation of \FT in the RoadRunner framework uses a different version of the \Rule{Release} rule from that shown in Figure~\ref{f:semvc}: the release handler updates $L_m$ to $L_m \sqcup C_t$ rather than $C_t$. In this case, the difference can be shown not to affect the correctness of the algorithm, and the \FT authors have confirmed that it has no impact on performance. 
 
-In order to avoid these discrepancies, we must verify not only the algorithm but also the instrumentation pass that implements it. In this and the following sections, we present an instrumentation pass in a simple language that is formally proven to implement the \VCalg algorithm of Section~\ref{vector-clocks}.
+In order to avoid such discrepancies, we must verify not only the algorithm but also the instrumentation pass that implements it. In this and the following sections, we present an instrumentation pass in a simple language that is formally proven to implement the \VCalg algorithm of Section~\ref{vector-clocks}.
 
 \subsection{The Language}
 We define a simple multithreaded language that is just complicated enough to have races and implement race detection instrumentation. The instructions of the language are inductively defined as follows, where $n$ is a natural number, $a$ is a local variable, $e, e1, e2$ are expressions, $x$ is a memory location, $l$ is a lock, $t$ is a numeric thread id, and $\mathit{li}$ is a list of $\mathit{instr}$s:
@@ -542,7 +533,7 @@ A \emph{program} is simply a list of instructions, considered to be the body of 
 \\ \hline
 \cfg{P \uplus (t, \unlock{\ell}\texttt{;} \mathit{li}, G)}{m}
 \anarrow{t}{\mathit{rel}(t, \ell)} \\
-\cfg{P \uplus (t, \mathit{li}, G}{m[\ell \mapsto 0]}
+\cfg{P \uplus (t, \mathit{li}, G)}{m[\ell \mapsto 0]}
 \\\\
 
 \multicolumn{1}{c}{\forall \mathit{li}' G'.\ (t, \mathit{li}', G') \not\in P}
@@ -563,7 +554,7 @@ A \emph{program} is simply a list of instructions, considered to be the body of 
 \\ \hline \rule{0pt}{2.5ex}
 \cfg{P \uplus (t, \assert{e_1}{e_2}\texttt{;} \mathit{li}, G)}{m}
 \anarrow{t}{} \\
-\cfg{P \uplus (t, \mathit{li}, G}{m}
+\cfg{P \uplus (t, \mathit{li}, G)}{m}
 \\\\
 
 \multicolumn{1}{c}{\mathsf{eval}(G, e_1) > \mathsf{eval}(G, e_2)}
@@ -629,7 +620,7 @@ We instrument programs by augmenting each race-detection-relevant instruction wi
 \label{helper}
 \end{figure}
 
-With these macros as building blocks, we can straightforwardly translate the rules of \VCalg from Figure~\ref{f:semvc} into code. For this purpose, we use a block-offset memory model; locations accessed in the original program are considered to be blocks of size 1. We set aside dedicated areas of memory for each of the components of the vector clock state, labeled $C$, $L$, $R$, and $W$ accordingly, and index into them by assigning a unique numeric identifier to each thread, local variable, and lock, so that offset $t$ into block $L[m]$ in memory contains the value of $L_m(t)$ (we write $L[m]$ as a shorthand for $L + m$, using the commonly understood equivalence between pointers and arrays). Note that the ordering of the associated vector clock operations depends on the instruction being instrumented; in particular, the blocking operations \texttt{lock} and \texttt{wait} must not change the vector clock state until after they successfully complete.  Because in our language the bodies of future threads are embedded in the \texttt{spawn} instructions, we instrument these threads by recursively instrumenting each instruction in their bodies. The instrumented version of a program $\mathit{prog}$ is then simply $\instrp{\mathit{prog}} \triangleq \instr{0}{\mathit{prog}}$, the result of applying the instrumentation function to each instruction in $\mathit{prog}$.
+With these macros as building blocks, we can straightforwardly translate the rules of \VCalg from Figure~\ref{f:semvc} into code. For this purpose, we use a block-offset memory model; locations accessed in the original program are considered to be blocks of size 1. We set aside dedicated areas of memory for each of the components of the vector clock state, labeled $C$, $L$, $R$, and $W$ accordingly, and index into them by assigning a unique numeric identifier to each thread, local variable, and lock, so that offset $t$ into block $L[m]$ in memory contains the value of $L_m(t)$ (we write $L[m]$ as a shorthand for $L + m$, using the commonly understood equivalence between pointers and arrays). Note that the ordering of the associated vector clock operations depends on the instruction being instrumented; in particular, the blocking operations \texttt{lock} and \texttt{wait} must not change the vector clock state until after they successfully complete.  Because in our language the bodies of future threads are embedded in the \texttt{spawn} instructions, we instrument these threads by recursively instrumenting each instruction in their bodies. The instrumented version of a program $\mathit{prog}$ is then simply $\instrp{\mathit{prog}} \triangleq \instr{0}{\mathit{prog}}$, the result of applying the instrumentation function (Figure~\ref{instrumentation}) to each instruction in $\mathit{prog}$.
 
 
 
