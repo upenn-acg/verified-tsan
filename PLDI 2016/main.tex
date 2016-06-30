@@ -207,7 +207,7 @@ This paper makes the following contributions:
 \item We give the first verified implementation of vector-clock race detection on a simple, imperative multithreaded language.
 \ignore{\item We uncover issues in the paper proof of correctness for \FT and in its current implementation that are unlikely to have been revealed without our verification efforts. We repair these issues in our own proofs and implementation.}
 \end{itemize}
-Along the way, we discovered that one lemma in the paper proof of \FT needed strengthening, and noticed a discrepancy between the \FT algorithm and one version of its implementation (which was corrected in a later version based on our feedback to the \FT authors). This highlights the value of formal verification for obtaining correct algorithms and implementations.
+Along the way, we discovered that one lemma in the paper proof of \FT needed strengthening, and noticed a minor discrepancy between the \FT algorithm and its implementation. This highlights the value of formal verification for obtaining correct algorithms and implementations.
 
 The remainder of this paper is organized as follows. In Section~\ref{strategy}, we lay out our approach to verifying dynamic race detection algorithms and their implementations. In Section~\ref{algorithms}, we state and verify several algorithms for race detection. In Sections~\ref{language} and \ref{verification}, we describe an instrumentation pass that implements dynamic race detection, and explain the verification process in detail. We compare our approach to related work in Section~\ref{related}, and evaluate our results and describe future work in Section~\ref{conclusion}.
 
