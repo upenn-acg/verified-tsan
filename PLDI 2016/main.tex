@@ -135,6 +135,10 @@
 \newtheorem{principle}{Principle}
 
 
+\definecolor{lightgray}{rgb}{0.9,0.9,0.9}
+\newcommand{\hl}[1]{\colorbox{lightgray}{\ensuremath{#1}}}
+
+
 \begin{document}
 
 \special{papersize=8.5in,11in}
@@ -626,32 +630,32 @@ With these macros as building blocks, we can straightforwardly translate the rul
 
 \begin{figure}[tb]
   \begin{tabular}[t]{rcl}
-\instr{t}{\load{a}{x}} & $\triangleq$ & \vcle{W[x]}{C[t]}\texttt{;}
-\\ & &  \move{(C[t], t)}{(R[b], t)}\texttt{;} 
+\instr{t}{\load{a}{x}} & $\triangleq$ & \hl{ \vcle{W[x]}{C[t]}\texttt{;} }
+\\ & &  \hl{ \move{(C[t], t)}{(R[b], t)}\texttt{;} }
 \\ & & \load{$a$}{$x$}\texttt{;} 
 \\ \\
-\instr{t}{\store{x}{e}} & $\triangleq$ & \vcle{W[x]}{C[t]}\texttt{;}
-\\ & &  \vcle{R[b]}{C[t]}\texttt{;}
-\\ & & \move{(C[t], t)}{(W[x], t)}\texttt{;}
+\instr{t}{\store{x}{e}} & $\triangleq$ & \hl{ \vcle{W[x]}{C[t]}\texttt{;} }
+\\ & &  \hl{ \vcle{R[b]}{C[t]}\texttt{;} }
+\\ & & \hl{ \move{(C[t], t)}{(W[x], t)}\texttt{;} }
 \\ & &  \store{$x$}{$e$}\texttt{;}
 \\ \\
 \instr{t}{\lock{m}} & $\triangleq$ & \lock{$m$}\texttt{;}
-\\ & & \maxvc{L[m]}{C[t]}\texttt{;}
+\\ & & \hl{ \maxvc{L[m]}{C[t]}\texttt{;} }
 \\ \\
-\instr{t}{\unlock{m}} & $\triangleq$ & \setvc{C[t]}{L[m]}\texttt{;}
-\\ & & \incvc{t}{C[t]}\texttt{;}
+\instr{t}{\unlock{m}} & $\triangleq$ & \hl{ \setvc{C[t]}{L[m]}\texttt{;} }
+\\ & & \hl{ \incvc{t}{C[t]}\texttt{;} }
 \\ & & \unlock{$m$}\texttt{;}
 \\ \\
 \instr{t}{\spawn{u}{\mathit{li}}} & $\triangleq$ &
-                                                   \maxvc{C[t]}{C[u]}\texttt{;}
-\\ & &  \incvc{t}{C[t]}\texttt{;}
+                                                   \hl{ \maxvc{C[t]}{C[u]}\texttt{;} }
+\\ & &  \hl{ \incvc{t}{C[t]}\texttt{;} }
 \\ & & \spawn{$u$}{(\instr{u}{\mathit{li}})}\texttt{;}
 \\ \\
 \instr{t}{\wait{u}} & $\triangleq$ & \wait{$u$}\texttt{;}
-\\ & & \maxvc{C[u]}{C[t]}\texttt{;}
-\\ & & \incvc{u}{C[u]}\texttt{;}
+\\ & & \hl{ \maxvc{C[u]}{C[t]}\texttt{;} }
+\\ & & \hl{ \incvc{u}{C[u]}\texttt{;} }
   \end{tabular}
-\caption{Instrumentation}
+\caption{Instrumented versions of each instruction, with instrumentation highlighted in gray.}
 \label{instrumentation}
 \end{figure}
 
