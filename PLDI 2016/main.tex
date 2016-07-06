@@ -128,6 +128,7 @@
 }
 
 \hyphenation{Comp-Cert}
+\hyphenation{analy-ses}
 
 \newtheorem{lemma}{Lemma}
 \newtheorem{theorem}{Theorem}
@@ -181,9 +182,9 @@ Writing race-free concurrent code is notoriously difficult, and races can result
 
 \section{Introduction}
 
-Multicore processors have steadily invaded a broad swathe of the computing ecosystem in everything from datacenters to smart watches. Writing multithreaded code for such platforms can bring good performance but also a host of programmability challenges. One of the key challenges is dealing with data races, as the presence of a data race introduces non-sequentially-consistent~\cite{manson_java_2005} and in some cases undefined~\cite{boehm_foundations_2008} behavior into programs, making program semantics very difficult to understand. Races are not detected by default in current language runtimes, though there are many systems that provide sound and complete data race detection via dynamic analysis~\cite{djit+,fasttrack,slimstate} to help programmers detect and remove data races from their programs. 
+Multicore processors have steadily invaded a broad swath of the computing ecosystem in everything from datacenters to smart watches. Writing multithreaded code for such platforms can bring good performance but also a host of programmability challenges. One of the key challenges is dealing with data races, as the presence of a data race introduces non-sequentially-consistent~\cite{manson_java_2005} and in some cases undefined~\cite{boehm_foundations_2008} behavior into programs, making program semantics very difficult to understand. Races are not detected by default in current language runtimes, though there are many systems that provide sound and complete data race detection via dynamic analysis~\cite{djit+,fasttrack,slimstate} to help programmers detect and remove data races from their programs. 
 
-While these analyses have been proven correct, such proofs have two main shortcomings: they are proofs of the algorithms, not of the implementations, and they are paper proofs instead of machine-checked proofs. As a consequence, it is possible that a race detector does not faithfully implement its algorithm, or that the algorithm itself is not fully correct. Moreover, it still remains to be shown that the implementation, often done via code instrumentation, does not itself introduce or mask races, and that, in the absence of races, the program's behavior is unchanged.
+While these analyses have been proven correct, such proofs have two main shortcomings: they are proofs of the algorithms, not of the implementations, and they are paper proofs instead of machine-checked proofs. As a consequence, it is possible that a race detector does not faithfully implement its algorithm, or that the algorithm itself is not fully correct. Moreover, it still remains to be shown that the implementation, often done via code instrumentation, does not itself introduce or mask races, and that in the absence of races, the program's behavior is unchanged.
 
 In this paper, we seek to rectify these concerns and place dynamic race detection on a provably correct foundation for the first time\footnote{All proofs are fully machine-checked in Coq. We have submitted them as non-anonymous supplementary material, and intend to submit a documented version for artifact evaluation.}. We begin by formalizing the proof of the classic vector-clock race detection algorithm~\cite{vcfidge,vcmattern} using the Coq interactive theorem prover~\cite{coq}. Having established the correctness of this base algorithm, we extend our work along two dimensions. 
 
@@ -196,7 +197,7 @@ In this paper, we seek to rectify these concerns and place dynamic race detectio
 
 We first explore the \textbf{algorithmic dimension} (ellipses in \autoref{f:overview}), by formally establishing the correctness of the \FT algorithm~\cite{fasttrack}. \FT includes several significant optimizations over the base vector-clock algorithm. We find that the correctness of \FT can be demonstrated by proving its equivalence to the vector-clock algorithm, which is a more straightforward process than demonstrating correctness in isolation, and likely lends itself to formalizing additional algorithms with reduced effort.
 %Our verification efforts have revealed a small issue in the paper proof that, while fixable, illustrates the potential dangers that stem from best-effort proofs. We have repaired this issue in our proof of \FT, establishing that the algorithm is correct.
-We also verify an extension of the base vector-clock algorithm that allows multiple joins of the same thread, as modern threading packages do.
+We also verify an extension of the base vector-clock algorithm that allows multiple joins to the same thread, as modern threading packages do.
 
 We next explore the \textbf{implementation dimension} (rectangles in \autoref{f:overview}), by formally establishing in Coq the correctness of an implementation of vector-clock race detection on a simple imperative language with threads. Given a program written in our language, our race detector adds instrumentation, written in the same language, to perform vector-clock race detection on the program. We demonstrate that this instrumentation correctly implements the vector-clock algorithm, again leveraging our previous verification effort. We also prove that our implementation preserves the program's semantics in the absence of races. This verification is much more difficult than proving the correctness of the algorithms, since it must deal directly with the details of the implementation language and the concurrency model; we must precisely define the relation between uninstrumented and instrumented memory states, and prove noninterference of the code added by the instrumentation.
 %While constructing our implementation, we consulted the existing implementation of \FT for guidance, and our verification process brought to light an example of extraneous work performed by the current \FT implementation. This issue is unlikely to have come to light otherwise, but when proving our implementation equivalent to the abstract algorithm such discrepancies were quickly revealed. This again demonstrates the value of formal verification over best-effort implementation, ensuring that an implementation does no less, and no more, than is necessary for correctness.
@@ -211,7 +212,7 @@ This paper makes the following contributions:
 %\item We uncover issues in the paper proof of correctness for \FT and in its current implementation that are unlikely to have been revealed without our verification efforts. We repair these issues in our own proofs and implementation.
 
 \end{itemize}
-Along the way, we discovered that one lemma in the paper proof of \FT was too strong, and noticed a minor discrepancy between the \FT algorithm and its implementation. In this case, the effects were benign, but more generally, this highlights the value of formal verification for obtaining correct algorithms and implementations.
+Along the way, we discovered that one lemma in the paper proof of \FT was too strong, and noticed a minor discrepancy between the \FT algorithm and its implementation. In this case the effects were benign, but more generally, this highlights the value of formal verification for obtaining correct algorithms and implementations.
 
 The remainder of this paper is organized as follows. In Section~\ref{strategy}, we lay out our approach to verifying dynamic race detection algorithms and their implementations. In Section~\ref{algorithms}, we state and verify several algorithms for race detection. In Sections~\ref{language} and \ref{verification}, we describe an instrumentation pass that implements dynamic race detection, and explain the verification process in detail. We compare our approach to related work in Section~\ref{related}, and evaluate our results and describe future work in Section~\ref{conclusion}.
 
@@ -219,7 +220,7 @@ The remainder of this paper is organized as follows. In Section~\ref{strategy}, 
 \label{strategy}
 Our goal for each algorithm and program transformation presented in this paper is to prove that it implements sound and complete race detection, i.e., that it raises an alarm in all racy executions and only racy executions. However, as much as possible, we prefer not to do this by referring back to the base definition of racy executions. We begin by stating and proving correctness of a simple vector-clock race detection algorithm, by direct relation to the definition of a race. We then prove further results---the correctness of a more sophisticated algorithm, and of an instrumentation pass meant to implement the simple algorithm---by relating them to the verified base algorithm. We may think of this hierarchy in terms of specifications and refinement: we begin by proving that the base algorithm refines the abstract specification of race detection, and then use it in turn as a specification refined by more complex or detailed mechanisms. This approach is modular and avoids duplicate proof effort, but it also serves as further validation of the base vector-clock algorithm: by showing that it is \emph{two-sided}, that is, that it both implements a higher-level specification of its desired behavior and is implemented by more concrete systems, we gain confidence that it is correctly stated (and not vacuous).
 
-Our approach to verifying instrumentation has three major steps. First, we describe our race detection algorithm abstractly, separately from the details of any programming language. We verify this algorithm against a high-level specification of the property we want to guarantee (in this case, soundness and completeness). Secondly, we define the semantics of a target language, labeled with the abstract operations produced by each step. This means that from each execution of an uninstrumented program, we can use the algorithm to determine the behavior we \emph{would have observed} if the program was correctly instrumented. Thirdly, we define our instrumentation pass, and also write a bigger-step semantics for instrumented programs in which an instruction executes together with its instrumentation in a single step. This strategy is analogous to that used in other proof efforts~\cite{softbound}, and makes it easier to directly relate executions of an instrumented program to executions of the original program. Given the bigger-step semantics, the proof of correctness of the instrumentation then breaks down into two parts: a proof of simulation between the bigger-step semantics and ``would have observed'' semantics of the uninstrumented program, and a proof that the bigger-step semantics completely captures the possible behaviors of any instrumented program. This three-step approach has applications beyond race detection: we believe that it could be applied to simplify the verification of any kind of instrumentation for dynamic checks, including memory safety and atomicity violation checking. The approach is particularly useful when verifying instrumentation of concurrent programs, since we are able to isolate all reasoning about interference between threads in the latter half of the third step---characterizing the possible behaviors of the instrumented program---and otherwise reason more or less sequentially.
+Our approach to showing that an instrumentation pass implements the vector-clock algorithm breaks down into several steps. We begin by defining the semantics of a target language, labeled with the abstract race detection operations produced by each step. This means that from each execution of an uninstrumented program, we can use the base algorithm to determine the behavior we \emph{would have observed} if the program was correctly instrumented. Next, we define our instrumentation pass, and also write a bigger-step semantics for instrumented programs in which an instruction executes together with its instrumentation in a single step. This strategy is analogous to that used in other proof efforts~\cite{softbound}, and makes it easier to directly relate executions of an instrumented program to executions of the original program. Given the bigger-step semantics, the proof of correctness of the instrumentation then breaks down into two parts: a proof of simulation between the bigger-step semantics and the ``would have observed'' semantics of the uninstrumented program, and a proof that the bigger-step semantics completely captures the possible behaviors of any instrumented program. This approach has applications beyond race detection: we believe that it could be applied to simplify the verification of any kind of instrumentation for dynamic checks, including memory safety and atomicity violation checking. The approach is particularly useful when verifying instrumentation of concurrent programs, since we are able to isolate all reasoning about interference between threads in the latter half of the third step---characterizing the possible behaviors of the instrumented program---and otherwise reason more or less sequentially.
 
 \section{Race Detection Algorithms}
 \label{algorithms}
@@ -228,9 +229,9 @@ We begin by reviewing the classic vector-clock race detection algorithm~\cite{vc
 % NB: VC stuff borrowed from Joe's Radish paper [ISCA '12]
 
 \subsection{Defining Data Races}
-Data races are formally defined in terms of a \emph{happens-before} relation $\hb$, a partial order over events in a program trace~\cite{lamporthb}. Events consist of $\mathit{rd}(t, x)$ and $\mathit{wr}(t, x)$ where a thread $t$ reads or writes a memory location $x$, lock operations $\mathit{acq}(t, m)$ and $\mathit{rel}(t, m)$ where a thread $t$ acquires or releases a lock $m$, $\mathit{fork}(t, u)$ where a thread $t$ creates a new thread $u$, and $\mathit{join}(t, u)$ where a thread $t$ joins with a thread $u$. Given events $a$ and $b$, we say $a$ \emph{happens before} $b$ (and $b$ \emph{happens after} $a$), written $a \hb b$, if: (1) $a$ precedes $b$ in program order in the same thread; or (2) $a$ precedes $b$ in synchronization order $\sw$, \eg, if $a$ is thread $\Tid$ releasing a lock $\Lock$, and $b$ is thread $\TidU$ subsequently acquiring it; or (3) $(a,b)$ is in the transitive closure of program order and synchronization order.
+Data races are formally defined in terms of a \emph{happens-before} relation $\hb$, a partial order over events in a program trace~\cite{lamporthb}. Events consist of memory operations $\mathit{rd}(t, x)$ and $\mathit{wr}(t, x)$ where a thread $t$ reads or writes a memory location $x$, lock operations $\mathit{acq}(t, m)$ and $\mathit{rel}(t, m)$ where a thread $t$ acquires or releases a lock $m$, $\mathit{fork}(t, u)$ where a thread $t$ creates a new thread $u$, and $\mathit{join}(t, u)$ where a thread $t$ joins with a thread $u$. Given events $a$ and $b$, we say $a$ \emph{happens before} $b$ (and $b$ \emph{happens after} $a$), written $a \hb b$, if: (1) $a$ precedes $b$ in program order in the same thread; or (2) $a$ precedes $b$ in synchronization order $\sw$, \eg, if $a$ is $\mathit{rel}(t, m)$ and $b$ is $\mathit{acq}(u, m)$; or (3) $(a,b)$ is in the transitive closure of program order and synchronization order.
 % Synchronization order also induces happens-before ordering on other synchronization events such as thread fork to thread start and thread termination to thread join.
-Two events not ordered by happens-before are \emph{concurrent}.  Two memory accesses to the same address form a \emph{data race} if they are concurrent and at least one is a write.
+Two events not ordered by happens-before are \emph{concurrent}.  Two memory accesses to the same location form a \emph{data race} if they are concurrent and at least one is a write.
 
 \subsection{Vector-Clock Race Detection}
 \label{vector-clocks}
@@ -282,29 +283,16 @@ comparison of two vector clocks: $\VC_a \VCCompare \VC_b$ is defined to mean $\f
 
 The state of a vector-clock race detector is a tuple $(C, L, R, W)$ of collections of vector clocks, where:
 \begin{itemize}
-%\setlength{\itemsep}{1pt}
-%\setlength{\parskip}{0pt}
-%\setlength{\parsep}{0pt}
-%% \item For each thread $\Tid$, vector clock $\ThreadVC{\Tid}$ represents the last
-%%   event in each thread that happens before $\Tid$'s current logical time.
-%% \item For each lock $\Lock$, vector clock $\LockVC{\Lock}$ represents the last
-%%   event in each thread that happens before the last release of $\Lock$.  
-%% \item For each address $\Address$, vector clock $\WriteVC{\Address}$ represents
-%%   the time of each thread's last write to $\Address$.
-%% \item For each address $\Address$, vector clock $\ReadVC{\Address}$ represents
-%%   the time of each thread's last read of $\Address$ \emph{since the last write
-%%     by any thread}.  If thread $t$ has not read $\Address$ since this write,
-%%   then $\ReadVC{\Address}(\Tid) = 0$.
 \item
  Vector clock $\ThreadVC{\Tid}$ stores the last time in each thread that happens before thread $\Tid$'s current logical time.
 \item
  Vector clock $\LockVC{\Lock}$ stores the last time in each thread that happens before the last release of lock $\Lock$.  
 \item
  Vector clock $\ReadVC{\Address}$ stores
-  the time of each thread's last read of address $\Address$.
+  the time of each thread's last read of location $\Address$.
 \item
  Vector clock $\WriteVC{\Address}$ stores
-  the time of each thread's last write to address $\Address$.
+  the time of each thread's last write to location $\Address$.
 \end{itemize}
 
 Initially, all $\LockVC{}$, $\ReadVC{}$, and $\WriteVC{}$ vector clocks are
@@ -312,7 +300,7 @@ set to $\bot_V$, where $\forall \Tid \Bind \bot_V(\Tid) = 0$.  Each thread $\Tid
 initial vector clock is $\ThreadVC{\Tid}$, where $\ThreadVC{\Tid}(\Tid) = 1$
 and $\forall \TidU \neq \Tid \Bind \ThreadVC{\Tid}(\TidU) = 0$.  
 
-\VCalg's operational semantics are presented in \autoref{f:semvc}. Each rule has the form $S \xRightarrow{a} S'$, meaning that when the current vector clock state is $S$ and the next event is $a$, the next vector clock state is $S'$. When a thread $\Tid$ acquires a lock $\Lock$ (the \Rule{Acquire} rule) we update $\ThreadVC{\Tid}$ to $\ThreadVC{\Tid} \VCMax \LockVC{\Lock}$.  By acquiring lock $\Lock$, thread $\Tid$ has synchronized with all events that happen before the last release of $\Lock$, so all these events happen before all subsequent events in $\Tid$.  When $\Tid$ releases a lock $\Lock$ (the \Rule{Release} rule), we update $\LockVC{\Lock}$ to $\ThreadVC{\Tid}$, capturing all events that happen before this release.  We then increment $\Tid$'s entry in its own vector clock $\ThreadVC{\Tid}$ to ensure that subsequent events in $\Tid$ do not appear to happen before the release $\Tid$ just performed.  The \Rule{Fork} and \Rule{Join} rules are similar to \Rule{Release} and \Rule{Acquire}, respectively. The increment $\mathit{inc}_u(C_u)$ in \Rule{Join} is needed to preserve the invariant that $\ThreadVC{\TidU}(u)$, thread $\TidU$'s entry for itself, is always higher than any other thread's entry for $\TidU$.
+\VCalg's operational semantics are presented in \autoref{f:semvc}. Each rule has the form $S \xRightarrow{a} S'$, meaning that when the current vector clock state is $S$ and the next event is $a$, the next vector clock state is $S'$. When a thread $\Tid$ acquires a lock $\Lock$ (the \Rule{Acquire} rule) we update $\ThreadVC{\Tid}$ to $\ThreadVC{\Tid} \VCMax \LockVC{\Lock}$.  By acquiring lock $\Lock$, thread $\Tid$ has synchronized with all events that happen before the last release of $\Lock$, so all these events happen before all subsequent events in $\Tid$.  When $\Tid$ releases a lock $\Lock$ (the \Rule{Release} rule), we update $\LockVC{\Lock}$ to $\ThreadVC{\Tid}$, capturing all events that happen before this release in the lock.  We then increment $\Tid$'s entry in its own vector clock $\ThreadVC{\Tid}$ to ensure that subsequent events in $\Tid$ do not appear to happen before the release $\Tid$ just performed.  The \Rule{Fork} and \Rule{Join} rules are similar to \Rule{Release} and \Rule{Acquire}, respectively. The increment $\mathit{inc}_u(C_u)$ in \Rule{Join} is needed to preserve the invariant that $\ThreadVC{\TidU}(u)$, thread $\TidU$'s entry for itself, is always higher than any other thread's entry for $\TidU$.
 
 When $\Tid$ reads a location $\Address$ (the \Rule{Read} rule), we check if $\WriteVC{\Address} \VCCompare \ThreadVC{\Tid}$.  If this check fails, there is a previous write to $\Address$ that did not happen before this read, so there is a data race. (Note that the algorithm is considered to detect a race when it is \emph{stuck}, that is, when there is no rule that can be applied for the next operation; when a state $\sigma$ is stuck on an operation $o$, we write $\sigma \not\xRightarrow{o}$.) Otherwise, we set $\Tid$'s entry in $\ReadVC{\Address}$ to $\Tid$'s current logical clock, $\ThreadVC{\Tid}(\Tid)$.  It often arises that $\Tid$ will read the same location repeatedly without an intervening change in its own clock value $\ThreadVC{\Tid}(\Tid)$. The \Rule{ReadNoChange} rule covers this case, in which no metadata updates are necessary.
 
@@ -333,7 +321,7 @@ The soundness and completeness of \VCalg follows from the fact that the $\sqsubs
 
 % joe: lifted from the SlimFast paper
 
-The \FT algorithm~\cite{fasttrack} leverages the observation that, by the definition of a data race, all writes to an address must be totally ordered in race-free traces. \FT accordingly adopts a more sophisticated representation of vector clocks to save space and time.
+The \FT algorithm~\cite{fasttrack} leverages the observation that, by the definition of a data race, all writes to a location must be totally ordered in race-free traces. \FT accordingly adopts a more sophisticated representation of vector clocks to save space and time.
 \emph{Epochs} can often be used in place of vector clocks; an epoch $c@t$  holds a timestamp for just one thread, and is treated as a vector clock that is $c$ for $t$ and 0 for every thread other than $t$:
 \[
 (c@t)(u) = 
@@ -346,9 +334,9 @@ The \FT algorithm~\cite{fasttrack} leverages the observation that, by the defini
 \]
 
 Because epochs have a single non-zero entry, an epoch can be compared with a vector clock, or another epoch, in \Constant time using the $\EpochCompare$ operator. We say that $c@t \EpochCompare V$ (and similarly $c@t \EpochCompare e$) when $(c@t)(u) \leq V(u)$ for all $u$, which occurs exactly when $c \le V(t)$.
-$\bot_e$ denotes a minimal epoch at an arbitrary thread $0@t_0$.
+We write $\bot_e$ for a minimal epoch at an arbitrary thread, $0@t_0$.
 
-A \FT analysis state is a tuple $(\mathcal{C}, \mathcal{L}, \mathcal{R}, \mathcal{W})$ just as in \VCalg, except that $\mathcal{R}_x$ may be either a read vector clock or epoch, and $\mathcal{W}_x$ is always an epoch. \FT's initial analysis state is the tuple $(\lambda t.\,\mathit{inc}_t(\bot_V), \lambda l.\,\bot_V , \lambda x.\, \bot_e, \lambda x.\, \bot_e)$. Each thread initially has an empty vector clock with its own entry incremented, all locks have empty vector clocks, and all memory locations have empty read and write epochs. The \FT operational semantics are presented in \autoref{f:semft} (in which we use $E(t)$ to mean $\mathcal{C}_t(t)@t$). The \Rule{Read} and \Rule{Write} rules are split into several cases, as $\mathcal{R}_x$ transitions between an epoch and a full vector clock. When a write occurs to a location $x$ for which $\mathcal{R}_x$ is a vector clock, $\mathcal{R}_x$ is set to an empty epoch $\bot_e$; conversely, when multiple concurrent reads to $x$ occur, $\mathcal{R}_x$ is inflated to a full vector clock.
+A \FT analysis state is a tuple $(\mathcal{C}, \mathcal{L}, \mathcal{R}, \mathcal{W})$ just as in \VCalg, except that $\mathcal{R}_x$ may be either a vector clock or an epoch, and $\mathcal{W}_x$ is always an epoch. \FT's initial analysis state is the tuple $(\lambda t.\,\mathit{inc}_t(\bot_V), \lambda l.\,\bot_V , \lambda x.\, \bot_e, \lambda x.\, \bot_e)$. Each thread initially has an empty vector clock with its own entry incremented, all locks have empty vector clocks, and all memory locations have empty read and write epochs. The \FT operational semantics are presented in \autoref{f:semft} (in which we use $E(t)$ to mean $\mathcal{C}_t(t)@t$). The \Rule{Read} and \Rule{Write} rules are split into several cases, as $\mathcal{R}_x$ transitions between an epoch and a full vector clock. When a write occurs to a location $x$ for which $\mathcal{R}_x$ is a vector clock, $\mathcal{R}_x$ is set to an empty epoch $\bot_e$; conversely, when multiple concurrent reads to $x$ occur, $\mathcal{R}_x$ is inflated to a full vector clock.
 
 
 
@@ -386,7 +374,7 @@ A \FT analysis state is a tuple $(\mathcal{C}, \mathcal{L}, \mathcal{R}, \mathca
 Flanagan and Freund justify the optimizations of \FT by proving that the $\sqsubseteq$ relation on vector clocks still precisely captures the happens-before relation. However, as part of the proof strategy outlined in Section~\ref{strategy}, we take a different approach, proving that the transition system of \FT simulates that of \VCalg. Since we have already verified \VCalg, this is sufficient to guarantee that \FT is sound and complete. In this section, we describe our novel simulation proof of \FT's correctness; in the following section, we describe our mechanization of the paper proof.
 
 Intuitively, the metadata optimizations of \FT are safe to perform because the reduced metadata still captures the same happens-before relationships, which means that the same $\sqsubseteq$ relationships hold between corresponding state components. Thus, we need only present a relation between \FT states and full vector clock states that captures this correspondence in order to prove a bisimulation between the two systems. The $C$ and $L$ components should remain unchanged. To characterize the expected semantics of epochs, we define the following \emph{emulation} relation:
-\begin{definition}An epoch $e$ \emph{emulates} a vector clock $V$ for another vector clock $V'$ if $e \preceq V'$ implies that $V \sqsubseteq V'$. An epoch $e$ emulates $V$ in a state $(C, L, R, W)$ if it emulates $V$ for $C_u$ for all $u$ and $L_m$ for all $m$.\end{definition}
+\begin{definition}An epoch $e$ \emph{emulates} a vector clock $V$ for another vector clock $V'$ if $e \preceq V'$ implies that $V \sqsubseteq V'$. An epoch $e$ emulates $V$ in a state $(C, L, R, W)$ if $\forall u.\ e$ emulates $V$ for $C_u$ and $\forall m.\ e$ emulates $V$ for $L_m$.\end{definition}
 
 \begin{figure}[t]
 \centering
@@ -416,7 +404,7 @@ rel $\Lock$ & &'' &'' \\%& [2,0] & " \\
 \label{f:writes-emu}
 \end{figure}
 
-In \FT, when write metadata $W_x$ is collapsed to an epoch $c@t$, it is precisely because $W_x(t) = c$ and $c@t$ emulates $W_x$. \autoref{f:writes-emu} shows a simple program with two threads that illustrates write epoch emulation. \VCalg's $W_x$ retains information about both threads' writes, but because $\Tid_0$'s write happens before $\Tid_1$'s write, the \FT write epoch retains information only about $\Tid_1$'s write. If $\Tid_1$'s write happens before some vector clock $\VC'$, then $\Tid_0$'s write must happen before $\VC'$ as well, so the write epoch emulates the write vector clock.
+In \FT, when a write vector clock $W_x$ is collapsed to an epoch $c@t$, it is precisely because $W_x(t) = c$ and $c@t$ emulates $W_x$. \autoref{f:writes-emu} shows a simple program with two threads that illustrates write epoch emulation. \VCalg's $W_x$ retains information about both threads' writes, but because $\Tid_0$'s write happens before $\Tid_1$'s write, the \FT write epoch retains information only about $\Tid_1$'s write. If $\Tid_1$'s write happens before some vector clock $\VC'$, then $\Tid_0$'s write must happen before $\VC'$ as well, so the write epoch emulates the write vector clock.
 
 \begin{figure}[t]
 \centering
@@ -427,11 +415,11 @@ $\Tid_0$ & $\ReadVC{\Address}$ & $\WriteVC{\Address}$ & $\mathcal{R}_{\Address}$
 read $\Address$ & [1,1] & [0,0] & [1,1] & $\EmptyEpoch$ \\
 write $\Address$ & " & [1,0] & $\EmptyEpoch$ & $1@t_0$ \\
 \end{tabular}
-\caption{An example of how \FT's write epoch emulates a conventional read vector clock.}
+\caption{An example of how \FT's write epoch emulates the conventional read vector clock.}
 \label{f:readvc-emu}
 \end{figure}
 
-The relation for read metadata is more complicated, because there are more ways in which read data may be dropped. The \Rule{WriteShared} rule resets read metadata to an empty epoch, erasing all previous values, and as long as $\mathcal{R}_x$ remains an epoch, any information about previous reads is lost. This has two effects on the simulation relation. First, we must make a special allowance for the case in which the read metadata is empty; in this case, it is the write epoch that emulates the original read vector clock. \autoref{f:readvc-emu} shows an example program illustrating this case. If the location $\Address$ is read by thread $\Tid_1$, then read by $\Tid_0$ (as shown), $\Tid_0$'s write will trigger the \Rule{WriteShared} rule which clears \FT's $\mathcal{R}_x$ metadata, losing track of the reads. However, \FT's write epoch emulates the conventional $R_x$ vector clock because the reads happen before $\Tid_0$'s write, so if $\Tid_0$'s write happens before some vector clock $\VC'$ the (lost) reads happen before $\VC'$ as well.
+The relation for read metadata is more complicated, because there are more ways in which read data may be dropped. The \Rule{WriteShared} rule resets read metadata to an empty epoch, erasing all previous values, and as long as $\mathcal{R}_x$ remains an epoch, any information about previous reads is lost. This has two effects on the simulation relation. First, we must make a special allowance for the case in which the read metadata is empty; in this case, it is the write epoch that emulates the original read vector clock. \autoref{f:readvc-emu} shows an example program illustrating this case. If the location $\Address$ is read by thread $\Tid_1$, then read by $\Tid_0$ (as shown), $\Tid_0$'s write will trigger the \Rule{WriteShared} rule, which clears \FT's $\mathcal{R}_x$ metadata, losing track of the reads. However, because the reads happen before $\Tid_0$'s write, \FT's write epoch still emulates the conventional $R_x$ vector clock: if $\Tid_0$'s write happens before some vector clock $\VC'$ the (lost) reads happen before $\VC'$ as well.
 
 \begin{figure}[t]
 \centering
@@ -448,16 +436,16 @@ rel $\Lock$ & &      &''&''\\
 \label{f:partial-emu}
 \end{figure}
 
-The second effect is that even when the \FT state holds a vector clock in $\mathcal{R}_x$, that vector clock may contain some 0 values in places where reads have in fact been performed. In effect, because \FT read vector clocks are always derived from epochs, they carry forward a partial emulation relation, in which one component emulates all the relationships on zeroed values. \autoref{f:partial-emu} shows an example program where each thread performs a read. $\Tid_0$'s read happens before $\Tid_1$'s read, causing \FT to discard $\Tid_0$'s read. $\Tid_2$'s read is concurrent with both other reads, so it forces \FT's $R_x$ into vector clock format. The $R_x$ entry for $\Tid_1$ emulates the entry for $\Tid_0$, since if $\Tid_1$'s read happens before some vector clock $\VC'$, $\Tid_0$'s read must happen before $\VC'$ as well. We capture this relation as follows:
+The second effect is that even when the \FT state holds a vector clock in $\mathcal{R}_x$, that vector clock may contain some 0 values for threads that have in fact read $x$. In effect, because \FT read vector clocks are always derived from epochs, they carry forward a partial emulation relation, in which one component emulates all the relationships on zeroed values. \autoref{f:partial-emu} shows an example program where each thread performs a read. $\Tid_0$'s read happens before $\Tid_1$'s read, causing \FT to discard $\Tid_0$'s read. $\Tid_2$'s read is concurrent with both other reads, so it forces \FT's $R_x$ into vector clock format. The $R_x$ entry for $\Tid_1$ emulates the entry for $\Tid_0$, since if $\Tid_1$'s read happens before some vector clock $\VC'$, $\Tid_0$'s read must happen before $\VC'$ as well. We capture this relation as follows:
 \begin{definition}A vector clock $V_0$ \emph{partially emulates} a vector clock $V$ for another vector clock $V'$ if there is some thread $t$ such that:
 
 \begin{itemize}
 \item for all $u$ such that $V_0(u) = 0$, $V_0(t) \le V'(t)$ implies that $V(u) \le V'(u)$
 \item for all $u$ such that $V_0(u) \neq 0$, $V_0(u) \le V'(u)$ implies that $V(u) \le V'(u)$
 \end{itemize}
-A vector clock $V_0$ partially emulates a vector clock $V$ in a state $(C, L, R, W)$ if it partially emulates $V$ for $C_u$ for all $u$ and $L_m$ for all $m$.\end{definition}
+A vector clock $V_0$ partially emulates a vector clock $V$ in a state $(C, L, R, W)$ if $\forall u.\ V_0$ partially emulates $V$ for $C_u$ and $\forall m.\ V_0$ partially emulates $V$ for $L_m$.\end{definition}
 
-We can now state the full simulation relation between vector clock and \FT states.
+We can now state the full simulation relation between \VCalg and \FT states.
 \begin{definition}A \VCalg state $(C, L, R, W)$ and a \FT state $(\mathcal{C}', \mathcal{L}', \mathcal{R}', \mathcal{W}')$ are in the relation $\sim$ when $\mathcal{C}' = C$, $\mathcal{L}' = L$, and for every location $x$:
 \begin{itemize}
 \item if $\mathcal{W}'_x = c@t$, then $W_x(t) = c$ and $c@t$ emulates $W_x$
