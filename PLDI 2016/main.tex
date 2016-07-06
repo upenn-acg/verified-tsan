@@ -975,7 +975,8 @@ where $(P_1, m_1) \sim (P_1', m_1')$, and, according to the \VCalg semantics of 
 Since $(P, m) \sim (P', m')$ implies that the memory and local environments agree on all locations except those involved in the instrumentation, these are strong correctness properties. Theorem~\ref{safe} guarantees that for each race-free execution of the original program, there is a successful instrumented execution that produces the same values in the environment and memory (and vice versa). Theorem~\ref{race} guarantees that for each racy execution of the original program, there is a corresponding instrumented execution that produces the same values in the environment and memory up until the first race, then fails (and vice versa). While it is difficult to talk about ``the same'' execution across two different programs, these lemmas guarantee that in terms of observable results, the original and instrumented programs have the same behavior modulo race detection, and that all racy executions are successfully detected.
 
 \section{Coq Formalization}
-\begin{figure}[h]
+\begin{table}[h]
+\centering
 \begin{tabular}{c || c | c}
 & definitions (loc) & proofs (loc)\\
 \hline
@@ -987,9 +988,11 @@ multi-join \textsc{VC} ($\Delta$)& 30 & 100\\
 %\hline
 instrumentation & 780 & 18900
 \end{tabular}
-\end{figure}
+\caption{Size of definitions and proofs in lines of code.}
+\label{tab:loc}
+\end{table}
 
-All the theorems stated in this paper have been formally verified in Coq. The size of the definitions and proofs in the verification is shown above. The proofs varied considerably in complexity. The proof of correctness for \FT by simulation with \VCalg is particularly simple, consisting mainly of proving that various inequalities are preserved by vector clock operations; this arithmetic could probably be automated, decreasing the burden of verifying related algorithms. The proofs of correctness of the instrumentation were much more complicated, even in proportion to the definitions; the bulk of the work involved reasoning about noninterference and reordering. Our proofs do not make use of any particularly advanced features of Coq, and many of them were completed by one of the authors with no prior Coq experience.
+All the theorems stated in this paper have been formally verified in Coq. The size of the definitions and proofs in the verification is shown in \autoref{tab:loc}. The proofs varied considerably in complexity. The proof of correctness for \FT by simulation with \VCalg is particularly simple, consisting mainly of proving that various inequalities are preserved by vector clock operations; this arithmetic could probably be automated, decreasing the burden of verifying related algorithms. The proofs of correctness of the instrumentation were much more complicated, even in proportion to the definitions; the bulk of the work involved reasoning about noninterference and reordering. Our proofs do not make use of any particularly advanced features of Coq, and many of them were completed by one of the authors with no prior Coq experience.
 
 \section{Related Work}
 \label{related}
