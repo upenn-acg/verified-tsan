@@ -165,11 +165,13 @@
 \preprintfooter{}   % 'preprint' option specified.
 
 \title{Verifying Dynamic Race Detection}
-% \authorinfo{William Mansky \and Yuanfeng Peng \and Steve Zdancewic \and Joseph Devietti}
-%            {University of Pennsylvania}
-%            {wmansky@seas.upenn.edu, yuanfeng@cis.upenn.edu, stevez@cis.upenn.edu, devietti@cis.upenn.edu}
-\authorinfo{}{}{}
+\authorinfo{William Mansky$^{\dagger}$ \and Yuanfeng Peng$^{*}$ \and Steve Zdancewic$^{*}$ \and Joseph Devietti$^{*}$}
+           {$^{\dagger}$Princeton University \qquad $^{*}$University of Pennsylvania}
+           {wmansky@cs.princeton.edu, yuanfeng@cis.upenn.edu, stevez@cis.upenn.edu, devietti@cis.upenn.edu \\ \vspace{-0.2in}}
+%\authorinfo{}{}{}
 \maketitle
+
+
 
 \begin{abstract}
 Writing race-free concurrent code is notoriously difficult, and races can result in bugs that are difficult to isolate and reproduce. Dynamic race detection can catch races that cannot (easily) be detected statically. One approach to dynamic race detection is to instrument the potentially racy code with operations that store and compare metadata, where the metadata implements some known race detection algorithm (e.g. vector-clock race detection). In this paper, we describe the process of formally verifying several algorithms for dynamic race detection. We then turn to implementations, laying out an instrumentation pass for race detection in a simple language and presenting a mechanized formal proof of its correctness: all races in a program will be caught by the instrumentation, and all races detected by the instrumentation are possible in the original program. %During the verification process, we discovered issues \TODO{tone this down?} in both the paper proof and the implementation of the \FT race detection algorithm.
@@ -186,7 +188,7 @@ Multicore processors have steadily invaded a broad swath of the computing ecosys
 
 While these analyses have been proven correct, such proofs have two main shortcomings: they are proofs of the algorithms, not of the implementations, and they are paper proofs instead of machine-checked proofs. As a consequence, it is possible that a race detector does not faithfully implement its algorithm, or that the algorithm itself is not fully correct. Moreover, it still remains to be shown that the implementation, often done via code instrumentation, does not itself introduce or mask races, and that in the absence of races, the program's behavior is unchanged.
 
-In this paper, we seek to rectify these concerns and place dynamic race detection on a provably correct foundation for the first time\footnote{All proofs are fully machine-checked in Coq. We have submitted them as non-anonymous supplementary material, and intend to submit a documented version for artifact evaluation.}. We begin by formalizing the proof of the classic vector-clock race detection algorithm~\cite{vcfidge,vcmattern} using the Coq interactive theorem prover~\cite{coq}. Having established the correctness of this base algorithm, we extend our work along two dimensions. 
+We seek to rectify these concerns and place dynamic race detection on a provably correct foundation for the first time. We begin by formalizing the proof of the classic vector-clock race detection algorithm~\cite{vcfidge,vcmattern} using the Coq interactive theorem prover~\cite{coq}.\footnote{All proofs are fully machine-checked in Coq. \TODO{Available where?}} Having established the correctness of this base algorithm, we extend our work in two dimensions. 
 
 %\begin{figure}[t]
 %\centering
@@ -195,14 +197,14 @@ In this paper, we seek to rectify these concerns and place dynamic race detectio
 % \label{f:overview}
 %\end{figure}
 
-We first explore the \textbf{algorithmic dimension}, by formally establishing the correctness of the \FT algorithm~\cite{fasttrack}. \FT includes several significant optimizations over the base vector-clock algorithm. We find that the correctness of \FT can be demonstrated by proving its equivalence to the vector-clock algorithm, which is a more straightforward process than demonstrating correctness in isolation, and likely lends itself to formalizing additional algorithms with reduced effort.
+We first explore the \textbf{algorithmic dimension}, formally establishing the correctness of the \FT algorithm~\cite{fasttrack}. \FT includes several significant optimizations over the base vector-clock algorithm. We find that the correctness of \FT can be demonstrated by proving its equivalence to the vector-clock algorithm, which is a more straightforward process than demonstrating correctness in isolation, and likely lends itself to formalizing additional algorithms with reduced effort.
 %Our verification efforts have revealed a small issue in the paper proof that, while fixable, illustrates the potential dangers that stem from best-effort proofs. We have repaired this issue in our proof of \FT, establishing that the algorithm is correct.
 We also verify an extension of the base vector-clock algorithm that allows multiple joins to the same thread, as modern threading packages do.
 
-We next explore the \textbf{implementation dimension}, by formally establishing in Coq the correctness of an implementation of vector-clock race detection on a simple imperative language with threads. Given a program written in our language, our race detector adds instrumentation, written in the same language, to perform vector-clock race detection on the program. We demonstrate that this instrumentation correctly implements the vector-clock algorithm, again leveraging our previous verification effort. We also prove that our implementation preserves the program's semantics in the absence of races. This verification is much more difficult than proving the correctness of the algorithms, since it must deal directly with the details of the implementation language and the concurrency model; we must precisely define the relation between uninstrumented and instrumented memory states, and prove noninterference of the code added by the instrumentation.
+We next explore the \textbf{implementation dimension}, formally establishing in Coq the correctness of an implementation of vector-clock race detection on a simple imperative language with threads. Given a program written in our language, our race detector adds instrumentation, written in the same language, to perform vector-clock race detection on the program. We demonstrate that this instrumentation correctly implements the vector-clock algorithm, again leveraging our previous verification effort. We also prove that our implementation preserves the program's semantics in the absence of races. This verification is much more difficult than proving the algorithm correct, since it must deal directly with the details of the implementation language and the concurrency model; we must precisely define the relation between uninstrumented and instrumented memory states, and prove noninterference of the code added by the instrumentation.
 %While constructing our implementation, we consulted the existing implementation of \FT for guidance, and our verification process brought to light an example of extraneous work performed by the current \FT implementation. This issue is unlikely to have come to light otherwise, but when proving our implementation equivalent to the abstract algorithm such discrepancies were quickly revealed. This again demonstrates the value of formal verification over best-effort implementation, ensuring that an implementation does no less, and no more, than is necessary for correctness.
 
-To the best of our knowledge, ours is the first work to adopt formal verification for either race detection algorithms \emph{or} their implementations. Moreover, we believe our general approach may be useful as a template for verifying a broad range of dynamic analyses, especially in the challenging domain of analyses for parallel programs. Verification is critical to help ensure that debugging tools are themselves free from bugs.
+To the best of our knowledge, ours is the first work to adopt formal verification for either race detection algorithms \emph{or} their implementations. Moreover, we believe our general approach may be useful as a template for verifying a broad range of dynamic analyses, especially in the challenging domain of analyses for parallel programs. Verification helps ensure that debugging tools are themselves free from bugs.
 
 This paper makes the following contributions:
 \begin{itemize}
@@ -228,19 +230,11 @@ We begin by reviewing the classic vector-clock race detection algorithm~\cite{vc
 
 % NB: VC stuff borrowed from Joe's Radish paper [ISCA '12]
 
-\subsection{Defining Data Races}
-Data races are formally defined in terms of a \emph{happens-before} relation $\hb$, a partial order over events in a program trace~\cite{lamporthb}. Events consist of memory operations $\mathit{rd}(t, x)$ and $\mathit{wr}(t, x)$ where a thread $t$ reads or writes a memory location $x$, lock operations $\mathit{acq}(t, m)$ and $\mathit{rel}(t, m)$ where a thread $t$ acquires or releases a lock $m$, $\mathit{fork}(t, u)$ where a thread $t$ creates a new thread $u$, and $\mathit{join}(t, u)$ where a thread $t$ joins with a thread $u$. Given events $a$ and $b$, we say $a$ \emph{happens before} $b$ (and $b$ \emph{happens after} $a$), written $a \hb b$, if: (1) $a$ precedes $b$ in program order in the same thread; or (2) $a$ precedes $b$ in synchronization order $\sw$, \eg, if $a$ is $\mathit{rel}(t, m)$ and $b$ is $\mathit{acq}(u, m)$; or (3) $(a,b)$ is in the transitive closure of program order and synchronization order.
-% Synchronization order also induces happens-before ordering on other synchronization events such as thread fork to thread start and thread termination to thread join.
-Two events not ordered by happens-before are \emph{concurrent}.  Two memory accesses to the same location form a \emph{data race} if they are concurrent and at least one is a write.
-
-\subsection{Vector-Clock Race Detection}
-\label{vector-clocks}
-
 
 \newcommand{\bigcell}[2][c]{% hat tip to http://tex.stackexchange.com/a/19678
   \begin{tabular}[#1]{@{}c@{}}#2\end{tabular}}
 
-\begin{figure*}[t]
+\begin{figure*}[ht]
 \footnotesize
 \centering
 \begin{tabular}{cp{1cm}c}
@@ -269,6 +263,17 @@ Two events not ordered by happens-before are \emph{concurrent}.  Two memory acce
 \caption{\VCalg operational semantics}
 \label{f:semvc}
 \end{figure*}
+
+
+\subsection{Defining Data Races}
+Data races are formally defined in terms of a \emph{happens-before} relation $\hb$, a partial order over events in a program trace~\cite{lamporthb}. Events consist of memory operations $\mathit{rd}(t, x)$ and $\mathit{wr}(t, x)$ where a thread $t$ reads or writes a memory location $x$, lock operations $\mathit{acq}(t, m)$ and $\mathit{rel}(t, m)$ where a thread $t$ acquires or releases a lock $m$, $\mathit{fork}(t, u)$ where a thread $t$ creates a new thread $u$, and $\mathit{join}(t, u)$ where a thread $t$ joins with a thread $u$. Given events $a$ and $b$, we say $a$ \emph{happens before} $b$ (and $b$ \emph{happens after} $a$), written $a \hb b$, if: (1) $a$ precedes $b$ in program order in the same thread; or (2) $a$ precedes $b$ in synchronization order $\sw$, \eg, if $a$ is $\mathit{rel}(t, m)$ and $b$ is $\mathit{acq}(u, m)$; or (3) $(a,b)$ is in the transitive closure of program order and synchronization order.
+% Synchronization order also induces happens-before ordering on other synchronization events such as thread fork to thread start and thread termination to thread join.
+Two events not ordered by happens-before are \emph{concurrent}.  Two memory accesses to the same location form a \emph{data race} if they are concurrent and at least one is a write.
+
+
+
+\subsection{Vector-Clock Race Detection}
+\label{vector-clocks}
 
 One common algorithm for dynamic race detection is to use \emph{vector clocks} to track the happens-before relation during
 execution \cite{vcfidge,vcmattern}.  A vector clock $\VC$ stores one (nonnegative) integer
@@ -312,34 +317,6 @@ Writes operate similarly to reads, with an additional check in the \Rule{Write} 
 %must also happen after all last reads of $\Address$ since the last write to
 %$\Address$.  
 
-\subsubsection{Correctness}
-Correctness for dynamic race detection is phrased in terms of \emph{soundness} and \emph{completeness}. Soundness means that if the algorithm runs to completion, then there was no race in the program trace; completeness means that given a trace without races, the algorithm does not get stuck.
-\begin{theorem}\label{vc-correct}\VCalg is sound and complete.\end{theorem}
-The soundness and completeness of \VCalg follows from the fact that the $\sqsubseteq$ relation between vector clocks precisely models the happens-before relation. Our Coq formalization follows the proof outline given in the presentation of \FT~\cite{fasttrack} (with the change described in Section~\ref{bug}), which can be straightforwardly translated into Coq. The main invariant of the algorithm is that $C_t(t) > C_u(t)$, that is, each thread always has a higher timestamp for itself than any other thread has for it. This guarantees that no operation by a thread $t$ can be seen by another thread $u$ (without detecting a race) until $t$ has synchronized with $u$.
-
-\subsection{\FT}
-
-% joe: lifted from the SlimFast paper
-
-The \FT algorithm~\cite{fasttrack} leverages the observation that, by the definition of a data race, all writes to a location must be totally ordered in race-free traces. \FT accordingly adopts a more sophisticated representation of vector clocks to save space and time.
-\emph{Epochs} can often be used in place of vector clocks; an epoch $c@t$  holds a timestamp for just one thread, and is treated as a vector clock that is $c$ for $t$ and 0 for every thread other than $t$:
-\[
-(c@t)(u) = 
-\left\{
-  \begin{array}[c]{ll}
-   c & \mathrm{if}\ t = u \\
-   0 & \mathrm{otherwise}
-  \end{array}
-  \right.
-\]
-
-Because epochs have a single non-zero entry, an epoch can be compared with a vector clock, or another epoch, in \Constant time using the $\EpochCompare$ operator. We say that $c@t \EpochCompare V$ (and similarly $c@t \EpochCompare e$) when $(c@t)(u) \leq V(u)$ for all $u$, which occurs exactly when $c \le V(t)$.
-We write $\bot_e$ for a minimal epoch at an arbitrary thread, $0@t_0$.
-
-A \FT analysis state is a tuple $(\mathcal{C}, \mathcal{L}, \mathcal{R}, \mathcal{W})$ just as in \VCalg, except that $\mathcal{R}_x$ may be either a vector clock or an epoch, and $\mathcal{W}_x$ is always an epoch. \FT's initial analysis state is the tuple $(\lambda t.\,\mathit{inc}_t(\bot_V), \lambda l.\,\bot_V , \lambda x.\, \bot_e, \lambda x.\, \bot_e)$. Each thread initially has an empty vector clock with its own entry incremented, all locks have empty vector clocks, and all memory locations have empty read and write epochs. The \FT operational semantics are presented in \autoref{f:semft} (in which we use $E(t)$ to mean $\mathcal{C}_t(t)@t$). The \Rule{Read} and \Rule{Write} rules are split into several cases, as $\mathcal{R}_x$ transitions between an epoch and a full vector clock. When a write occurs to a location $x$ for which $\mathcal{R}_x$ is a vector clock, $\mathcal{R}_x$ is set to an empty epoch $\bot_e$; conversely, when multiple concurrent reads to $x$ occur, $\mathcal{R}_x$ is inflated to a full vector clock.
-
-
-
 \begin{figure*}[t]
 \footnotesize
 \centering
@@ -365,9 +342,41 @@ A \FT analysis state is a tuple $(\mathcal{C}, \mathcal{L}, \mathcal{R}, \mathca
 \inference[\Rule{\Rule{WriteShared}}]{\mathcal{R}_x \in \mathit{\VectorClock} \\ \mathcal{R}_x \VCCompare \mathcal{C}_t \qquad \mathcal{W}_x \EpochCompare \mathcal{C}_t \\ \mathcal{W}' = \mathcal{W}[x := E(t)] \\ \mathcal{R}' = \mathcal{R}[x := \bot_e]}{ (\mathcal{C}, \mathcal{L}, \mathcal{R}, \mathcal{W}) \xRightarrow{\mathit{wr}(t, x)} (\mathcal{C}, \mathcal{L}, \mathcal{R}', \mathcal{W}') }
 }
 \end{tabular}
-\caption{\FT operational semantics. The \Rule{Fork}, \Rule{Join}, \Rule{Acquire} and \Rule{Release} rules are identical to \VCalg, and omitted here for clarity.}
+\caption{\FT operational semantics. \Rule{Fork}, \Rule{Join}, \Rule{Acquire} and \Rule{Release} are identical to \VCalg.}
 \label{f:semft}
 \end{figure*}
+
+
+\subsubsection{Correctness}
+Correctness for dynamic race detection is phrased in terms of \emph{soundness} and \emph{completeness}. Soundness means that if the algorithm runs to completion, then there was no race in the program trace; completeness means that given a trace without races, the algorithm does not get stuck.
+\begin{theorem}\label{vc-correct}\VCalg is sound and complete.\end{theorem}
+The soundness and completeness of \VCalg follows from the fact that the $\sqsubseteq$ relation between vector clocks precisely models the happens-before relation. Our Coq formalization follows the proof outline given in the presentation of \FT~\cite{fasttrack} (with the change described in Section~\ref{bug}), which can be straightforwardly translated into Coq. The main invariant of the algorithm is that $C_t(t) > C_u(t)$, that is, each thread always has a higher timestamp for itself than any other thread has for it. This guarantees that no operation by a thread $t$ can be seen by another thread $u$ (without detecting a race) until $t$ has synchronized with $u$.
+
+
+
+\subsection{\FT}
+
+% joe: lifted from the SlimFast paper
+
+The \FT algorithm~\cite{fasttrack} leverages the observation that, by the definition of a data race, all writes to a location must be totally ordered in race-free traces. \FT accordingly adopts a more sophisticated representation of vector clocks to save space and time.
+\emph{Epochs} can often be used in place of vector clocks; an epoch $c@t$  holds a timestamp for just one thread, and is treated as a vector clock that is $c$ for $t$ and 0 for every thread other than $t$:
+\[
+(c@t)(u) = 
+\left\{
+  \begin{array}[c]{ll}
+   c & \mathrm{if}\ t = u \\
+   0 & \mathrm{otherwise}
+  \end{array}
+  \right.
+\]
+
+Because epochs have a single non-zero entry, an epoch can be compared with a vector clock, or another epoch, in \Constant time using the $\EpochCompare$ operator. We say that $c@t \EpochCompare V$ (and similarly $c@t \EpochCompare e$) when $(c@t)(u) \leq V(u)$ for all $u$, which occurs exactly when $c \le V(t)$.
+We write $\bot_e$ for a minimal epoch at an arbitrary thread, $0@t_0$.
+
+A \FT analysis state is a tuple $(\mathcal{C}, \mathcal{L}, \mathcal{R}, \mathcal{W})$ just as in \VCalg, except that $\mathcal{R}_x$ may be either a vector clock or an epoch, and $\mathcal{W}_x$ is always an epoch. \FT's initial analysis state is the tuple $(\lambda t.\,\mathit{inc}_t(\bot_V), \lambda l.\,\bot_V , \lambda x.\, \bot_e, \lambda x.\, \bot_e)$. Each thread initially has an empty vector clock with its own entry incremented, all locks have empty vector clocks, and all memory locations have empty read and write epochs. The \FT operational semantics are presented in \autoref{f:semft} (in which we use $E(t)$ to mean $\mathcal{C}_t(t)@t$). The \Rule{Read} and \Rule{Write} rules are split into several cases, as $\mathcal{R}_x$ transitions between an epoch and a full vector clock. When a write occurs to a location $x$ for which $\mathcal{R}_x$ is a vector clock, $\mathcal{R}_x$ is set to an empty epoch $\bot_e$; conversely, when multiple concurrent reads to $x$ occur, $\mathcal{R}_x$ is inflated to a full vector clock.
+
+
+
 
 
 \subsubsection{Proof by Bisimulation}
@@ -407,6 +416,7 @@ rel $\Lock$ & &'' &'' \\%& [2,0] & " \\
 In \FT, when a write vector clock $W_x$ is collapsed to an epoch $c@t$, it is precisely because $W_x(t) = c$ and $c@t$ emulates $W_x$. \autoref{f:writes-emu} shows a simple program with two threads that illustrates write epoch emulation. \VCalg's $W_x$ retains information about both threads' writes, but because $\Tid_0$'s write happens before $\Tid_1$'s write, the \FT write epoch retains information only about $\Tid_1$'s write. If $\Tid_1$'s write happens before some vector clock $\VC'$, then $\Tid_0$'s write must happen before $\VC'$ as well, so the write epoch emulates the write vector clock.
 
 \begin{figure}[t]
+\small
 \centering
 \begin{tabular}{c|cc|cc|}
 & \multicolumn{2}{c}{VC} & \multicolumn{2}{c}{FT} \\
@@ -422,6 +432,7 @@ write $\Address$ & " & [1,0] & $\EmptyEpoch$ & $1@t_0$ \\
 The relation for read metadata is more complicated, because there are more ways in which read data may be dropped. The \Rule{WriteShared} rule resets read metadata to an empty epoch, erasing all previous values, and as long as $\mathcal{R}_x$ remains an epoch, any information about previous reads is lost. This has two effects on the simulation relation. First, we must make a special allowance for the case in which the read metadata is empty; in this case, it is the write epoch that emulates the original read vector clock. \autoref{f:readvc-emu} shows an example program illustrating this case. If the location $\Address$ is read by thread $\Tid_1$, then read by $\Tid_0$ (as shown), $\Tid_0$'s write will trigger the \Rule{WriteShared} rule, which clears \FT's $\mathcal{R}_x$ metadata, losing track of the reads. However, because the reads happen before $\Tid_0$'s write, \FT's write epoch still emulates the conventional $R_x$ vector clock: if $\Tid_0$'s write happens before some vector clock $\VC'$ the (lost) reads happen before $\VC'$ as well.
 
 \begin{figure}[t]
+\small
 \centering
 \begin{tabular}{ccc|c|c|}
 $\Tid_0$ & $\Tid_1$ & $\Tid_2$ & VC $\ReadVC{\Address}$ & FT $\mathcal{R}_{\Address}$ \\
@@ -459,7 +470,7 @@ We can now state the full simulation relation between \VCalg and \FT states.
 \begin{proof}In each direction, the relation $\sim$ is preserved by corresponding steps in the two systems, which we show by case analysis on the rule applied.\end{proof}
 
 \begin{theorem}\FT is sound and complete.\end{theorem}
-\begin{proof}For each successful execution of \FT, there is a successful execution of \VCalg on the same trace, so by Theorem~\ref{vc-correct} the trace is race-free. Conversely, for each race-free trace, there is a successful execution of \VCalg, so there is also a successful execution of \FT.\end{proof}
+\begin{proof}For each successful execution of \FT, there is a successful execution of \VCalg on the same trace; by Theorem~\ref{vc-correct} the trace is race-free. Conversely, for each race-free trace, there is a successful execution of \VCalg, so there is also one using \FT.\end{proof}
 
 While the statement of the simulation relation is complicated, once it is correctly stated, the proof itself is reduced to proving that various $\le$ relationships are preserved by mathematical operations on vector clocks. %We expect that the arithmetic involved could be further automated, decreasing the burden of verifying related algorithms.
 
@@ -496,11 +507,18 @@ To avoid such discrepancies, we must verify both the algorithm and the instrumen
 
 \subsection{The Language}
 We begin with a multithreaded language just complicated enough to have races and implement race detection instrumentation. The instructions of the language are inductively defined as follows, where $n$ is a natural number, $a$ is a local variable, $e, e_1, e_2$ are $\mathit{expr}$s, $x$ is a memory location, $l$ is a lock, $t$ is a numeric thread id, and $\mathit{li}$ is a list of $\mathit{instr}$s:
-\begin{align*}\mathit{expr} ::= n~|~a~|~e_1 + e_2~|~\mathtt{max}(e_1, e_2)\end{align*}
-\begin{align*}\mathit{instr} ::=\ &\assign{a}{e}~|~\load{a}{x}~|~\store{x}{e}~|~\lock{l}~\\|~&\unlock{l}~|~\spawn{t}{\mathit{li}}~|~\wait{t}~\\|~&\assert{e_1}{e_2}\end{align*}
+\[
+\begin{array}{rcl}
+\mathit{e}  & ::= & n~|~a~|~e_1 + e_2~|~\mathtt{max}(e_1, e_2)\\
+\mathit{instr} & ::= &\assign{a}{e}~|~\load{a}{x}~|~\store{x}{e}~|~\lock{l}\\ 
+& | &\unlock{l}~|~\spawn{t}{\mathit{li}}~|~\wait{t}~\\ 
+&| &\assert{e_1}{e_2}
+\end{array}
+\]
 A \emph{program} is a list of instructions, which will serve as the body of the thread with id $0$. The dynamic state of a program contains a collection $P$ of thread states -- each a triple $(t, \mathit{li}, \rho)$ of a thread id, a list of instructions (we write $\cdot$ for the empty list), and an environment mapping local variables to values -- alongside a memory state\footnote{While our semantics is phrased in terms of memory states and updates, the Coq implementation uses an approach based on that of Mansky et al.~\cite{memspec}, in which memory is represented as a sequence of operations and program and memory semantics are stated separately. This approach is convenient for verification, but its details are orthogonal to race detection instrumentation.} $m$. We also include a special error state $\mathit{err}$ for detected races (i.e., failed \texttt{assert}s). We give semantics to the language via a labeled transition system: each step is labeled with the race detection operation it produces, if any. These operations do not effect the program's execution, but let us track the behavior that ``would have happened'' if the \VCalg algorithm was run in parallel with the program, which serves as a reference for the correctness of the instrumentation. In each step, we break the thread states into a composition $P \uplus (t, \mathit{li}, \rho)$ of an arbitrary thread $t$ and the remaining threads, and execute the next instruction in $t$, updating the state as necessary. Thus, the transition rules for the language are of the form \exec{P}{m}{t}{o}{(P', m')}, where $t$ is the executing thread and $o$ is the race detection operation produced, if any.
 
 \begin{figure}[tb]
+\small
 \[
 \begin{array}{c}
  \cfg{P \uplus (t, \assign{a}{e}\texttt{;} \mathit{li}, G)}{m}  
@@ -576,7 +594,7 @@ The semantics of the language is shown in Figure~\ref{semantics}. Note that we i
 We instrument programs by augmenting each race-detection-relevant instruction with a code snippet implementing the corresponding \VCalg rule. We begin by defining macros for the basic mathematical operations of the algorithm, as shown in Figure~\ref{helper}. These macros make use of two pieces of data from the program to be instrumented: \texttt{tmp1} and \texttt{tmp2} are two local variables unused in the program, which will be used as temporaries for the instrumentation, and $z$ is the largest thread id generated in the lifetime of the program. (Note that in our simple language, $z$ can be determined statically; in real-world implementations, the vector clock data would need to support dynamic resizing.)
 
 \begin{figure}[tb]
-
+\small
   \begin{tabular}[t]{rcl}
 
     \move{p}{q} & $\triangleq$ & \load{\texttt{tmp1}}{$p$}\texttt{;}
@@ -616,11 +634,12 @@ We instrument programs by augmenting each race-detection-relevant instruction wi
 \label{helper}
 \end{figure}
 
-With these macros as building blocks, we can straightforwardly translate the rules of \VCalg from Figure~\ref{f:semvc} into code. For this purpose, we use a CompCert-style block-offset memory model~\cite{compcertmem}; memory references have the form $(\mathit{block}, \mathit{offset})$, and locations accessed in the original program are considered to be blocks of size 1. We set aside dedicated areas of memory for each of the components of the vector clock state, labeled $C$, $L$, $R$, and $W$ accordingly, and index into them by assigning a unique numeric identifier to each thread, local variable, and lock, so that offset $t$ into block $L[m]$ in memory contains the value of $L_m(t)$ (we write $L[m]$ as a shorthand for $L + m$, using the commonly understood equivalence between pointers and arrays). Note that the ordering of the associated vector clock operations depends on the instruction being instrumented; in particular, the blocking operations \texttt{lock} and \texttt{wait} must not change the vector clock state until after they successfully complete.  Because in our language the bodies of future threads are embedded in the \texttt{spawn} instructions, we instrument these threads by recursively instrumenting each instruction in their bodies. The instrumented version of a program $\mathit{prog}$ is then simply $\instrp{\mathit{prog}} \triangleq \instr{0}{\mathit{prog}}$, the result of applying the instrumentation function (Figure~\ref{instrumentation}) to each instruction in $\mathit{prog}$.
+With these macros as building blocks, we can straightforwardly translate the rules of \VCalg from Figure~\ref{f:semvc} into code. For this purpose, we use a CompCert-style block-offset memory model~\cite{compcertmem}; memory references have the form $(\mathit{block}, \mathit{offset})$, and locations accessed in the original program are considered to be blocks of size 1. We set aside dedicated areas of memory for each of the components of the vector clock state, labeled $C$, $L$, $R$, and $W$ accordingly, and index into them by assigning a unique numeric identifier to each thread, local variable, and lock, so that offset $t$ into block $L[m]$ in memory contains the value of $L_m(t)$ (we write $L[m]$ as a shorthand for $L + m$, using the commonly understood equivalence between pointers and arrays). Note that the ordering of the associated vector clock operations depends on the instruction being instrumented; in particular, the blocking operations \texttt{lock} and \texttt{wait} must not change the vector clock state until after they successfully complete.  Because in our language the bodies of future threads are embedded in the \texttt{spawn} instructions, we instrument these threads by recursively instrumenting each instruction in their bodies. The instrumented version of $\mathit{prog}$ is then simply $\instrp{\mathit{prog}} \triangleq \instr{0}{\mathit{prog}}$, the result of applying the instrumentation function (Figure~\ref{instrumentation}) to each instruction in $\mathit{prog}$.
 
 
 
 \begin{figure}[tb]
+\small
   \begin{tabular}[t]{rcl}
 \instr{t}{\load{a}{x}} & $\triangleq$ & \hl{\lock{$X[x]$}\texttt{;}}
 \\ & & \hl{ \vcle{W[x]}{C[t]}\texttt{;} }
@@ -659,6 +678,7 @@ With these macros as building blocks, we can straightforwardly translate the rul
 \label{sync}
 
 \begin{figure}[htb]
+\small
 \centering
 \begin{tabular}{c || c}
 \texttt{//}{$\mathsf{hb\_check}(W[x], C[t_1])$} & \texttt{//}$\mathsf{hb\_check}(W[x], C[t_2])$\\
@@ -675,7 +695,7 @@ With these macros as building blocks, we can straightforwardly translate the rul
 \label{instr-race}
 \end{figure}
 
-A direct translation of the race detection rules into code cannot implement sound and complete race detection for one important reason: when a race does occur, the corresponding instrumentation also races. In instrumented programs such as that shown in Figure~\ref{instr-race}, depending on the order in which the updates to metadata locations occur, the instrumentation may fail to detect the race between the two threads. In general, poorly synchronized race detection instrumentation cannot hope to successfully detect all races. At the same time, adding too much synchronization could significantly hurt performance.
+A direct translation of the race detection rules into code cannot implement sound and complete race detection for one important reason: when a race does occur, the corresponding instrumentation also races. In instrumented programs such as that shown in Figure~\ref{instr-race}, depending on the ordering of updates to metadata locations, the instrumentation may fail to detect the race between the two threads. In general, poorly synchronized race detection instrumentation cannot hope to successfully detect all races. At the same time, adding too much synchronization could significantly hurt performance.
 
 Given the set of operations available in our language, we can show that it suffices to add a lock for each memory location, which is used to protect the instrumentation on that memory location. (Intuitively, the other cases do not require extra locks because locks prevent races on their associated metadata, and a thread cannot race with the thread that spawns it or waits for it to terminate; the instrumentation on two different locations also never conflicts.) To implement the necessary synchronization in our instrumentation, we add another designated area of memory, $X$, such that $X[x]$ holds the lock protecting the metadata for $x$, and add locking to the \texttt{load} and \texttt{store} instrumentation, as reflected in Figure~\ref{instrumentation}. This guarantees that the instrumentation will never race with itself, which is sufficient to allow us to prove correctness of the instrumentation in the next section.
 
@@ -686,6 +706,7 @@ We verify the instrumentation pass by showing that the instrumentation records t
 
 \subsection{Bigger-Step Semantics and Reordering}
 \begin{figure}[t!]
+\small
 \[
 \begin{array}{c}
 
@@ -775,51 +796,51 @@ We verify the instrumentation pass by showing that the instrumentation records t
 \label{iexec}
 \end{figure}
 Key to our correctness proof is the idea that the instrumented program can be seen as executing under a bigger-step semantics in which each instruction and its instrumentation execute in a single step. These steps are of the form $\iexec{P}{m}{t}{R}$, as shown in Figure~\ref{iexec}. Each step may modify the temporary variables in an arbitrary way, but otherwise performs a combination of the underlying operation and the corresponding checks and changes to the metadata. Instrumentation for \texttt{load} and \texttt{store} may also fail a check and step to the $\mathit{err}$ state. We can show that each bigger step corresponds to a sequence of steps in the small-step semantics\footnote{From now on, we omit the race detection operation labeling on steps taken by instrumented programs; it may differ arbitrarily from the labels on the original program and is not relevant to detecting races.}:
+%
 \begin{lemma}\label{iexec-exec}If $\iexec{P}{m}{t}{(P', m')}$, then $\execstar{P}{m}{}{(P', m')}$.\end{lemma}
-\begin{proof}By case analysis and application of the relevant small-step rules.\end{proof}
+\begin{proof}By case analysis and use of the small-step rules.\end{proof}
 
-We would also like to prove the correspondence in the other, more difficult, direction. Any given execution of an instrumented program may not line up with one in which the instrumentation for each instruction executes in a single step; at a state in the middle of the execution, the program may be in the process of executing as many different instrumentation sections as there are threads. We resolve this problem by showing that we can ``reorder'' the steps of any execution so that the instrumentation for each instruction executes contiguously. More precisely, we show that each execution of an instrumented program is equivalent to one in which the instrumentation executes atomically.
+Proving the correspondence in the other direction is harder. Any given execution of an instrumented program may not line up with one in which the instrumentation for each instruction executes in a single step; at a state in the middle of the execution, the program may be executing as many different instrumentation sections as there are threads. We resolve this problem by ``reordering'' the steps of any execution so that the instrumentation for each instruction executes contiguously. More precisely, we show that each execution of an instrumented program is equivalent to one in which the instrumentation executes atomically.
 
-The reordering proceeds inductively: given an execution, we can always find the first complete instrumentation section, move its steps to the front of the execution, and then continue on the remaining steps. We begin by defining the uninstrumented state represented by each intermediate state of the execution.
+Reordering proceeds inductively: given an execution, we can always find the first complete instrumentation section, move its steps to the front of the execution, and then continue on the remaining steps. To do so, define the uninstrumented state represented by each intermediate state of the execution.
 \begin{definition}An instrumented state $P$ is an \emph{instrumented suffix} of an uninstrumented state $P_0$ if $P_0$ and $P$ contain the same threads and for each thread $t$:
 \begin{itemize}
 \item if $P_0(t) = \cdot$, then $P(t) = \cdot$
 \item if $P_0(t) = i; \mathit{li}$, then $P(t) = \mathit{li}_i; \instr{t}{\mathit{li}}$, where $\mathit{li}_i$ is some non-empty suffix of $\instr{t}{i}$
 \end{itemize}
 \end{definition}
-\noindent This definition lets us identify the instructions in the original program that are currently being processed by the instrumented program.
+\noindent This definition identifies which original program instructions are currently being processed by the instrumentation.
 
-Now we need to characterize the circumstances in which steps of an execution can be reordered. Steps by one thread have no effect on the state or local environment of other threads; the only way in which they communicate is via their effects on the shared memory. As such, the main obligation in proving that we can reorder steps in an execution is to show that reordering the associated memory operations does not change the behavior of the program. For our purposes, it suffices to show the stronger condition that if two instrumentation sections execute simultaneously, then the memory locations that they access do not overlap. We refer to this property as \emph{noninterference}. In the following, we use $\execstart{P}{m}{t}{R}$ to mean that there is a (possibly empty) sequence of steps $(P, m) \rightarrow_t (P_1, m_1) \rightarrow_t ... \rightarrow_t R$, and $\execstarm{P}{m}{t}{R}$ to mean that there is a (possibly empty) sequence of steps $(P, m) \rightarrow_a (P_1, m_1) \rightarrow_b ... \rightarrow_z R$ 
+Now we need to characterize the circumstances in which steps of an execution can be reordered. Steps by one thread have no effect on the state or local environment of other threads; the only way in which they communicate is via their effects on the shared memory. As such, the main obligation in proving that we can reorder steps in an execution is to show that reordering the associated memory operations does not change the behavior of the program. It suffices to show the stronger condition that if two instrumentation sections execute simultaneously, then the memory locations that they access do not overlap. We refer to this property as \emph{noninterference}. In the following, we use $\execstart{P}{m}{t}{R}$ to mean that there is a (possibly empty) sequence of steps $(P, m) \rightarrow_t (P_1, m_1) \rightarrow_t ... \rightarrow_t R$, and $\execstarm{P}{m}{t}{R}$ to mean that there is a (possibly empty) sequence of steps $(P, m) \rightarrow_a (P_1, m_1) \rightarrow_b ... \rightarrow_z R$ 
 where $a, b, ..., z \neq t$. 
 
 The core of noninterference is the fact that while an instrumentation section is executing, the memory locations it accesses are protected from access by other threads, by either a lock or the innate mechanics of thread creation.
-\begin{lemma}\label{indep}Let $P_0$ be a well-formed uninstrumented state and $P_0'$ its instrumented counterpart. Suppose we have some state $P_1'$ and instruction $i$ such that \[\execstar{P_0'}{m_0}{}{(P_1', m_1)}\ \mathrm{where}\ P_1'(t) = \instr{t}{i}; \mathit{li} \ \mathrm{and}\] \[\exec{P_1'}{m_1}{t}{}{(P_2, m_2)} \execstars{}{(P_3, m_3)} \execs{}{}{(P_4, m_4)}\] such that $P_3(t) = i'; ...; \mathit{li}$. Then the locations accessed by $t$ from $m_1$ to $m_4$ do not overlap with the locations accessed by threads other than $t$ from $m_1$ to $m_4$.\end{lemma}
-\begin{proof}By case analysis on the instruction $i$, using the guarantees provided by locking and spawn-wait synchronization. %In the cases of assignment and \texttt{assert} statements, no locations are accessed. For \texttt{load} and \texttt{store} instructions on a location $x$, the lock $X[x]$ protects all associated memory locations, and so no other thread can access them until the lock is released. For \texttt{lock} and \texttt{unlock} instructions on a lock $m$, $m$ itself protects its associated metadata, and likewise no other thread can access until the instrumentation is finished and the lock released. For \texttt{spawn} instructions, the thread is not spawned until the end of the instrumentation, and so no other thread can interact with it or its metadata. Likewise, for \texttt{wait} instructions, the instrumentation cannot begin to execute until the target of the \texttt{wait} has terminated, and at that point no other thread will access its metadata (we assume here only single joins, see Section~\ref{waits} for more details).
+\begin{lemma}\label{indep}Let $P_0$ be a well-formed uninstrumented state and $P_0'$ its instrumented version. Suppose we have some state $P_1'$ and instruction $i$ such that \[\execstar{P_0'}{m_0}{}{(P_1', m_1)}\ \mathrm{where}\ P_1'(t) = \instr{t}{i}; \mathit{li} \ \mathrm{and}\] \[\exec{P_1'}{m_1}{t}{}{(P_2, m_2)} \execstars{}{(P_3, m_3)} \execs{}{}{(P_4, m_4)}\] such that $P_3(t) = i'; ...; \mathit{li}$. Then the locations accessed by $t$ from $m_1$ to $m_4$ do not overlap with the locations accessed by threads other than $t$ from $m_1$ to $m_4$.\end{lemma}
+\begin{proof}By case analysis on $i$, using the guarantees provided by locking and spawn-wait synchronization. %In the cases of assignment and \texttt{assert} statements, no locations are accessed. For \texttt{load} and \texttt{store} instructions on a location $x$, the lock $X[x]$ protects all associated memory locations, and so no other thread can access them until the lock is released. For \texttt{lock} and \texttt{unlock} instructions on a lock $m$, $m$ itself protects its associated metadata, and likewise no other thread can access until the instrumentation is finished and the lock released. For \texttt{spawn} instructions, the thread is not spawned until the end of the instrumentation, and so no other thread can interact with it or its metadata. Likewise, for \texttt{wait} instructions, the instrumentation cannot begin to execute until the target of the \texttt{wait} has terminated, and at that point no other thread will access its metadata (we assume here only single joins, see Section~\ref{waits} for more details).
 \end{proof}
 
 We can then prove our main noninterference lemma.
-\begin{lemma}[Noninterference]\label{noninterference}Let $P_0$ be a well-formed uninstrumented state and $P$ its instrumented counterpart. Suppose that $\execstart{P}{m}{t}{(P_1, m_1)} \execstarms{t}{(P_2, m_2)} \execs{t}{}{(P_3, m_3)}$ such that $P_2$ is an instrumented suffix of $P_0$. Then the operation performed to reach $m_3$ does not overlap with the locations accessed from $m_1$ to $m_2$.\end{lemma}
+\begin{lemma}[Noninterference]\label{noninterference}Let $P_0$ be a well-formed uninstrumented state and $P$ its instrumented version. Suppose that $\execstart{P}{m}{t}{(P_1, m_1)} \execstarms{t}{(P_2, m_2)} \execs{t}{}{(P_3, m_3)}$ such that $P_2$ is an instrumented suffix of $P_0$. Then the operation performed to reach $m_3$ does not overlap with the locations accessed from $m_1$ to $m_2$.\end{lemma}
 \begin{proof}By induction on the derivation of $\execstarm{P_1}{m_1}{t}{(P_2, m_2)}$, using Lemma~\ref{indep}. %Since $P_2$ is an instrumented suffix of $P_0$, we know that no instrumentation section is completed in this section of the execution. Thus, each step by a thread $u \neq t$ is either the first step of an instrumentation section, or somewhere in the middle of an instrumentation section. In the former case, we know from Lemma~\ref{indep} that the remaining operations by threads other than $u$ do not overlap with the operations by $u$. In the latter case, there must have previously existed a first step by $u$ that began executing the instrumentation section, and again we know from Lemma~\ref{indep} that all remaining operations by threads other than $u$ do not overlap with operations by $u$. We can conclude that the operations by each thread from $m_1$ to $m_3$ are to disjoint locations. Since no operations from $m_1$ to $m_2$ are by $t$, the desired result follows.
 \end{proof}
 
 We call two memory states \emph{similar}, written $m_1 \sim m_2$, if they allow the same values to be read at all non-metadata locations. This similarity is preserved by reordering operations to unrelated locations, which allows us to use Lemma~\ref{noninterference} to reorder steps and obtain similar memories. In an execution in which every thread terminates, we can reorder the entire execution into successful sections:
-\begin{lemma}\label{exec-iexec}Let $P_0$ be a well-formed uninstrumented state and $P$ its instrumented counterpart. If $\execstar{P}{m}{}{(P', m')}$ where $P'$ is a final state, then $\iexecstar{P}{m}{(P', m'')}$ such that $m'' \sim m'$.\end{lemma}
+\begin{lemma}\label{exec-iexec}Let $P_0$ be a well-formed uninstrumented state and $P$ its instrumented version. If $\execstar{P}{m}{}{(P', m')}$ and $P'$ is a final state, then $\iexecstar{P}{m}{(P', m'')}$ and $m'' \sim m'$.\end{lemma}
 %\begin{proof}By Lemma~\ref{exec-iexec1}, there is some $P_1$ such that $\iexecstar{P}{m}{(P_1', m_1')} \execstars{}{(P', m'')}$ and $P'$ is an instrumented suffix of $P_1$. But a final state is only the instrumented suffix of a final state, and so $P_1$ and hence $P_1'$ must also be final. Since $P_1'$ is final, $P_1' = P'$ and $m_1' = m''$, completing the proof.\end{proof}
 
 We must also consider the case in which the instrumented program detects a race, and so fails an assertion before reaching a final state. In this case, other threads may be in the midst of instrumentation sections when the execution terminates. In order to show that the instrumented program is nonetheless in the same state (up to metadata) as the original program, we must use a slightly more sophisticated approach. The core of the approach, diagrammed in Figure~\ref{fig:confluence}, is a confluence property stating that in an execution in which an instrumentation section has an effect on non-metadata state, 1) we can reorder the section into an atomic block, and 2) executing all the remaining steps after the atomic block yields the same state as completing the incomplete section in the starting execution.
- \begin{lemma}\label{first-effect}Let $P_0$ be a well-formed uninstrumented state and $P$ its instrumented counterpart. Suppose that $\execstar{P}{m}{}{(P_1, m_1)}$\\$\execs{t}{}{(P_2, m_2)} \execstars{}{(P_3, m_3)}$, where $P_1$ is an instrumented suffix of $P_0$ and the step from $P_1$ to $P_2$ has an effect on non-metadata state. Then there exist $P', m', P_3', m_3'$ such that $\iexec{P}{m}{t}{(P', m')} \execstars{}{(P_3', m_3')}$, $m_3' \sim m_3$, and $\execstart{P_3}{m_3}{t}{(P_3', m_3')}$ by only executing metadata operations.\end{lemma}
+ \begin{lemma}\label{first-effect}Let $P_0$ be a well-formed uninstrumented state and $P$ its instrumented version. Suppose $\execstar{P}{m}{}{(P_1, m_1)}$\\$\execs{t}{}{(P_2, m_2)} \execstars{}{(P_3, m_3)}$, where $P_1$ is an instrumented suffix of $P_0$ and the step from $P_1$ to $P_2$ affects non-metadata state. Then there exist $P', m', P_3', m_3'$ such that $\iexec{P}{m}{t}{(P', m')} \execstars{}{(P_3', m_3')}$, $m_3' \sim m_3$, and $\execstart{P_3}{m_3}{t}{(P_3', m_3')}$ by only executing metadata operations.\end{lemma}
  \begin{proof}By noninterference and the confluence properties of the step relation.\end{proof}
 
 This lets us reorder an execution in which a race is detected into a sequence of successful instrumentation sections followed by a failing section:
-\begin{lemma}\label{exec-fail-iexec}Let $P_0$ be a well-formed uninstrumented state and $P$ its instrumented counterpart. If $\execstar{P}{m}{}{(P', m')} \rightarrow \mathit{err}$, then $\iexecstar{P}{m}{(P', m'')}$ such that $m'' \sim m'$ and $(P', m'') \Rightarrow \mathit{err}$.\end{lemma}
+\begin{lemma}\label{exec-fail-iexec}Let $P_0$ be a well-formed uninstrumented state and $P$ its instrumented version. If $\execstar{P}{m}{}{(P', m')} \rightarrow \mathit{err}$, then $\iexecstar{P}{m}{(P', m'')}$ such that $m'' \sim m'$ and $(P', m'') \Rightarrow \mathit{err}$.\end{lemma}
 %\begin{proof}By Lemma~\ref{exec-iexec1}, there is some $P_1$ such that $\iexecstar{P}{m}{(P_1', m_1')} \execstars{}{(P', m'')}$ and $P'$ is an instrumented suffix of $P_1$. Then we can inductively apply Lemma~\ref{next-effect} to get a state $(P_2', m_2')$ such that $\iexecstar{P_1'}{m_1'}{(P_2', m_2')} \execstarts{t}{(P', m'')}$, $m_2' \sim m''$, and the final steps by $t$ are exactly the failing instrumentation section, i.e., $(P_2', m_2') \Rightarrow \mathit{err}$.\end{proof}
 
 \begin{figure}[t]
 \xymatrix@=2ex
 {
-& (P,m) \ar[rr]^>{*}  \ar@{:>}[rrrrdd]_{i}_>{t} & & \cdot \ar[rr]^{i}_>{t} & & \cdot \ar[rr]^>{*} & & \cdot \ar@{.>}[rr]^>{*} & & (P',m') \\
-\\
-& && && \cdot \ar@{.>}[rrrruu]^>>{*}
+& (P,m) \ar[rr]^>{*}  \ar@{:>}[rrrrd]_{i}_>{t} & & \cdot \ar[rr]^{i}_>{t} & & \cdot \ar[rr]^>{*} & & \cdot \ar@{.>}[rr]^>{*} & & (P',m') \\
+& && && \cdot \ar@{.>}[rrrru]^>>{*}
 \\
 }
 \caption{Confluence diagram for completing partially executed instrumentation block for the source instruction $i$.}
@@ -903,11 +924,11 @@ such that $\sigma \not\xRightarrow{o}$
 
 \subsection{Simulation}
 
-Using Lemmas~\ref{iexec-exec}, \ref{exec-iexec}, and \ref{exec-fail-iexec}, we can reason entirely in terms of the bigger-step relation in which instrumentation executes atomically. The correctness of the instrumentation now becomes a matter of simulation: we need only prove that there is a bisimulation between states of the uninstrumented program and the instrumented program such that they mirror each other's behavior. We begin by defining the relationship between states of the abstract algorithm and memory configurations.
+Lemmas~\ref{iexec-exec}, \ref{exec-iexec}, and \ref{exec-fail-iexec} let us reason entirely in terms of the bigger-step relation in which instrumentation executes atomically. The correctness of the instrumentation now becomes a matter of simulation: we need only prove that there is a bisimulation between states of the uninstrumented program and the instrumented program such that they mirror each other's behavior. First we define the relationship between states of the abstract algorithm and memory configurations.
 
 \begin{definition}A block $b$ in a memory $m$ \emph{encodes} a vector clock $V$ if for all $t \le z$, the value at $(b, t)$ in $m$ is equal to $V(t)$. A \VCalg state $\sigma = (C, L, R, W)$ is encoded by a memory $m$, written $m \models (C, L, R, W)$, if $C[t]$ encodes $C_t$ for every $t$, $L[m]$ encodes $L_m$ for every $m$, and $R[x]$ and $W[x]$ encode $R_x$ and $W_x$ respectively for every $x$.\end{definition}
 
-\begin{definition}The relation $\sim$ relates an uninstrumented state $P$ to an instrumented state $P'$ if the same thread ids exist in $P$ and $P'$, and for each pair of corresponding threads $(t, \mathit{li}, G), (t, \mathit{li}', G')$, $\mathit{li}' = \instr{t}{\mathit{li}}$ and $G'(a) = G(a)$ for all non-{\rm \texttt{tmp}} variables $a$. We write $(P, m) \sim (P', m')$ if $P \sim P'$ and $m \sim m'$.\end{definition}
+\begin{definition}Uninstrumented state $P$ relates to instrumented state $P'$, written $P\sim P'$, if the same thread ids exist in $P$ and $P'$, and for each pair of corresponding threads $(t, \mathit{li}, G), (t, \mathit{li}', G')$, $\mathit{li}' = \instr{t}{\mathit{li}}$ and $G'(a) = G(a)$ for all non-{\rm \texttt{tmp}} variables $a$. Say $(P, m) \sim (P', m')$ if $P \sim P'$ and $m \sim m'$.\end{definition}
 
 For each of the two directions of bisimulation, we must consider the
 case in which the original program does not race (and the instrumented
@@ -915,11 +936,15 @@ program matches its behavior), and the case in which it does race (and
 the instrumented program fails an assertion).  The lemmas summarizing
 these relationships are illustrated in Figure~\ref{f:bisim}.
 
-\begin{lemma}If $P$ is a well-formed state, $(P, m) \sim (P', m')$, $m' \models \sigma$, $\exec{P}{m}{t}{o}{(P_2, m_2)}$, and $\sigma \xRightarrow{o} \sigma'$, then $\iexec{P'}{m'}{t}{(P_2', m_2')}$ such that $(P_2, m_2) \sim (P_2', m_2')$ and $m_2' \models \sigma'$.\end{lemma}
- \begin{lemma}If $P$ is a well-formed state, $(P, m) \sim (P', m')$, $m' \models \sigma$, $\exec{P}{m}{t}{o}{(P_2, m_2)}$, and $\sigma \not\xRightarrow{o}$, then $\iexec{P'}{m'}{t}{\mathit{err}}$.\end{lemma}
- \begin{lemma}If $P$ is a well-formed state, $(P, m) \sim (P', m')$, $m' \models \sigma$, and $\iexec{P'}{m'}{t}{(P_2', m_2')}$, then $\exec{P}{m}{t}{o}{(P_2, m_2)}$ such that $(P_2, m_2) \sim (P_2', m_2')$, $\sigma \xRightarrow{o} \sigma'$, and $m_2' \models \sigma'$.\end{lemma}
- \begin{lemma}If $P$ is a well-formed state, $(P, m) \sim (P', m')$, $m' \models \sigma$, and $\iexec{P}{m}{t}{\mathit{err}}$, then $\exec{P}{m}{t}{o}{(P_2, m_2)}$ and $s \not\xRightarrow{o}$.\end{lemma}
-\begin{proof}Each lemma is proved in the same way, by induction on the execution, case analysis on the next instruction to execute, and computation showing that the instrumentation performs exactly the operations of the \VCalg algorithm.\end{proof}
+\begin{lemma}[Bisimulations]Let $P$ be a well-formed state
+\begin{itemize}
+\item If $(P, m) \sim (P', m')$, $m' \models \sigma$, $\exec{P}{m}{t}{o}{(P_2, m_2)}$, and $\sigma \xRightarrow{o} \sigma'$, then $\iexec{P'}{m'}{t}{(P_2', m_2')}$ such that $(P_2, m_2) \sim (P_2', m_2')$ and $m_2' \models \sigma'$.
+\item If $(P, m) \sim (P', m')$, $m' \models \sigma$, $\exec{P}{m}{t}{o}{(P_2, m_2)}$, and $\sigma \not\xRightarrow{o}$, then $\iexec{P'}{m'}{t}{\mathit{err}}$.
+\item If $(P, m) \sim (P', m')$, $m' \models \sigma$, and $\iexec{P'}{m'}{t}{(P_2', m_2')}$, then $\exec{P}{m}{t}{o}{(P_2, m_2)}$ such that $(P_2, m_2) \sim (P_2', m_2')$, $\sigma \xRightarrow{o} \sigma'$, and $m_2' \models \sigma'$.
+\item If $(P, m) \sim (P', m')$, $m' \models \sigma$, and $\iexec{P}{m}{t}{\mathit{err}}$, then $\exec{P}{m}{t}{o}{(P_2, m_2)}$ and $s \not\xRightarrow{o}$.
+\end{itemize}
+\end{lemma}
+\begin{proof}Each lemma is proved, by induction on the execution, case analysis on the next instruction to execute, and computation showing that the instrumentation performs exactly the operations of the \VCalg algorithm.\end{proof}
 
 The overall correctness of the instrumentation is expressed by the following theorems:
 
@@ -953,7 +978,13 @@ where $(P_1, m_1) \sim (P_1', m_1')$, and, according to the \VCalg semantics of 
 Since $(P, m) \sim (P', m')$ implies that the memory and local environments agree on all locations except those involved in the instrumentation, these are strong correctness properties. Theorem~\ref{safe} guarantees that for each race-free execution of the original program, there is a successful instrumented execution that produces the same values in the environment and memory (and vice versa). Theorem~\ref{race} guarantees that for each racy execution of the original program, there is a corresponding instrumented execution that produces the same values in the environment and memory up until the first race, then fails (and vice versa). While it is difficult to talk about ``the same'' execution across two different programs, these lemmas guarantee that in terms of observable results, the original and instrumented programs have the same behavior modulo race detection, and that all racy executions are successfully detected.
 
 \section{Coq Formalization}
-\begin{table}[h]
+All the theorems stated in this paper have been formally verified in Coq. The size of the definitions and proofs in the verification is shown in \autoref{tab:loc}. The proofs varied considerably in complexity. The proof of correctness for \FT by bisimulation with \VCalg is particularly simple, consisting mainly of proving that various inequalities are preserved by vector clock operations; this arithmetic could probably be automated, decreasing the burden of verifying related algorithms. The proofs of correctness of the instrumentation were much more complicated, even in proportion to the definitions; the bulk of the work involved reasoning about noninterference and reordering. Our proofs do not make use of any particularly advanced features of Coq, and many of them were completed by one of the authors with no prior Coq experience.
+
+
+\section{Related Work}
+\label{related}
+
+\begin{table}[t]
 \centering
 \begin{tabular}{c || c | c}
 & definitions (loc) & proofs (loc)\\
@@ -972,10 +1003,7 @@ instrumentation & 780 & 18900
 \label{tab:loc}
 \end{table}
 
-All the theorems stated in this paper have been formally verified in Coq. The size of the definitions and proofs in the verification is shown in \autoref{tab:loc}. The proofs varied considerably in complexity. The proof of correctness for \FT by bisimulation with \VCalg is particularly simple, consisting mainly of proving that various inequalities are preserved by vector clock operations; this arithmetic could probably be automated, decreasing the burden of verifying related algorithms. The proofs of correctness of the instrumentation were much more complicated, even in proportion to the definitions; the bulk of the work involved reasoning about noninterference and reordering. Our proofs do not make use of any particularly advanced features of Coq, and many of them were completed by one of the authors with no prior Coq experience.
 
-\section{Related Work}
-\label{related}
 
 There are a few examples of verified program instrumentation from the literature, such as
 the implementation of the SoftBound system for enforcing memory safety in the Vellvm framework \cite{vellvm} and the RockSalt system for software fault isolation on x86 \cite{Morrisett:2012:RBF:2254064.2254111}. Neither of these systems support instrumentation of multithreaded code, which is the main source of complexity in our verification. Sadowski et al.~\cite{coqatomicity} partially verified an algorithm for atomicity analysis in Coq, using its semantics on traces of events and statements of the invariants of the analysis, but have not yet extended it to a verified instrumentation pass.
@@ -995,9 +1023,9 @@ There is a rich history of systems that provide dynamic data race detection, dat
 \section{Conclusions and Future Work}
 \label{conclusion}
 
-We have presented the first machine-verified proofs of correctness of the \VCalg and \FT race detection algorithms, as well as a race detection instrumentation pass for a simple multithreaded language. The proofs provide a strong connection between the instrumentation and the abstract algorithm, and ensure that the instrumented program has the same behavior as the original program.  Our verification efforts have revealed the need for a revised lemma in the original paper proof of correctness for \FT, and brought up a small discrepancy between the \FT algorithm and its implementation.  Our work places dynamic data race detection on a formally verified foundation for the first time, and our reordering-based approach to verifying the instrumentation pass should be useful in verifying other kinds of instrumentation on multithreaded programs.
+We have presented the first machine-verified proofs of correctness of the \VCalg and \FT race detection algorithms and a race detection instrumentation pass for a simple multithreaded language. The proofs provide a strong connection between the instrumentation and the abstract algorithm, and ensure that the instrumented program has the same behavior as the original program.  Our verification efforts have revealed the need for a revised lemma in the original paper proof of correctness for \FT, and brought up a small discrepancy between the \FT algorithm and its implementation.  Our work places dynamic data race detection on a formally verified foundation for the first time, and our reordering-based approach to verifying the instrumentation pass should be useful in verifying other kinds of instrumentation on multithreaded programs.
 
-We intend to expand our approach to verified race detection along three main lines. First, our approach should generalize easily to verifying more sophisticated algorithms and instrumentation passes, such as an implementation of \FT~\cite{fasttrack} or the \textsc{ThreadSanitizer} algorithm used in LLVM~\cite{serebryany_threadsanitizer:_2009}. The second and greater challenge will be to apply the same approach to more realistic languages, and ultimately to integrate it into high-assurance compilation frameworks like Vellvm~\cite{vellvm} or CompCert~\cite{compcert}. This would involve taking into account a wider range of program instructions and potential complications, including variable-size accesses and low-level atomics. Finally, our proofs thus far assume sequential consistency as the concurrent memory model; an interesting challenge would be to prove that the same instrumentation suffices under the relaxed memory models used in languages like C~\cite{boehm_foundations_2008} and Java~\cite{manson_java_2005}. By extending the reach of verified race detection, we aim to make it easier to design and justify increasingly sophisticated race detection algorithms and implementations.
+% We intend to expand our approach to verified race detection along three main lines. First, our approach should generalize easily to verifying more sophisticated algorithms and instrumentation passes, such as an implementation of \FT~\cite{fasttrack} or the \textsc{ThreadSanitizer} algorithm used in LLVM~\cite{serebryany_threadsanitizer:_2009}. The second and greater challenge will be to apply the same approach to more realistic languages, and ultimately to integrate it into high-assurance compilation frameworks like Vellvm~\cite{vellvm} or CompCert~\cite{compcert}. This would involve taking into account a wider range of program instructions and potential complications, including variable-size accesses and low-level atomics. Finally, our proofs thus far assume sequential consistency as the concurrent memory model; an interesting challenge would be to prove that the same instrumentation suffices under the relaxed memory models used in languages like C~\cite{boehm_foundations_2008} and Java~\cite{manson_java_2005}. By extending the reach of verified race detection, we aim to make it easier to design and justify increasingly sophisticated race detection algorithms and implementations.
 
 \bibliographystyle{myabbrvnat}
 \bibliography{sources}
