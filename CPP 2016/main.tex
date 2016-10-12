@@ -840,7 +840,7 @@ This lets us reorder an execution in which a race is detected into a sequence of
 \xymatrix@=2ex
 {
 & (P,m) \ar[rr]^>{*}  \ar@{:>}[rrrrd]_{i}_>{t} & & \cdot \ar[rr]^{i}_>{t} & & \cdot \ar[rr]^>{*} & & \cdot \ar@{.>}[rr]^>{*} & & (P',m') \\
-& && && \cdot \ar@{.>}[rrrru]^>>{*}
+& && && \cdot \ar@{.>}[rrrru]^>>>>{*}
 \\
 }
 \caption{Confluence diagram for completing partially executed instrumentation block for the source instruction $i$.}
