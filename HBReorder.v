@@ -6353,6 +6353,7 @@ Proof.
   - destruct n; clarify; rewrite skipn_nil in Hn; clarify.
 Qed.
 
+(* incomplete reordering *)
 Lemma finish_handler : forall P0'
   (HX_locks : forall v, v < zv -> good_lock (X + v, 0) P0')
   i l i0 t (Hsafe : safe_instr i0) (Ht : t < zt)

@@ -755,13 +755,6 @@ Section VectorClocks.
       eapply rtc_trans; eauto. }
   Qed.
 
-(*  Lemma clock_pos : forall s t u (Hwf : well_formed s) (Hdiff : t <> u),
-    clock_of s t t > 0.
-  Proof.
-    intros (((?, ?), ?), ?); clarify.
-    specialize (Hwf1 _ _ Hdiff); omega.
-  Qed.*)
-
   Theorem Soundness tr : forall s', step_star s0 tr s' -> race_free tr.
   Proof.
     intros; rewrite race_free_alt; repeat intro; clarify.
@@ -1631,50 +1624,6 @@ Section VectorClocks.
         as [s2' [Hstep' Hsim']].
       destruct s2 as (((C2, L2), R2), W2).
       clear Hsteps IHHsteps; inversion Hstep; clarify.
-      (*- generalize (read_own _ _ Hroot HR); clarify.
-        generalize (Hsim22 x); intros [Hw Hr].
-        destruct (W2 x) eqn: HW2.
-        destruct (R2 x) eqn: HR2; clarify.
-        + do 2 eexists.
-          * eapply FT_read_shared; eauto; clarsimp.
-          * clarify.
-            destruct (eq_dec x1 x); subst; [rewrite upd_new | rewrite upd_old]; 
-              auto; clear Hsim22.
-            unfold upd; split; [|split]; clarsimp.
-            generalize (clock_pos t Hroot); intro.
-            split; clarify; [|split; intros; wf_check].
-            exists x0; split; clarify.
-            split; intros; wf_check.
-            specialize (Hr212 t0); clarify.
-            apply Hr2121.
-            specialize (Hwf221 x x0); clarsimp.
-        + destruct e; clarify.
-          specialize (Hr1 t2); clarify.
-          destruct (le_dec n (C2 t t2)); do 2 eexists.
-          * eapply FT_read_exclusive; eauto; clarsimp.
-          * clarify.
-            destruct (eq_dec x0 x); subst; [rewrite upd_new | rewrite upd_old]; 
-              auto; clear Hsim22.
-            split; [|split]; clarsimp.
-            generalize (clock_pos t Hroot); clarify.
-            split; intros; rewrite HR in *; rewrite <- cond in *; wf_check.
-            apply Hr22; clarsimp.
-          * generalize (Hwf221 x t); clarsimp.
-            eapply FT_read_share; eauto.
-            destruct (W2 x); clarify.
-          * clarify.
-            destruct (eq_dec x0 x); subst; [rewrite upd_new | rewrite upd_old]; 
-              auto; clear Hsim22.
-            unfold upd; split; [|split]; clarsimp.
-            destruct n; [exfalso; omega | clarify].
-            split.
-            { exists t2; clarify.
-              split; intros; apply Hr22; clarsimp. }
-            { intros t' Hle.
-              destruct (eq_dec t2 t'); clarify.
-              { split; intros; apply Hr22; clarsimp. }
-              { unfold vc_bot in *; clarify.
-                split; intros; wf_check. } }*)
       - generalize (Hsim22 x); intros [Hw Hr].
         destruct (R2 x) eqn: HR2; clarify.
         + do 2 eexists.
@@ -1727,17 +1676,6 @@ Section VectorClocks.
               destruct n; unfold vc_bot in *; clarify.
               destruct (eq_dec t t'); clarify.
               split; intros; apply Hr22; clarsimp. }
-      (*- generalize (Hsim22 x); intros [Hw Hr].
-        generalize (write_own' _ _ Hroot HW); intros [HWle HRle].
-        destruct (W2 x) eqn: HW2; clarify.
-        destruct Hw2 as [Hw Hl].
-        generalize (step_star_wf wf0 Hroot); intros [_ [_ [_ Hwle]]].
-        specialize (Hwle x t1); specialize (Hw t1); clarify.
-        specialize (Hw t); generalize (Hwf1 t1 t); destruct (eq_dec t1 t);
-          clarify; [|omega].
-        do 2 eexists.
-        + apply FT_write_same_epoch; clarsimp.
-        + clarify.*)
       - generalize (Hsim22 x); intros [Hw Hr].
         destruct (W2 x) eqn: HW2; clarify.
         destruct (R2 x) eqn: HR2; clarify.
