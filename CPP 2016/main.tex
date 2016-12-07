@@ -181,9 +181,9 @@
 Writing race-free concurrent code is notoriously difficult, and data races can result in bugs that are difficult to isolate and reproduce. Dynamic race detection can catch data races that cannot (easily) be detected statically. One approach to dynamic race detection is to instrument the potentially racy code with operations that store and compare metadata, where the metadata implements some known race detection algorithm (e.g. vector-clock race detection). In this paper, we describe the process of formally verifying several algorithms for dynamic race detection. We then turn to implementations, laying out an instrumentation pass for race detection in a simple language and presenting a mechanized formal proof of its correctness: all races in a program will be caught by the instrumentation, and all races detected by the instrumentation are possible in the original program.
 \end{abstract}
 
-\category{D.1.3}{Software, Programming Techniques, Concurrent Programming}{}
-\category{D.2.4}{Software, Software Engineering, Software/Program Verification}{Correctness proofs, Formal methods}
-\category{F.3.1}{Theory of Computation, Logics and Meanings of Programs, Specifying and Verifying and Reasoning about Programs}{Mechanical verification}
+\category{D.1.3}{Programming Techniques}{Concurrent Programming}
+\category{D.2.4}{Software Engineering}{Software/Program Verification - Correctness proofs, Formal methods}
+\category{F.3.1}{Logics and Meanings of Programs}{Specifying and Verifying and Reasoning about Programs - Mechanical verification}
 
 \keywords Dynamic Race Detection, Interactive Theorem Proving
 
@@ -1026,12 +1026,127 @@ We have presented the first machine-verified proofs of correctness of the \VCalg
 
 We intend to expand our approach to verified race detection along three main lines. First, our approach should generalize easily to verifying more sophisticated algorithms and instrumentation passes, such as an implementation of \FT~\cite{fasttrack} or the \textsc{ThreadSanitizer} algorithm used in LLVM~\cite{serebryany_threadsanitizer:_2009}. The second and greater challenge will be to apply the same approach to more realistic languages, and ultimately to integrate it into high-assurance compilation frameworks like Vellvm~\cite{vellvm} or CompCert~\cite{compcert}. This would involve taking into account a wider range of program instructions and potential complications, including variable-size accesses and low-level atomics. Finally, our proofs thus far assume sequential consistency as the concurrent memory model; an interesting challenge would be to prove that the same instrumentation suffices under the relaxed memory models used in languages like C~\cite{boehm_foundations_2008} and Java~\cite{manson_java_2005}. By extending the reach of verified race detection, we aim to make it easier to design and justify increasingly sophisticated race detection algorithms and implementations.
 
-\section{Acknowledgements}
+\section*{Acknowledgements}
 This material is based upon work supported in part by NSF Grants 1521539 (Collaborative Research: Expeditions in Computing: The Science of Deep Specification)  and XPS-1337174 (CLCCA: Improving Parallel Program Reliability Through Novel Approaches to Precise Dynamic Data Race Detection). Any opinions, findings, and conclusions or recommendations expressed in this material are those of the authors and do not necessarily reflect the views of the NSF. We would like to thank Stephen Freund and Cormac Flanagan for their detailed and helpful feedback.
 
-\bibliographystyle{myabbrvnat}
-\bibliography{sources}
+\begin{thebibliography}{20}
+\expandafter\ifx\csname natexlab\endcsname\relax\def\natexlab#1{#1}\fi
+\expandafter\ifx\csname url\endcsname\relax
+  \def\url#1{{\tt #1}}\fi
 
-% !! The bibliography should be embedded for final submission.
+\bibitem[Boehm and Adve(2008)]{boehm_foundations_2008}
+H.-J. Boehm and S.~V. Adve.
+\newblock Foundations of the {C++} Concurrency Memory Model.
+\newblock PLDI '08, pages 68--78, New York, NY, USA, 2008. ACM.
+
+\bibitem[Christiaens and Bosschere(2001)]{christiaens_trade:_2001}
+M.~Christiaens and K.~D. Bosschere.
+\newblock {TRaDe}: {Data} {Race} {Detection} for {Java}.
+\newblock {ICCS} '01, pages 761--770, London, UK, UK, 2001. Springer-Verlag.
+
+\bibitem[Elmas \emph{et~al.}(2007)Elmas, Qadeer, and
+  Tasiran]{elmas_goldilocks:_2007}
+T.~Elmas, S.~Qadeer, and S.~Tasiran.
+\newblock Goldilocks: a race and transaction-aware {Java} runtime.
+\newblock {PLDI} '07, pages 245--255, June 2007.
+
+\bibitem[Fidge(1991)]{vcfidge}
+C.~Fidge.
+\newblock Logical Time in Distributed Computing Systems.
+\newblock {\em Computer}, 24\penalty0 (8):\penalty0 28--33, Aug. 1991.
+
+\bibitem[Flanagan and Freund(2009)]{fasttrack}
+C.~Flanagan and S.~N. Freund.
+\newblock {FastTrack}: Efficient and Precise Dynamic Race Detection.
+\newblock PLDI '09, pages 121--133, New York, NY, USA, 2009. ACM.
+
+\bibitem[Itzkovitz \emph{et~al.}(1999)Itzkovitz, Schuster, and
+  Zeev-Ben-Mordehai]{djit+}
+A.~Itzkovitz, A.~Schuster, and O.~Zeev-Ben-Mordehai.
+\newblock Toward Integration of Data Race Detection in {DSM} Systems.
+\newblock {\em J. Parallel Distrib. Comput.}, 59\penalty0 (2):\penalty0
+  180--203, Nov. 1999.
+
+\bibitem[Lamport(1978)]{lamporthb}
+L.~Lamport.
+\newblock Time, Clocks, and the Ordering of Events in a Distributed System.
+\newblock {\em Commun. ACM}, 21\penalty0 (7):\penalty0 558--565, July 1978.
+
+\bibitem[Leroy(2009)]{compcert}
+X.~Leroy.
+\newblock A Formally Verified Compiler Back-end.
+\newblock {\em J. Autom. Reason.}, 43\penalty0 (4):\penalty0 363--446, Dec.
+  2009.
+
+\bibitem[Leroy and Blazy(2008)]{compcertmem}
+X.~Leroy and S.~Blazy.
+\newblock Formal Verification of a {C}-like Memory Model and Its Uses for
+  Verifying Program Transformations.
+\newblock {\em J. Autom. Reason.}, 41:\penalty0 1--31, July 2008.
+
+\bibitem[Mansky \emph{et~al.}(2015)Mansky, Garbuzov, and Zdancewic]{memspec}
+W.~Mansky, D.~Garbuzov, and S.~Zdancewic.
+\newblock An Axiomatic Specification for Sequential Memory Models.
+\newblock {CAV} '15, pages 413--428, 2015.
+
+\bibitem[Manson \emph{et~al.}(2005)Manson, Pugh, and Adve]{manson_java_2005}
+J.~Manson, W.~Pugh, and S.~V. Adve.
+\newblock The {Java} Memory Model.
+\newblock POPL '05, pages 378--391, New York, NY, USA, 2005. ACM.
+
+\bibitem[Mattern(1989)]{vcmattern}
+F.~Mattern.
+\newblock Virtual time and global states of distributed systems.
+\newblock Parallel and Distributed Algorithms, pages 215--226, 1989.
+
+\bibitem[Morrisett \emph{et~al.}(2012)Morrisett, Tan, Tassarotti, Tristan, and
+  Gan]{Morrisett:2012:RBF:2254064.2254111}
+G.~Morrisett, G.~Tan, J.~Tassarotti, J.-B. Tristan, and E.~Gan.
+\newblock {RockSalt}: Better, Faster, Stronger {SFI} for the x86.
+\newblock PLDI '12, pages 395--404, New York, NY, USA, 2012. ACM.
+
+\bibitem[Nagarakatte \emph{et~al.}(2009)Nagarakatte, Zhao, Martin, and
+  Zdancewic]{softbound}
+S.~Nagarakatte, J.~Zhao, M.~M. Martin, and S.~Zdancewic.
+\newblock {SoftBound}: Highly Compatible and Complete Spatial Memory Safety for
+  {C}.
+\newblock PLDI '09, pages 245--258, New York, NY, USA, 2009. ACM.
+
+\bibitem[Pozniansky and Schuster(2003)]{pozniansky_efficient_2003}
+E.~Pozniansky and A.~Schuster.
+\newblock Efficient on-the-fly data race detection in multithreaded {C}++
+  programs.
+\newblock {PPoPP} '03, pages 179--190, New York, NY, USA, 2003. ACM.
+
+\bibitem[Sadowski \emph{et~al.}(2008)Sadowski, Yi, Knowles, and
+  Flanagan]{coqatomicity}
+C.~Sadowski, J.~Yi, K.~Knowles, and C.~Flanagan.
+\newblock Proving correctness of a dynamic atomicity analysis in Coq.
+\newblock Workshop on Mechanizing Metatheory '08, 2008.
+
+\bibitem[Serebryany and Iskhodzhanov(2009)]{serebryany_threadsanitizer:_2009}
+K.~Serebryany and T.~Iskhodzhanov.
+\newblock {ThreadSanitizer}: {Data} {Race} {Detection} in {Practice}.
+\newblock {WBIA} '09, pages 62--71, New York, NY, USA, 2009. ACM.
+
+\bibitem[{The Coq Development Team}(2016)]{coq}
+{The Coq Development Team}.
+\newblock The {Coq} Proof Assistant Reference Manual (Version 8.5), 2016.
+\newblock URL \url{https://coq.inria.fr/refman/}.
+
+\bibitem[Wilcox \emph{et~al.}(2015)Wilcox, Finch, Flanagan, and
+  Freund]{slimstate}
+J.~Wilcox, P.~Finch, C.~Flanagan, and S.~N. Freund.
+\newblock Array Shadow State Compression for Precise Dynamic Race Detection.
+\newblock {ASE} '15, 2015.
+
+\bibitem[Zhao \emph{et~al.}(2012)Zhao, Nagarakatte, Martin, and
+  Zdancewic]{vellvm}
+J.~Zhao, S.~Nagarakatte, M.~M. Martin, and S.~Zdancewic.
+\newblock Formalizing the LLVM Intermediate Representation for Verified Program
+  Transformations.
+\newblock POPL '12, pages 427--440, New York, NY, USA, 2012. ACM.
+
+\end{thebibliography}
 
 \end{document}
